@@ -1,0 +1,52 @@
+/* CSS Variables - Brain Dump Partner Design System */
+
+:root {
+  /* Nani Style Colors - Light Mode */
+  --bg-main: #f0f4f8;
+  --bg-card: #ffffff;
+  --bg-sidebar: #ffffff;
+  --bg-glass: rgba(255, 255, 255, 0.8);
+
+  --primary: #0ea5e9; /* Sky 500 - Vivid Cyan */
+  --primary-hover: #0284c7; /* Sky 600 */
+  --primary-light: #e0f2fe; /* Sky 100 */
+
+  --accent-pink: #f472b6; /* Pink 400 */
+  --accent-orange: #fb923c; /* Orange 400 */
+  --accent-green: #4ade80; /* Green 400 */
+
+  --text-main: #334155; /* Slate 700 */
+  --text-muted: #94a3b8; /* Slate 400 */
+
+  --border-color: #f1f5f9;
+
+  /* Shadows - Soft & Diffuse */
+  --shadow-sm: 0 2px 8px -2px rgba(14, 165, 233, 0.1);
+  --shadow-card: 0 10px 40px -10px rgba(148, 163, 184, 0.2);
+  --shadow-lg: 0 20px 60px -15px rgba(148, 163, 184, 0.35);
+  --shadow-float: 0 20px 50px -10px rgba(14, 165, 233, 0.3);
+
+  /* Radius */
+  --radius-lg: 24px;
+  --radius-md: 16px;
+  --radius-sm: 12px;
+  --radius-full: 9999px;
+}
+
+/* Dark Mode Theme */
+[data-theme="dark"] {
+  --bg-main: #0f172a; /* Slate 900 */
+  --bg-card: #1e293b; /* Slate 800 */
+  --bg-sidebar: #1e293b; /* Slate 800 */
+  --bg-glass: rgba(30, 41, 59, 0.8);
+
+  --text-main: #f8fafc; /* Slate 50 */
+  --text-muted: #94a3b8; /* Slate 400 */
+
+  --border-color: #334155; /* Slate 700 */
+
+  --shadow-sm: 0 2px 8px -2px rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 10px 40px -10px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 20px 60px -15px rgba(0, 0, 0, 0.6);
+  --shadow-float: 0 20px 50px -10px rgba(0, 0, 0, 0.5);
+}

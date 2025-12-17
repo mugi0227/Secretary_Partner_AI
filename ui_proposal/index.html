@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brain Dump Partner</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="logo">
+                <div class="logo-icon">
+                    <i class="fa-solid fa-brain"></i>
+                </div>
+                <span class="logo-text">Brain Dump</span>
+            </div>
+
+            <ul class="nav-links">
+                <li class="nav-item active" data-target="dashboard">
+                    <a href="#">
+                        <i class="fa-solid fa-chart-pie"></i>
+                        <span>Dashboard</span>
+                    </a>
+                </li>
+                <!-- Chat removed from main nav, moved to global widget -->
+                <li class="nav-item" data-target="tasks">
+                    <a href="#">
+                        <i class="fa-solid fa-list-check"></i>
+                        <span>Tasks</span>
+                    </a>
+                </li>
+                <li class="nav-item" data-target="projects">
+                    <a href="#">
+                        <i class="fa-solid fa-folder-open"></i>
+                        <span>Projects</span>
+                    </a>
+                </li>
+            </ul>
+
+            <div class="sidebar-footer">
+                <div class="user-profile">
+                    <div class="avatar">S</div>
+                    <div class="user-info">
+                        <span class="user-name">Shuhei</span>
+                        <span class="user-status">Online</span>
+                    </div>
+                </div>
+                <button class="settings-btn">
+                    <i class="fa-solid fa-gear"></i>
+                </button>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+
+            <!-- Header -->
+            <header class="top-bar">
+                <div class="page-title">
+                    <h1 id="page-title">Dashboard</h1>
+                    <span class="date-display">2025年12月15日 (月)</span>
+                </div>
+                <div class="top-actions">
+                    <button class="icon-btn theme-toggle" id="theme-toggle" title="Toggle Dark Mode">
+                        <i class="fa-solid fa-moon"></i>
+                    </button>
+                    <button class="icon-btn notification-btn">
+                        <i class="fa-regular fa-bell"></i>
+                        <span class="badge">3</span>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Dashboard View -->
+            <div id="dashboard-view" class="view-section active">
+                <div class="dashboard-grid">
+                    <!-- Welcome / Agent Status -->
+                    <div class="card agent-card">
+                        <div class="agent-status">
+                            <div class="agent-avatar">
+                                <div class="pulse-ring"></div>
+                                <i class="fa-solid fa-robot"></i>
+                            </div>
+                            <div class="agent-message">
+                                <h2>Good Morning, Shuhei!</h2>
+                                <p>今日のエネルギーレベルは「低め」ですね。無理せず、まずは簡単なタスクから始めましょう。</p>
+                            </div>
+                        </div>
+                        <div class="agent-actions">
+                            <button class="secondary-btn">
+                                <i class="fa-solid fa-play"></i> 朝のブリーフィング
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Top 3 Tasks -->
+                    <div class="card top-tasks-card">
+                        <div class="card-header">
+                            <h3>Focus for Today</h3>
+                            <span class="tag high-priority">Top 3</span>
+                        </div>
+                        <div class="task-list">
+                            <div class="task-item">
+                                <div class="task-check">
+                                    <i class="fa-regular fa-circle"></i>
+                                </div>
+                                <div class="task-content">
+                                    <span class="task-title">確定申告の書類を集める</span>
+                                    <div class="task-meta">
+                                        <span class="meta-tag urgency-high"><i class="fa-solid fa-fire"></i> High
+                                            Urgency</span>
+                                        <span class="meta-tag energy-low"><i class="fa-solid fa-battery-quarter"></i>
+                                            Low Energy</span>
+                                    </div>
+                                </div>
+                                <button class="task-action-btn"><i class="fa-solid fa-ellipsis"></i></button>
+                            </div>
+                            <div class="task-item">
+                                <div class="task-check">
+                                    <i class="fa-regular fa-circle"></i>
+                                </div>
+                                <div class="task-content">
+                                    <span class="task-title">A社開発案件の要件定義書レビュー</span>
+                                    <div class="task-meta">
+                                        <span class="meta-tag urgency-medium"><i class="fa-solid fa-clock"></i>
+                                            Medium</span>
+                                        <span class="meta-tag energy-high"><i class="fa-solid fa-battery-full"></i> High
+                                            Energy</span>
+                                    </div>
+                                </div>
+                                <button class="task-action-btn"><i class="fa-solid fa-ellipsis"></i></button>
+                            </div>
+                            <div class="task-item">
+                                <div class="task-check">
+                                    <i class="fa-regular fa-circle"></i>
+                                </div>
+                                <div class="task-content">
+                                    <span class="task-title">牛乳を買う</span>
+                                    <div class="task-meta">
+                                        <span class="meta-tag urgency-low"><i class="fa-solid fa-leaf"></i> Low</span>
+                                        <span class="meta-tag energy-low"><i class="fa-solid fa-battery-quarter"></i>
+                                            Quick Win</span>
+                                    </div>
+                                </div>
+                                <button class="task-action-btn"><i class="fa-solid fa-ellipsis"></i></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Stats / Progress -->
+                    <div class="card stats-card">
+                        <h3>Weekly Progress</h3>
+                        <div class="progress-chart-mock">
+                            <div class="bar" style="height: 40%"></div>
+                            <div class="bar" style="height: 70%"></div>
+                            <div class="bar" style="height: 50%"></div>
+                            <div class="bar active" style="height: 30%"></div>
+                            <div class="bar" style="height: 20%"></div>
+                            <div class="bar" style="height: 10%"></div>
+                            <div class="bar" style="height: 10%"></div>
+                        </div>
+                        <div class="stats-summary">
+                            <div class="stat-item">
+                                <span class="stat-value">12</span>
+                                <span class="stat-label">Done</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-value">5</span>
+                                <span class="stat-label">Pending</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tasks View -->
+            <div id="tasks-view" class="view-section" style="display: none;">
+                <div class="kanban-board">
+                    <div class="kanban-column">
+                        <div class="column-header">
+                            <span class="column-title">To Do</span>
+                            <span class="column-count">3</span>
+                        </div>
+                        <div class="kanban-card">
+                            <div class="card-tags">
+                                <span class="tag high-priority">High</span>
+                            </div>
+                            <h4>確定申告の書類を集める</h4>
+                            <div class="card-footer">
+                                <span class="due-date"><i class="fa-regular fa-clock"></i> Today</span>
+                                <div class="assignee">S</div>
+                            </div>
+                        </div>
+                        <div class="kanban-card">
+                            <div class="card-tags">
+                                <span class="tag medium-priority">Medium</span>
+                            </div>
+                            <h4>A社開発案件の要件定義書レビュー</h4>
+                            <div class="card-footer">
+                                <span class="due-date"><i class="fa-regular fa-clock"></i> Tomorrow</span>
+                                <div class="assignee">S</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="kanban-column">
+                        <div class="column-header">
+                            <span class="column-title">In Progress</span>
+                            <span class="column-count">1</span>
+                        </div>
+                        <div class="kanban-card active-card">
+                            <div class="card-tags">
+                                <span class="tag low-priority">Low</span>
+                            </div>
+                            <h4>メール返信: 田中さん</h4>
+                            <div class="card-footer">
+                                <span class="due-date"><i class="fa-regular fa-clock"></i> Now</span>
+                                <div class="assignee">S</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="kanban-column">
+                        <div class="column-header">
+                            <span class="column-title">Done</span>
+                            <span class="column-count">5</span>
+                        </div>
+                        <div class="kanban-card done-card">
+                            <h4>朝会参加</h4>
+                            <div class="card-footer">
+                                <span class="completed-date"><i class="fa-solid fa-check"></i> 10:30 AM</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- Global Chat Widget -->
+        <div class="global-chat-widget">
+            <div class="chat-window" id="chat-window">
+                <div class="chat-header">
+                    <div class="chat-title">
+                        <i class="fa-solid fa-robot"></i>
+                        <span>Secretary Partner</span>
+                    </div>
+                    <button class="close-chat-btn" id="close-chat-btn"><i class="fa-solid fa-times"></i></button>
+                </div>
+                <div class="chat-history">
+                    <div class="message agent">
+                        <div class="message-avatar"><i class="fa-solid fa-robot"></i></div>
+                        <div class="message-bubble">
+                            <p>何か頭にあることを書き出しますか？それともタスクの相談をしますか？</p>
+                        </div>
+                        <span class="message-time">10:00 AM</span>
+                    </div>
+                    <!-- Messages will be added here -->
+                </div>
+                <div class="chat-input-area">
+                    <button class="input-action-btn"><i class="fa-solid fa-plus"></i></button>
+                    <div class="input-wrapper">
+                        <input type="text" placeholder="Type or dump thoughts...">
+                    </div>
+                    <button class="mic-btn"><i class="fa-solid fa-microphone"></i></button>
+                    <button class="send-btn"><i class="fa-solid fa-paper-plane"></i></button>
+                </div>
+            </div>
+            <button class="chat-fab" id="chat-fab">
+                <i class="fa-solid fa-comments"></i>
+            </button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

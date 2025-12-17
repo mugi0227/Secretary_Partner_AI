@@ -1,0 +1,217 @@
+.task-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  transition: background 0.3s ease,
+              border-color 0.3s ease,
+              transform 0.3s ease;
+  border: 1px solid transparent;
+  animation: fadeIn 0.6s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.task-item.removing {
+  animation: fadeOut 0.6s ease-out forwards;
+  pointer-events: none;
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+}
+
+.task-item:hover {
+  background: var(--primary-light);
+  border-color: var(--primary);
+  transform: translateX(4px);
+}
+
+.task-check {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.circle-icon {
+  font-size: 1rem;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* 白い丸（FaCircle）のスタイル */
+.circle-icon:not(.check-icon) {
+  color: transparent;
+  background: white;
+  border: 2px solid var(--text-muted);
+  border-radius: 50%;
+  width: 1.2em;
+  height: 1.2em;
+  display: block;
+  box-sizing: border-box;
+}
+
+.circle-icon:not(.check-icon) svg {
+  display: none; /* FaCircleのSVGは非表示にして、背景の白い円だけを表示 */
+}
+
+.circle-icon.check-icon {
+  color: var(--primary);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ホバー時：薄くチェックを表示 */
+.task-check:hover .check-icon.hover-preview {
+  opacity: 0.3;
+  transition: opacity 0.2s ease;
+}
+
+/* クリック時：1秒かけてチェックがつく（Nintendo風バウンス） */
+.circle-icon.check-icon.done {
+  color: #4ade80;
+  opacity: 1;
+  animation: checkAppear 1s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+}
+
+@keyframes checkAppear {
+  0% {
+    transform: translate(-50%, -50%) scale(0) rotate(-180deg);
+    opacity: 0;
+  }
+  60% {
+    transform: translate(-50%, -50%) scale(1.4) rotate(10deg);
+    opacity: 0.9;
+  }
+  75% {
+    transform: translate(-50%, -50%) scale(0.9) rotate(-5deg);
+    opacity: 1;
+  }
+  85% {
+    transform: translate(-50%, -50%) scale(1.1) rotate(2deg);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+.task-check:hover .circle-icon:not(.check-icon) {
+  border-color: var(--primary);
+  transform: translate(-50%, -50%) scale(1.1);
+}
+
+.task-check:active .circle-icon:not(.check-icon) {
+  transform: translate(-50%, -50%) scale(0.95);
+}
+
+.task-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.task-title {
+  display: block;
+  font-weight: 500;
+  color: var(--text-main);
+  margin-bottom: 0.375rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: all 0.3s ease;
+}
+
+.task-item[data-done="true"] .task-title {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.task-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.meta-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.meta-tag.urgency-high {
+  background: rgba(251, 146, 60, 0.1);
+  color: var(--accent-orange);
+}
+
+.meta-tag.urgency-medium {
+  background: rgba(14, 165, 233, 0.1);
+  color: var(--primary);
+}
+
+.meta-tag.urgency-low {
+  background: rgba(148, 163, 184, 0.1);
+  color: var(--text-muted);
+}
+
+.meta-tag.energy-low {
+  background: rgba(74, 222, 128, 0.1);
+  color: var(--accent-green);
+}
+
+.meta-tag.energy-high {
+  background: rgba(244, 114, 182, 0.1);
+  color: var(--accent-pink);
+}
+
+.task-action-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-size: 1.25rem;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+  opacity: 0;
+}
+
+.task-item:hover .task-action-btn {
+  opacity: 1;
+}
+
+.task-action-btn:hover {
+  background: var(--primary-light);
+  color: var(--primary);
+}
