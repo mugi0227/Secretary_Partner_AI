@@ -80,13 +80,15 @@
   padding-top: 1.5rem;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.5rem;
 }
 
 .user-profile {
   display: flex;
   align-items: center;
   gap: 0.8rem;
+  flex: 1;
+  min-width: 0;
 }
 
 .user-avatar {
@@ -127,7 +129,12 @@
   color: var(--text-muted);
 }
 
-.settings-btn {
+.footer-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.footer-btn {
   width: 36px;
   height: 36px;
   border: none;
@@ -140,10 +147,18 @@
   justify-content: center;
   font-size: 1.1rem;
   transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
-.settings-btn:hover {
+.footer-btn:hover {
   background: var(--bg-main);
   color: var(--primary);
+}
+
+.footer-btn.settings-btn:hover {
   transform: rotate(45deg);
+}
+
+.theme-toggle-btn:hover {
+  transform: scale(1.1);
 }

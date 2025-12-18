@@ -1,11 +1,9 @@
 import { Link, useLocation } from 'react-router-dom';
-import { FaBrain, FaChartPie, FaListCheck, FaFolderOpen, FaTrophy, FaGear, FaMoon, FaSun } from 'react-icons/fa6';
-import { useTheme } from '../../context/ThemeContext';
+import { FaBrain, FaChartPie, FaListCheck, FaFolderOpen, FaTrophy, FaGear } from 'react-icons/fa6';
 import './Sidebar.css';
 
 export function Sidebar() {
   const location = useLocation();
-  const { theme, toggleTheme } = useTheme();
 
   const navItems = [
     { path: '/', label: 'Dashboard', icon: FaChartPie },
@@ -44,18 +42,9 @@ export function Sidebar() {
             <span className="user-status">Online</span>
           </div>
         </div>
-        <div className="footer-actions">
-          <button
-            className="footer-btn theme-toggle-btn"
-            onClick={toggleTheme}
-            title={theme === 'light' ? 'ダークモードに切り替え' : 'ライトモードに切り替え'}
-          >
-            {theme === 'light' ? <FaMoon /> : <FaSun />}
-          </button>
-          <Link to="/settings" className="footer-btn settings-btn" title="Settings">
-            <FaGear />
-          </Link>
-        </div>
+        <Link to="/settings" className="settings-btn" title="Settings">
+          <FaGear />
+        </Link>
       </div>
     </aside>
   );
