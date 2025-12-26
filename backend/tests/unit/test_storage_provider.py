@@ -8,6 +8,7 @@ import tempfile
 import shutil
 
 from app.infrastructure.local.storage_provider import LocalStorageProvider
+from app.core.config import get_settings
 from app.core.exceptions import NotFoundError
 
 
@@ -89,5 +90,6 @@ async def test_get_public_url(temp_storage):
     url = await temp_storage.upload(path, data)
     public_url = temp_storage.get_public_url(path)
 
-    assert public_url.startswith("file://")
+    settings = get_settings()
+    assert public_url.startswith(settings.BASE_URL)
     assert "public.txt" in public_url

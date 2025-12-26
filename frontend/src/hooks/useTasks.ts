@@ -2,19 +2,29 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { tasksApi } from '../api/tasks';
 import type { TaskCreate, TaskUpdate } from '../api/types';
 
-export function useTasks() {
+export function useTasks(projectId?: string) {
   const queryClient = useQueryClient();
 
   const query = useQuery({
-    queryKey: ['tasks'],
-    queryFn: tasksApi.getAll,
+    queryKey: projectId ? ['tasks', 'project', projectId] : ['tasks'],
+    queryFn: async () => {
+      const allTasks = await tasksApi.getAll();
+      // Filter by project_id if provided
+      if (projectId) {
+        return allTasks.filter(task => task.project_id === projectId);
+      }
+      return allTasks;
+    },
   });
 
   const createMutation = useMutation({
     mutationFn: tasksApi.create,
     onSuccess: () => {
+      // Invalidate all task queries (including filtered ones)
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['top3'] });
+      queryClient.invalidateQueries({ queryKey: ['today-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['schedule'] });
     },
   });
 
@@ -22,16 +32,22 @@ export function useTasks() {
     mutationFn: ({ id, data }: { id: string; data: TaskUpdate }) =>
       tasksApi.update(id, data),
     onSuccess: () => {
+      // Invalidate all task queries (including filtered ones)
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['top3'] });
+      queryClient.invalidateQueries({ queryKey: ['today-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['schedule'] });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: tasksApi.delete,
     onSuccess: () => {
+      // Invalidate all task queries (including filtered ones)
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
       queryClient.invalidateQueries({ queryKey: ['top3'] });
+      queryClient.invalidateQueries({ queryKey: ['today-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['schedule'] });
     },
   });
 
@@ -39,6 +55,7 @@ export function useTasks() {
     tasks: query.data ?? [],
     isLoading: query.isLoading,
     error: query.error,
+    refetch: query.refetch,
     createTask: (data: TaskCreate) => createMutation.mutate(data),
     updateTask: (id: string, data: TaskUpdate) =>
       updateMutation.mutate({ id, data }),

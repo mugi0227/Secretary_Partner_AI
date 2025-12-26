@@ -93,6 +93,46 @@ async def test_update_task(session_factory, test_user_id):
 
 
 @pytest.mark.asyncio
+async def test_update_task_propagates_status_to_subtasks(session_factory, test_user_id):
+    """Test updating parent status updates subtasks."""
+    repo = SqliteTaskRepository(session_factory=session_factory)
+
+    parent = await repo.create(
+        test_user_id,
+        TaskCreate(
+            title="Parent",
+            created_by=CreatedBy.USER,
+        ),
+    )
+    child1 = await repo.create(
+        test_user_id,
+        TaskCreate(
+            title="Child 1",
+            parent_id=parent.id,
+            created_by=CreatedBy.USER,
+        ),
+    )
+    child2 = await repo.create(
+        test_user_id,
+        TaskCreate(
+            title="Child 2",
+            parent_id=parent.id,
+            created_by=CreatedBy.USER,
+        ),
+    )
+
+    from app.models.task import TaskUpdate
+
+    await repo.update(test_user_id, parent.id, TaskUpdate(status=TaskStatus.WAITING))
+
+    updated_child1 = await repo.get(test_user_id, child1.id)
+    updated_child2 = await repo.get(test_user_id, child2.id)
+
+    assert updated_child1.status == TaskStatus.WAITING
+    assert updated_child2.status == TaskStatus.WAITING
+
+
+@pytest.mark.asyncio
 async def test_delete_task(session_factory, test_user_id):
     """Test deleting a task."""
     repo = SqliteTaskRepository(session_factory=session_factory)

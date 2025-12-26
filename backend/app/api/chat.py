@@ -14,9 +14,11 @@ from app.api.deps import (
     CurrentUser,
     LLMProvider,
     TaskRepo,
+    ProjectRepo,
     MemoryRepo,
     AgentTaskRepo,
     CaptureRepo,
+    ChatRepo,
 )
 from app.core.exceptions import LLMError
 from app.models.chat import ChatRequest, ChatResponse
@@ -31,9 +33,11 @@ async def chat(
     user: CurrentUser,
     llm_provider: LLMProvider,
     task_repo: TaskRepo,
+    project_repo: ProjectRepo,
     memory_repo: MemoryRepo,
     agent_task_repo: AgentTaskRepo,
     capture_repo: CaptureRepo,
+    chat_repo: ChatRepo,
     session_id: str | None = Query(None, description="Session ID for conversation continuity"),
 ):
     """
@@ -59,9 +63,11 @@ async def chat(
     agent_service = AgentService(
         llm_provider=llm_provider,
         task_repo=task_repo,
+        project_repo=project_repo,
         memory_repo=memory_repo,
         agent_task_repo=agent_task_repo,
         capture_repo=capture_repo,
+        chat_repo=chat_repo,
     )
 
     try:
@@ -92,9 +98,11 @@ async def chat_stream(
     user: CurrentUser,
     llm_provider: LLMProvider,
     task_repo: TaskRepo,
+    project_repo: ProjectRepo,
     memory_repo: MemoryRepo,
     agent_task_repo: AgentTaskRepo,
     capture_repo: CaptureRepo,
+    chat_repo: ChatRepo,
     session_id: str | None = Query(None, description="Session ID for conversation continuity"),
 ):
     """
@@ -106,9 +114,11 @@ async def chat_stream(
     agent_service = AgentService(
         llm_provider=llm_provider,
         task_repo=task_repo,
+        project_repo=project_repo,
         memory_repo=memory_repo,
         agent_task_repo=agent_task_repo,
         capture_repo=capture_repo,
+        chat_repo=chat_repo,
     )
 
     async def event_generator() -> AsyncGenerator[str, None]:
@@ -138,4 +148,53 @@ async def chat_stream(
             "X-Accel-Buffering": "no",  # Disable buffering for nginx
         },
     )
+
+
+@router.get("/sessions")
+async def list_sessions(
+    user: CurrentUser,
+    llm_provider: LLMProvider,
+    task_repo: TaskRepo,
+    project_repo: ProjectRepo,
+    memory_repo: MemoryRepo,
+    agent_task_repo: AgentTaskRepo,
+    capture_repo: CaptureRepo,
+    chat_repo: ChatRepo,
+):
+    """List chat sessions for the current user."""
+    agent_service = AgentService(
+        llm_provider=llm_provider,
+        task_repo=task_repo,
+        project_repo=project_repo,
+        memory_repo=memory_repo,
+        agent_task_repo=agent_task_repo,
+        capture_repo=capture_repo,
+        chat_repo=chat_repo,
+    )
+    return await agent_service.list_user_sessions(user.id)
+
+
+@router.get("/history/{session_id}")
+async def get_history(
+    session_id: str,
+    user: CurrentUser,
+    llm_provider: LLMProvider,
+    task_repo: TaskRepo,
+    project_repo: ProjectRepo,
+    memory_repo: MemoryRepo,
+    agent_task_repo: AgentTaskRepo,
+    capture_repo: CaptureRepo,
+    chat_repo: ChatRepo,
+):
+    """Get message history for a specific session."""
+    agent_service = AgentService(
+        llm_provider=llm_provider,
+        task_repo=task_repo,
+        project_repo=project_repo,
+        memory_repo=memory_repo,
+        agent_task_repo=agent_task_repo,
+        capture_repo=capture_repo,
+        chat_repo=chat_repo,
+    )
+    return await agent_service.get_session_messages(user.id, session_id)
 

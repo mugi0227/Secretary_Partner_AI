@@ -5,11 +5,14 @@ Provides rule-based scoring with optional AI enhancement.
 """
 
 from datetime import datetime, date
+from uuid import UUID
+from typing import Optional
 
 from app.core.logger import setup_logger
 from app.interfaces.task_repository import ITaskRepository
 from app.models.task import Task
-from app.models.enums import Priority, EnergyLevel
+from app.models.enums import Priority, EnergyLevel, TaskStatus
+from app.services.scheduler_service import SchedulerService
 
 logger = setup_logger(__name__)
 
@@ -23,8 +26,9 @@ class Top3Service:
     2. Optional AI enhancement (context-aware adjustments)
     """
 
-    def __init__(self, task_repo: ITaskRepository):
+    def __init__(self, task_repo: ITaskRepository, scheduler_service: Optional[SchedulerService] = None):
         self.task_repo = task_repo
+        self.scheduler_service = scheduler_service or SchedulerService()
 
         # Scoring weights
         self.importance_weights = {
@@ -39,15 +43,25 @@ class Top3Service:
             Priority.LOW: 1.0,
         }
 
-    async def get_top3(self, user_id: str) -> list[Task]:
+    async def get_top3(
+        self,
+        user_id: str,
+        capacity_hours: Optional[float] = None,
+        check_capacity: bool = True,
+    ) -> dict:
         """
-        Get today's top 3 priority tasks.
+        Get today's top 3 priority tasks with capacity awareness.
 
         Args:
             user_id: User ID
+            capacity_hours: Daily capacity in hours (None = use default 8h)
+            check_capacity: Whether to check capacity constraints
 
         Returns:
-            List of top 3 tasks (or fewer if less than 3 exist)
+            Dictionary with:
+                - tasks: list[Task] - Top 3 tasks
+                - capacity_info: dict - Capacity check results (if check_capacity=True)
+                - overflow_suggestion: str - Suggestion for overflow tasks
         """
         # Get all incomplete tasks
         tasks = await self.task_repo.list(
@@ -58,26 +72,122 @@ class Top3Service:
 
         if not tasks:
             logger.info(f"No tasks found for user {user_id}")
-            return []
+            return {"tasks": [], "capacity_info": None, "overflow_suggestion": ""}
+
+        # Filter out tasks with unmet dependencies
+        actionable_tasks = await self._filter_actionable_tasks(user_id, tasks)
+
+        if not actionable_tasks:
+            logger.info(f"No actionable tasks found for user {user_id}")
+            return {"tasks": [], "capacity_info": None, "overflow_suggestion": ""}
 
         # Calculate scores
         scored_tasks = []
-        for task in tasks:
+        for task in actionable_tasks:
             score = self._calculate_base_score(task)
             scored_tasks.append((task, score))
 
         # Sort by score (highest first)
         scored_tasks.sort(key=lambda x: x[1], reverse=True)
 
-        # Return top 3
-        top3 = [task for task, score in scored_tasks[:3]]
+        # Get top tasks (more than 3 for capacity check)
+        top_tasks = [task for task, score in scored_tasks]
+
+        # Check capacity if requested
+        capacity_info = None
+        overflow_suggestion = ""
+        final_tasks = top_tasks[:3]
+
+        if check_capacity:
+            # Check capacity for all top tasks
+            capacity_result = self.scheduler_service.check_schedule_feasibility(
+                top_tasks,
+                capacity_hours=capacity_hours,
+            )
+            capacity_info = capacity_result
+
+            # If capacity exceeded, suggest moving overflow tasks
+            if not capacity_result["feasible"]:
+                overflow_tasks = capacity_result["overflow_tasks"]
+                overflow_suggestion = self.scheduler_service.suggest_overflow_actions(
+                    overflow_tasks
+                )
+                # Return only tasks that fit
+                final_tasks = capacity_result["tasks_that_fit"][:3]
 
         logger.info(
             f"Top 3 tasks for {user_id}: "
-            f"{[task.title for task in top3]}"
+            f"{[task.title for task in final_tasks]}"
         )
 
-        return top3
+        return {
+            "tasks": final_tasks,
+            "capacity_info": capacity_info,
+            "overflow_suggestion": overflow_suggestion,
+        }
+
+    async def _filter_actionable_tasks(self, user_id: str, tasks: list[Task]) -> list[Task]:
+        """
+        Filter tasks to only include those with all dependencies completed.
+
+        Args:
+            user_id: User ID
+            tasks: List of tasks to filter
+
+        Returns:
+            List of actionable tasks (dependencies met)
+        """
+        if not tasks:
+            return []
+
+        # Get all task IDs and their statuses
+        task_status_map = {task.id: task.status for task in tasks}
+
+        # Also fetch dependency tasks that might not be in the current list
+        all_dependency_ids = set()
+        for task in tasks:
+            all_dependency_ids.update(task.dependency_ids)
+
+        # Fetch missing dependency tasks
+        missing_dep_ids = all_dependency_ids - set(task_status_map.keys())
+        if missing_dep_ids:
+            for dep_id in missing_dep_ids:
+                try:
+                    dep_task = await self.task_repo.get(user_id, dep_id)
+                    if dep_task:
+                        task_status_map[dep_task.id] = dep_task.status
+                except Exception as e:
+                    logger.warning(f"Failed to fetch dependency task {dep_id}: {e}")
+
+        # Filter actionable tasks
+        actionable = []
+        for task in tasks:
+            if not task.dependency_ids:
+                # No dependencies, always actionable
+                actionable.append(task)
+                continue
+
+            # Check if all dependencies are completed
+            all_deps_met = True
+            for dep_id in task.dependency_ids:
+                dep_status = task_status_map.get(dep_id)
+                if dep_status != TaskStatus.DONE:
+                    all_deps_met = False
+                    logger.debug(
+                        f"Task {task.title} blocked by dependency {dep_id} "
+                        f"(status: {dep_status})"
+                    )
+                    break
+
+            if all_deps_met:
+                actionable.append(task)
+
+        logger.info(
+            f"Filtered {len(tasks)} tasks to {len(actionable)} actionable tasks "
+            f"(blocked: {len(tasks) - len(actionable)})"
+        )
+
+        return actionable
 
     def _calculate_base_score(self, task: Task) -> float:
         """

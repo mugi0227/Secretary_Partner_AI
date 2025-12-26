@@ -25,6 +25,10 @@ class BreakdownStep(BaseModel):
         max_length=2000,
         description="詳細な進め方ガイド（Markdown形式、サブステップの代わり）",
     )
+    dependency_step_numbers: list[int] = Field(
+        default_factory=list,
+        description="このステップが依存する先行ステップの番号リスト（DAG形成）",
+    )
 
 
 class TaskBreakdown(BaseModel):

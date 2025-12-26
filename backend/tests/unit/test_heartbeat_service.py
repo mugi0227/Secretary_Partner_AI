@@ -78,7 +78,21 @@ async def test_process_heartbeat_no_pending_tasks(heartbeat_service, mock_agent_
     # No pending tasks
     mock_agent_task_repo.get_pending.return_value = []
 
-    result = await heartbeat_service.process_heartbeat(user_id)
+    import app.services.heartbeat_service
+    original_datetime = app.services.heartbeat_service.datetime
+
+    class MockDateTime:
+        @staticmethod
+        def now():
+            mock_now = datetime.now().replace(hour=12, minute=0)
+            return mock_now
+
+    app.services.heartbeat_service.datetime = MockDateTime
+
+    try:
+        result = await heartbeat_service.process_heartbeat(user_id)
+    finally:
+        app.services.heartbeat_service.datetime = original_datetime
 
     assert result["status"] == "success"
     assert result["processed"] == 0
@@ -117,7 +131,21 @@ async def test_process_heartbeat_with_pending_tasks(heartbeat_service, mock_agen
     mock_agent_task_repo.get_pending.return_value = [task1, task2]
     mock_agent_task_repo.mark_completed.return_value = task1
 
-    result = await heartbeat_service.process_heartbeat(user_id)
+    import app.services.heartbeat_service
+    original_datetime = app.services.heartbeat_service.datetime
+
+    class MockDateTime:
+        @staticmethod
+        def now():
+            mock_now = datetime.now().replace(hour=12, minute=0)
+            return mock_now
+
+    app.services.heartbeat_service.datetime = MockDateTime
+
+    try:
+        result = await heartbeat_service.process_heartbeat(user_id)
+    finally:
+        app.services.heartbeat_service.datetime = original_datetime
 
     assert result["status"] == "success"
     assert result["processed"] == 2
@@ -148,7 +176,21 @@ async def test_process_heartbeat_task_failure(heartbeat_service, mock_agent_task
     mock_agent_task_repo.mark_completed.side_effect = Exception("Execution failed")
     mock_agent_task_repo.mark_failed.return_value = task
 
-    result = await heartbeat_service.process_heartbeat(user_id)
+    import app.services.heartbeat_service
+    original_datetime = app.services.heartbeat_service.datetime
+
+    class MockDateTime:
+        @staticmethod
+        def now():
+            mock_now = datetime.now().replace(hour=12, minute=0)
+            return mock_now
+
+    app.services.heartbeat_service.datetime = MockDateTime
+
+    try:
+        result = await heartbeat_service.process_heartbeat(user_id)
+    finally:
+        app.services.heartbeat_service.datetime = original_datetime
 
     # Should still return success even if tasks fail
     assert result["status"] == "success"

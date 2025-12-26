@@ -1,14 +1,17 @@
-import { useState } from 'react';
-import { FaTimes, FaFire, FaClock, FaLeaf, FaBatteryFull, FaBatteryQuarter, FaCheckCircle, FaCircle, FaArrowLeft, FaBookOpen, FaEdit } from 'react-icons/fa';
+import { useState, useMemo } from 'react';
+import { FaTimes, FaFire, FaClock, FaLeaf, FaBatteryFull, FaBatteryQuarter, FaCheckCircle, FaCircle, FaArrowLeft, FaBookOpen, FaEdit, FaLock, FaLockOpen } from 'react-icons/fa';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 import type { Task } from '../../api/types';
 import './TaskDetailModal.css';
 
 interface TaskDetailModalProps {
   task: Task;
   subtasks?: Task[];
+  allTasks?: Task[];
+  initialSubtask?: Task | null;
   onClose: () => void;
   onEdit?: (task: Task) => void;
 }
@@ -40,8 +43,52 @@ function extractGuide(description?: string | null): { mainDescription: string; g
   return { mainDescription: description, guide: '' };
 }
 
-export function TaskDetailModal({ task, subtasks = [], onClose, onEdit }: TaskDetailModalProps) {
-  const [selectedSubtask, setSelectedSubtask] = useState<Task | null>(null);
+export function TaskDetailModal({ task, subtasks = [], allTasks = [], initialSubtask = null, onClose, onEdit }: TaskDetailModalProps) {
+  const [selectedSubtask, setSelectedSubtask] = useState<Task | null>(initialSubtask);
+
+  // Sort subtasks by step_number (extracted from title like "[1] ...")
+  const sortedSubtasks = useMemo(() => {
+    return [...subtasks].sort((a, b) => {
+      const getStepNumber = (title: string) => {
+        const match = title.match(/^\[(\d+)\]/);
+        return match ? parseInt(match[1]) : 999;
+      };
+      return getStepNumber(a.title) - getStepNumber(b.title);
+    });
+  }, [subtasks]);
+
+  // Look up dependency tasks for parent task (left panel always shows parent)
+  const dependencies = useMemo(() => {
+    if (!task.dependency_ids || task.dependency_ids.length === 0) {
+      return [];
+    }
+
+    return task.dependency_ids
+      .map(depId => allTasks.find(t => t.id === depId))
+      .filter((t): t is Task => t !== undefined);
+  }, [task, allTasks]);
+
+  // Look up dependency tasks for selected subtask (shown in right panel)
+  const subtaskDependencies = useMemo(() => {
+    if (!selectedSubtask?.dependency_ids || selectedSubtask.dependency_ids.length === 0) {
+      return [];
+    }
+
+    return selectedSubtask.dependency_ids
+      .map(depId => sortedSubtasks.find(t => t.id === depId))
+      .filter((t): t is Task => t !== undefined);
+  }, [selectedSubtask, sortedSubtasks]);
+
+  // Calculate effective estimated minutes (parent task's own time or sum of subtasks)
+  const effectiveEstimatedMinutes = useMemo(() => {
+    if (sortedSubtasks.length > 0) {
+      // If has subtasks: return sum of subtask estimates
+      return sortedSubtasks.reduce((sum, subtask) => sum + (subtask.estimated_minutes || 0), 0);
+    } else {
+      // If no subtasks: return task's own estimate
+      return task.estimated_minutes || 0;
+    }
+  }, [task.estimated_minutes, sortedSubtasks]);
 
   const getPriorityIcon = (level: string) => {
     switch (level) {
@@ -94,15 +141,22 @@ export function TaskDetailModal({ task, subtasks = [], onClose, onEdit }: TaskDe
       exit={{ opacity: 0 }}
     >
       <motion.div
+        layout
         className={`modal-container ${selectedSubtask ? 'split-view' : ''}`}
         onClick={(e) => e.stopPropagation()}
         initial={{ scale: 0.95, opacity: 0, y: 10 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.95, opacity: 0, y: 10 }}
-        transition={{ type: "spring", damping: 30, stiffness: 450, mass: 0.8 }}
+        transition={{
+          type: "spring",
+          damping: 35,
+          stiffness: 400,
+          mass: 1,
+          layout: { duration: 0.45, ease: [0.16, 1, 0.3, 1] }
+        }}
       >
-        {/* Main Task Panel */}
-        <div className="modal-content">
+        {/* Main Task Panel - Always shows parent task */}
+        <motion.div layout className="modal-content">
           <div className="modal-header">
             <h2>{task.title}</h2>
             <div className="modal-header-actions">
@@ -130,21 +184,23 @@ export function TaskDetailModal({ task, subtasks = [], onClose, onEdit }: TaskDe
             {task.description && (
               <div className="detail-section">
                 <h3>説明</h3>
-                {taskDescription.mainDescription && (
-                  <div className="description-text markdown-content">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {taskDescription.mainDescription}
-                    </ReactMarkdown>
-                  </div>
-                )}
-                {taskDescription.guide && (
-                  <div className="task-guide markdown-content">
-                    <h4>進め方ガイド</h4>
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {taskDescription.guide}
-                    </ReactMarkdown>
-                  </div>
-                )}
+                <>
+                  {taskDescription.mainDescription && (
+                    <div className="description-text markdown-content">
+                      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                        {taskDescription.mainDescription}
+                      </ReactMarkdown>
+                    </div>
+                  )}
+                  {taskDescription.guide && (
+                    <div className="task-guide markdown-content">
+                      <h4>進め方ガイド</h4>
+                      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                        {taskDescription.guide}
+                      </ReactMarkdown>
+                    </div>
+                  )}
+                </>
               </div>
             )}
 
@@ -173,14 +229,57 @@ export function TaskDetailModal({ task, subtasks = [], onClose, onEdit }: TaskDe
                     <span>{task.energy_level}</span>
                   </span>
                 </div>
-                {task.estimated_minutes && (
+                {effectiveEstimatedMinutes > 0 && (
                   <div className="metadata-item">
                     <span className="metadata-label">見積もり時間</span>
-                    <span className="metadata-value">{task.estimated_minutes}分</span>
+                    <span className="metadata-value">
+                      {effectiveEstimatedMinutes}分
+                      {sortedSubtasks.length > 0 && task.estimated_minutes && task.estimated_minutes !== effectiveEstimatedMinutes && (
+                        <span className="metadata-hint"> (サブタスク合計)</span>
+                      )}
+                    </span>
                   </div>
                 )}
               </div>
             </div>
+
+            {/* Dependencies */}
+            {dependencies.length > 0 && (
+              <div className="detail-section">
+                <h3>依存関係</h3>
+                <p className="dependency-hint">以下のタスクを先に完了する必要があります（クリックで移動）</p>
+                <ul className="dependencies-list">
+                  {dependencies.map((dep) => (
+                    <li
+                      key={dep.id}
+                      className={`dependency-item ${dep.status === 'DONE' ? 'completed' : 'pending'} clickable`}
+                      onClick={() => {
+                        // Jump to another task (close current modal and open new one)
+                        onClose();
+                        // Small delay to allow modal close animation
+                        setTimeout(() => {
+                          const taskCard = document.querySelector(`[data-task-id="${dep.id}"]`);
+                          if (taskCard) {
+                            (taskCard as HTMLElement).click();
+                          }
+                        }, 300);
+                      }}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      {dep.status === 'DONE' ? (
+                        <FaLockOpen className="dependency-icon completed" />
+                      ) : (
+                        <FaLock className="dependency-icon pending" />
+                      )}
+                      <span className="dependency-title">{dep.title}</span>
+                      <span className={`dependency-status status-${dep.status.toLowerCase()}`}>
+                        {getStatusLabel(dep.status)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {/* Due Date */}
             {task.due_date && (
@@ -190,14 +289,24 @@ export function TaskDetailModal({ task, subtasks = [], onClose, onEdit }: TaskDe
               </div>
             )}
 
-            {/* Subtasks */}
-            {subtasks.length > 0 && (
+            {/* Subtasks - always visible in left panel */}
+            {sortedSubtasks.length > 0 && (
               <div className="detail-section">
-                <h3>サブタスク ({subtasks.length}件)</h3>
+                <h3>サブタスク ({sortedSubtasks.length}件)</h3>
                 <ul className="subtasks-list">
-                  {subtasks.map((subtask) => {
+                  {sortedSubtasks.map((subtask) => {
                     const { guide } = extractGuide(subtask.description);
                     const hasGuide = guide.length > 0;
+
+                    // Check if this subtask has dependencies
+                    const hasDependencies = subtask.dependency_ids && subtask.dependency_ids.length > 0;
+                    const dependencyTasks = hasDependencies
+                      ? subtask.dependency_ids
+                        .map(depId => sortedSubtasks.find(t => t.id === depId))
+                        .filter((t): t is Task => t !== undefined)
+                      : [];
+                    const hasPendingDependencies = dependencyTasks.some(dep => dep.status !== 'DONE');
+
                     return (
                       <li
                         key={subtask.id}
@@ -209,9 +318,20 @@ export function TaskDetailModal({ task, subtasks = [], onClose, onEdit }: TaskDe
                         ) : (
                           <FaCircle className="subtask-icon" />
                         )}
+                        {hasDependencies && hasPendingDependencies && (
+                          <FaLock className="subtask-dependency-icon" title={`${dependencyTasks.map(d => d.title).join(', ')} に依存`} />
+                        )}
                         <span className={subtask.status === 'DONE' ? 'subtask-title done' : 'subtask-title'}>
                           {subtask.title}
                         </span>
+                        {hasDependencies && (
+                          <span className="subtask-dependency-hint" title={`${dependencyTasks.map(d => d.title).join(', ')} に依存`}>
+                            {dependencyTasks.map(d => {
+                              const match = d.title.match(/^\[(\d+)\]/);
+                              return match ? match[1] : '?';
+                            }).join(',')} に依存
+                          </span>
+                        )}
                         {hasGuide && (
                           <FaBookOpen className="subtask-guide-icon" title="進め方ガイドあり" />
                         )}
@@ -241,41 +361,134 @@ export function TaskDetailModal({ task, subtasks = [], onClose, onEdit }: TaskDe
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
 
-        {/* Guide Panel */}
+        {/* Guide Panel - Shows subtask details */}
         <AnimatePresence>
-          {selectedSubtask && selectedGuide && (
+          {selectedSubtask && (
             <motion.div
+              layout
               className="guide-panel"
-              initial={{ x: 50, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              exit={{ x: 50, opacity: 0 }}
-              transition={{ type: "spring", damping: 20, stiffness: 200 }}
+              initial={{ x: 50, opacity: 0, width: 0, marginLeft: 0 }}
+              animate={{ x: 0, opacity: 1, width: 500, marginLeft: "1.5rem" }}
+              exit={{ x: 50, opacity: 0, width: 0, marginLeft: 0 }}
+              transition={{
+                type: "spring",
+                damping: 35,
+                stiffness: 400,
+                mass: 1,
+                layout: { duration: 0.45, ease: [0.16, 1, 0.3, 1] }
+              }}
             >
               <div className="guide-header">
                 <button className="back-btn" onClick={() => setSelectedSubtask(null)}>
                   <FaArrowLeft />
                 </button>
-                <h3>進め方ガイド</h3>
+                <h3>サブタスク詳細</h3>
               </div>
               <div className="guide-content">
+                {/* Subtask Title */}
                 <div className="guide-task-title">
                   <FaBookOpen />
                   <span>{selectedSubtask.title}</span>
                 </div>
-                {selectedGuide.mainDescription && (
-                  <div className="guide-description">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {selectedGuide.mainDescription}
-                    </ReactMarkdown>
+
+                {/* Status */}
+                <div className="guide-section">
+                  <h4>ステータス</h4>
+                  <span className={`status-badge status-${selectedSubtask.status.toLowerCase()}`}>
+                    {getStatusLabel(selectedSubtask.status)}
+                  </span>
+                </div>
+
+                {/* Dependencies */}
+                {subtaskDependencies.length > 0 && (
+                  <div className="guide-section">
+                    <h4>
+                      <FaLock style={{ marginRight: '0.5rem' }} />
+                      依存関係
+                    </h4>
+                    <p className="dependency-hint">以下のサブタスクを先に完了する必要があります（クリックで切り替え）</p>
+                    <ul className="dependencies-list">
+                      {subtaskDependencies.map((dep) => (
+                        <li
+                          key={dep.id}
+                          className={`dependency-item ${dep.status === 'DONE' ? 'completed' : 'pending'} clickable`}
+                          onClick={() => setSelectedSubtask(dep)}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          {dep.status === 'DONE' ? (
+                            <FaLockOpen className="dependency-icon completed" />
+                          ) : (
+                            <FaLock className="dependency-icon pending" />
+                          )}
+                          <span className="dependency-title">{dep.title}</span>
+                          <span className={`dependency-status status-${dep.status.toLowerCase()}`}>
+                            {getStatusLabel(dep.status)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
-                <div className="guide-steps markdown-content">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {selectedGuide.guide}
-                  </ReactMarkdown>
+
+                {/* Metadata */}
+                <div className="guide-section">
+                  <h4>優先度・エネルギー</h4>
+                  <div className="metadata-grid">
+                    <div className="metadata-item">
+                      <span className="metadata-label">重要度</span>
+                      <span className={`meta-badge importance-${selectedSubtask.importance.toLowerCase()}`}>
+                        {getPriorityIcon(selectedSubtask.importance)}
+                        <span>{selectedSubtask.importance}</span>
+                      </span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">緊急度</span>
+                      <span className={`meta-badge urgency-${selectedSubtask.urgency.toLowerCase()}`}>
+                        {getPriorityIcon(selectedSubtask.urgency)}
+                        <span>{selectedSubtask.urgency}</span>
+                      </span>
+                    </div>
+                    <div className="metadata-item">
+                      <span className="metadata-label">エネルギー</span>
+                      <span className={`meta-badge energy-${selectedSubtask.energy_level.toLowerCase()}`}>
+                        {getEnergyIcon(selectedSubtask.energy_level)}
+                        <span>{selectedSubtask.energy_level}</span>
+                      </span>
+                    </div>
+                    {selectedSubtask.estimated_minutes && (
+                      <div className="metadata-item">
+                        <span className="metadata-label">見積時間</span>
+                        <span className="metadata-value">{selectedSubtask.estimated_minutes}分</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
+
+                {/* Description */}
+                {selectedGuide?.mainDescription && (
+                  <div className="guide-section">
+                    <h4>説明</h4>
+                    <div className="guide-description markdown-content">
+                      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                        {selectedGuide.mainDescription}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                )}
+
+                {/* Guide */}
+                {selectedGuide?.guide && (
+                  <div className="guide-section">
+                    <h4>進め方ガイド</h4>
+                    <div className="guide-steps markdown-content">
+                      <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                        {selectedGuide.guide}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                )}
               </div>
             </motion.div>
           )}

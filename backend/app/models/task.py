@@ -29,6 +29,9 @@ class TaskBase(BaseModel):
     )
     due_date: Optional[datetime] = Field(None, description="期限")
     parent_id: Optional[UUID] = Field(None, description="親タスクID（サブタスクの場合）")
+    dependency_ids: list[UUID] = Field(
+        default_factory=list, description="このタスクより先に終わらせるべきタスクのID"
+    )
 
 
 class TaskCreate(TaskBase):
@@ -53,6 +56,8 @@ class TaskUpdate(BaseModel):
     estimated_minutes: Optional[int] = Field(None, ge=1, le=480)
     due_date: Optional[datetime] = None
     parent_id: Optional[UUID] = None
+    dependency_ids: Optional[list[UUID]] = None
+    source_capture_id: Optional[UUID] = None
 
 
 class Task(TaskBase):

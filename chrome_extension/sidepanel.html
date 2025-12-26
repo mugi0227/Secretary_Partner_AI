@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Secretary Agent</title>
+    <link rel="stylesheet" href="styles.css">
+    <meta charset="UTF-8">
+</head>
+
+<body>
+    <div id="app">
+        <header class="app-header">
+            <div class="header-left">
+                <div class="logo-glow"></div>
+                <span class="logo-icon">✨</span>
+                <div class="header-titles">
+                    <h1 class="logo-text">Secretary Agent</h1>
+                    <div class="status-wrap">
+                        <div id="status" class="status-indicator online" title="Connected"></div>
+                        <span class="status-text">Online</span>
+                    </div>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button id="history-btn" class="action-icon-btn" title="Recent Chats">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                </button>
+                <button id="new-chat-btn" class="action-icon-btn" title="New Chat">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 5v14M5 12h14"></path>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- History Panel -->
+        <div id="history-panel" class="history-panel hidden">
+            <div class="panel-header">
+                <h3>Recent Chats</h3>
+                <button id="close-history" class="close-btn">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div id="session-list" class="session-list">
+                <div class="loading-item">Loading history...</div>
+            </div>
+        </div>
+
+        <main id="chat-stream">
+            <div id="messages" class="message-list">
+                <!-- Messages will be injected here -->
+                <div class="message assistant">
+                    <div class="message-content">Hello, Shuhei! I'm your Secretary Agent. How can I help you today?
+                    </div>
+                </div>
+                <div id="thinking" class="thinking-container hidden">
+                    <div class="thinking-bubble">
+                        <div class="dot"></div>
+                        <div class="dot"></div>
+                        <div class="dot"></div>
+                    </div>
+                    <span class="thinking-text">Thinking...</span>
+                </div>
+            </div>
+        </main>
+
+        <footer class="input-section">
+            <div id="preview-container" class="hidden">
+                <div class="preview-card">
+                    <img id="screenshot-preview" src="" alt="Screenshot">
+                    <button id="remove-screenshot" class="remove-btn">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="3">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                    <div class="preview-info">
+                        <span class="preview-type">Screenshot</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-box-wrapper">
+                <div class="input-actions-left">
+                    <button id="capture-btn" class="input-action-btn" title="Capture Tab">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path
+                                d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                            <circle cx="12" cy="13" r="4" />
+                        </svg>
+                    </button>
+                </div>
+                <textarea id="user-input" placeholder="Type a message..." rows="1"></textarea>
+                <div class="input-actions-right">
+                    <button id="send-btn" class="send-action-btn" title="Send" disabled>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="22" y1="2" x2="11" y2="13" />
+                            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="legal-footer">
+                Secretary Agent may make mistakes.
+            </div>
+        </footer>
+    </div>
+    <script src="sidepanel.js"></script>
+</body>
+
+</html>

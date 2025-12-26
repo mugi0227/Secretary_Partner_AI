@@ -71,6 +71,7 @@ export function KanbanBoard({
           status={column.status}
           title={column.title}
           tasks={tasksByStatus[column.status]}
+          allTasks={tasks}
           subtasksMap={subtasksMap}
           onEditTask={onEditTask}
           onDeleteTask={onDeleteTask}

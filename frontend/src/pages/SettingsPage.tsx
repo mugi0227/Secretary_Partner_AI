@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
-import { FaCog, FaMoon, FaSun, FaBell, FaUser } from 'react-icons/fa';
+import { FaCog, FaMoon, FaSun, FaBell, FaUser, FaClock } from 'react-icons/fa';
 import { useTheme } from '../context/ThemeContext';
+import { DEFAULT_DAILY_BUFFER_HOURS } from '../utils/capacitySettings';
 import './SettingsPage.css';
 
 export function SettingsPage() {
   const { theme, toggleTheme } = useTheme();
   const [userName, setUserName] = useState('');
+  const [dailyCapacityHours, setDailyCapacityHours] = useState(8);
+  const [dailyBufferHours, setDailyBufferHours] = useState(DEFAULT_DAILY_BUFFER_HOURS);
   const [quietHoursEnabled, setQuietHoursEnabled] = useState(false);
   const [quietHoursStart, setQuietHoursStart] = useState('22:00');
   const [quietHoursEnd, setQuietHoursEnd] = useState('07:00');
@@ -13,11 +16,17 @@ export function SettingsPage() {
   // Load settings from localStorage
   useEffect(() => {
     const savedUserName = localStorage.getItem('userName') || 'Shuhei';
+    const savedDailyCapacityHours = parseFloat(localStorage.getItem('dailyCapacityHours') || '8');
+    const savedDailyBufferHours = parseFloat(
+      localStorage.getItem('dailyBufferHours') || String(DEFAULT_DAILY_BUFFER_HOURS)
+    );
     const savedQuietHoursEnabled = localStorage.getItem('quietHoursEnabled') === 'true';
     const savedQuietHoursStart = localStorage.getItem('quietHoursStart') || '22:00';
     const savedQuietHoursEnd = localStorage.getItem('quietHoursEnd') || '07:00';
 
     setUserName(savedUserName);
+    setDailyCapacityHours(savedDailyCapacityHours);
+    setDailyBufferHours(savedDailyBufferHours);
     setQuietHoursEnabled(savedQuietHoursEnabled);
     setQuietHoursStart(savedQuietHoursStart);
     setQuietHoursEnd(savedQuietHoursEnd);
@@ -26,6 +35,24 @@ export function SettingsPage() {
   const handleUserNameChange = (value: string) => {
     setUserName(value);
     localStorage.setItem('userName', value);
+  };
+
+  const handleDailyCapacityChange = (value: string) => {
+    const hours = parseFloat(value);
+    if (!isNaN(hours) && hours > 0 && hours <= 24) {
+      setDailyCapacityHours(hours);
+      localStorage.setItem('dailyCapacityHours', String(hours));
+      window.dispatchEvent(new Event('capacity-settings-updated'));
+    }
+  };
+
+  const handleDailyBufferChange = (value: string) => {
+    const hours = parseFloat(value);
+    if (!isNaN(hours) && hours >= 0 && hours <= 24) {
+      setDailyBufferHours(hours);
+      localStorage.setItem('dailyBufferHours', String(hours));
+      window.dispatchEvent(new Event('capacity-settings-updated'));
+    }
   };
 
   const handleQuietHoursToggle = () => {
@@ -74,6 +101,52 @@ export function SettingsPage() {
             />
             <p className="setting-description">
               AgentCardなどで表示される名前を設定します
+            </p>
+          </div>
+        </div>
+
+        {/* Daily Capacity Settings */}
+        <div className="settings-section">
+          <h3 className="section-title">
+            <FaClock />
+            稼働時間
+          </h3>
+          <div className="setting-item">
+            <label htmlFor="dailyCapacityHours" className="setting-label">
+              1日の稼働時間（時間）
+            </label>
+            <input
+              type="number"
+              id="dailyCapacityHours"
+              value={dailyCapacityHours}
+              onChange={(e) => handleDailyCapacityChange(e.target.value)}
+              className="setting-input capacity-input"
+              placeholder="8"
+              min="1"
+              max="24"
+              step="0.5"
+            />
+            <p className="setting-description">
+              スケジューリング計算に使用する1日の作業可能時間を設定します（デフォルト: 8時間）
+            </p>
+          </div>
+          <div className="setting-item">
+            <label htmlFor="dailyBufferHours" className="setting-label">
+              バッファ時間（時間）
+            </label>
+            <input
+              type="number"
+              id="dailyBufferHours"
+              value={dailyBufferHours}
+              onChange={(e) => handleDailyBufferChange(e.target.value)}
+              className="setting-input capacity-input"
+              placeholder="1"
+              min="0"
+              max="24"
+              step="0.5"
+            />
+            <p className="setting-description">
+              稼働時間から差し引いて計算します（例: 8時間 - 1時間 = 7時間）
             </p>
           </div>
         </div>

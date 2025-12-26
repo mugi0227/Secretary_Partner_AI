@@ -35,7 +35,7 @@ class CaptureBase(BaseModel):
 class CaptureCreate(CaptureBase):
     """Schema for creating a new capture."""
 
-    pass
+    base64_image: Optional[str] = Field(None, description="Base64 encoded image data (transient)")
 
 
 class Capture(CaptureBase):

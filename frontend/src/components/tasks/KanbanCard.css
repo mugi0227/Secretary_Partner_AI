@@ -5,6 +5,12 @@
   box-shadow: var(--shadow-card);
   cursor: grab;
   transition: all 0.2s ease;
+  position: relative;
+}
+
+.kanban-card.blocked {
+  opacity: 0.7;
+  border: 2px dashed rgba(148, 163, 184, 0.3);
 }
 
 .kanban-card:hover {
@@ -22,6 +28,40 @@
   align-items: flex-start;
   gap: 0.5rem;
   margin-bottom: 0.5rem;
+}
+
+.dependency-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.dependency-indicator.locked {
+  color: var(--accent-orange);
+  background: rgba(251, 146, 60, 0.1);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.dependency-indicator.unlocked {
+  color: var(--accent-green);
+  background: rgba(74, 222, 128, 0.1);
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.05);
+  }
 }
 
 .card-title {

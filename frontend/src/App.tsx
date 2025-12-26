@@ -6,6 +6,7 @@ import { AppLayout } from './components/layout/AppLayout';
 import { DashboardPage } from './pages/DashboardPage';
 import { TasksPage } from './pages/TasksPage';
 import { ProjectsPage } from './pages/ProjectsPage';
+import { ProjectDetailPage } from './pages/ProjectDetailPage';
 import { AchievementPage } from './pages/AchievementPage';
 import { SettingsPage } from './pages/SettingsPage';
 
@@ -28,6 +29,7 @@ function AnimatedRoutes() {
           <Route index element={<DashboardPage />} />
           <Route path="tasks" element={<TasksPage />} />
           <Route path="projects" element={<ProjectsPage />} />
+          <Route path="projects/:projectId" element={<ProjectDetailPage />} />
           <Route path="achievement" element={<AchievementPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>

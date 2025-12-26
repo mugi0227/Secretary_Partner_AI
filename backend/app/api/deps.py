@@ -17,6 +17,7 @@ from app.interfaces.project_repository import IProjectRepository
 from app.interfaces.agent_task_repository import IAgentTaskRepository
 from app.interfaces.memory_repository import IMemoryRepository
 from app.interfaces.capture_repository import ICaptureRepository
+from app.interfaces.chat_session_repository import IChatSessionRepository
 from app.interfaces.llm_provider import ILLMProvider
 from app.interfaces.speech_provider import ISpeechToTextProvider
 from app.interfaces.storage_provider import IStorageProvider
@@ -83,6 +84,17 @@ def get_capture_repository() -> ICaptureRepository:
         return SqliteCaptureRepository()
 
 
+@lru_cache()
+def get_chat_session_repository() -> IChatSessionRepository:
+    """Get chat session repository instance."""
+    settings = get_settings()
+    if settings.is_gcp:
+        raise NotImplementedError("Chat session repository not implemented for GCP")
+    else:
+        from app.infrastructure.local.chat_session_repository import SqliteChatSessionRepository
+        return SqliteChatSessionRepository()
+
+
 # ===========================================
 # Provider Dependencies
 # ===========================================
@@ -130,7 +142,7 @@ def get_auth_provider() -> IAuthProvider:
         raise NotImplementedError("Firebase Auth not implemented yet")
     else:
         from app.infrastructure.local.mock_auth import MockAuthProvider
-        return MockAuthProvider()
+        return MockAuthProvider(enabled=True)
 
 
 @lru_cache()
@@ -211,6 +223,7 @@ ProjectRepo = Annotated[IProjectRepository, Depends(get_project_repository)]
 AgentTaskRepo = Annotated[IAgentTaskRepository, Depends(get_agent_task_repository)]
 MemoryRepo = Annotated[IMemoryRepository, Depends(get_memory_repository)]
 CaptureRepo = Annotated[ICaptureRepository, Depends(get_capture_repository)]
+ChatRepo = Annotated[IChatSessionRepository, Depends(get_chat_session_repository)]
 LLMProvider = Annotated[ILLMProvider, Depends(get_llm_provider)]
 StorageProvider = Annotated[IStorageProvider, Depends(get_storage_provider)]
 SpeechProvider = Annotated[ISpeechToTextProvider, Depends(get_speech_provider)]

@@ -87,7 +87,8 @@ async def test_top3_api_integration(task_repo, top3_service):
         await task_repo.create(user_id, task_data)
 
     # Get top 3
-    top3 = await top3_service.get_top3(user_id)
+    result = await top3_service.get_top3(user_id)
+    top3 = result["tasks"]
 
     # Assertions
     assert len(top3) == 3
@@ -136,7 +137,8 @@ async def test_top3_api_with_completed_tasks(task_repo, top3_service):
     await task_repo.update(user_id, task2.id, TaskUpdate(status=TaskStatus.DONE))
 
     # Get top 3
-    top3 = await top3_service.get_top3(user_id)
+    result = await top3_service.get_top3(user_id)
+    top3 = result["tasks"]
 
     # Should only return active task
     assert len(top3) == 1
@@ -149,7 +151,8 @@ async def test_top3_api_empty_tasks(task_repo, top3_service):
     user_id = "test_user"
 
     # Get top 3 with no tasks
-    top3 = await top3_service.get_top3(user_id)
+    result = await top3_service.get_top3(user_id)
+    top3 = result["tasks"]
 
     assert len(top3) == 0
 
@@ -170,7 +173,8 @@ async def test_top3_api_less_than_3_tasks(task_repo, top3_service):
     )
 
     # Get top 3
-    top3 = await top3_service.get_top3(user_id)
+    result = await top3_service.get_top3(user_id)
+    top3 = result["tasks"]
 
     # Should return only 2 tasks
     assert len(top3) == 2

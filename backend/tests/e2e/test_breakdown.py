@@ -185,3 +185,63 @@ async def test_get_subtasks_endpoint():
         assert str(child1.id) in subtask_ids
         assert str(child2.id) in subtask_ids
 
+
+@pytest.mark.e2e
+@pytest.mark.asyncio
+async def test_breakdown_sets_dependencies():
+    """Test that breakdown sets dependency relationships between subtasks (partial order, not total)."""
+    settings = get_settings()
+
+    if not settings.GOOGLE_API_KEY:
+        pytest.skip("GOOGLE_API_KEY not configured")
+
+    await init_db()
+
+    # Create a task that likely needs sequential steps (e.g., tax filing)
+    session_factory = get_session_factory()
+    task_repo = SqliteTaskRepository(session_factory=session_factory)
+    task = await task_repo.create(
+        "dev_user",
+        TaskCreate(
+            title="確定申告を完了する",
+            description="今年分の確定申告を期限までに提出する。領収書の整理から申告書の提出まで。",
+            created_by=CreatedBy.USER,
+        ),
+    )
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            f"/api/tasks/{task.id}/breakdown",
+            json={"create_subtasks": True},
+            headers={"Authorization": "Bearer dev_user"},
+        )
+
+        assert response.status_code == 200, response.text
+        data = response.json()
+
+        # Verify subtasks were created
+        assert data["subtasks_created"] is True
+        assert len(data["subtask_ids"]) >= 3  # At least 3 steps
+
+        # Verify breakdown contains dependency_step_numbers
+        steps = data["breakdown"]["steps"]
+        has_dependencies = any(len(step.get("dependency_step_numbers", [])) > 0 for step in steps)
+
+        # For sequential tasks like tax filing, we expect at least some dependencies
+        # (though not necessarily total order)
+        assert has_dependencies, "Expected at least some dependencies in breakdown steps"
+
+    # Verify dependencies in actual database
+    subtasks = await task_repo.get_subtasks("dev_user", task.id)
+    subtask_map = {str(s.id): s for s in subtasks}
+
+    # At least one subtask should have dependencies
+    has_db_dependencies = any(len(s.dependency_ids) > 0 for s in subtasks)
+    assert has_db_dependencies, "Expected at least one subtask to have dependencies set"
+
+    # Verify dependency integrity: all dependency IDs must exist in subtasks
+    for subtask in subtasks:
+        for dep_id in subtask.dependency_ids:
+            assert str(dep_id) in subtask_map, f"Dependency {dep_id} not found in subtasks"
+

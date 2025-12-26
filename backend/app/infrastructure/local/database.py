@@ -17,6 +17,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    JSON,
     create_engine,
 )
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -53,6 +54,7 @@ class TaskORM(Base):
     estimated_minutes = Column(Integer, nullable=True)
     due_date = Column(DateTime, nullable=True)
     parent_id = Column(String(36), nullable=True, index=True)
+    dependency_ids = Column(JSON, nullable=True, default=list)
     source_capture_id = Column(String(36), nullable=True)
     created_by = Column(String(10), default="USER")
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -70,6 +72,11 @@ class ProjectORM(Base):
     description = Column(Text, nullable=True)
     status = Column(String(20), default="ACTIVE")
     context_summary = Column(Text, nullable=True)
+    context = Column(Text, nullable=True)  # 詳細コンテキスト（README）
+    priority = Column(Integer, default=5)  # プロジェクト優先度（1-10）
+    goals = Column(JSON, nullable=True, default=list)  # プロジェクトのゴールリスト
+    key_points = Column(JSON, nullable=True, default=list)  # 重要なポイントリスト
+    kpi_config = Column(JSON, nullable=True)  # KPI configuration
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -123,6 +130,31 @@ class CaptureORM(Base):
     image_analysis = Column(Text, nullable=True)
     processed = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ChatSessionORM(Base):
+    """Chat session ORM model."""
+
+    __tablename__ = "chat_sessions"
+
+    session_id = Column(String(100), primary_key=True)
+    user_id = Column(String(255), nullable=False, index=True)
+    title = Column(String(200), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ChatMessageORM(Base):
+    """Chat message ORM model."""
+
+    __tablename__ = "chat_messages"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    session_id = Column(String(100), ForeignKey("chat_sessions.session_id"), index=True)
+    user_id = Column(String(255), nullable=False, index=True)
+    role = Column(String(20), nullable=False)
+    content = Column(Text, nullable=False, default="")
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
 
 # ===========================================

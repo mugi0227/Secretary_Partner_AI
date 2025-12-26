@@ -27,6 +27,30 @@
   align-items: center;
 }
 
+.header-actions .button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.header-actions .button-primary {
+  background: var(--primary);
+  color: white;
+}
+
+.header-actions .button-primary:hover {
+  background: var(--primary-dark);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px -4px rgba(14, 165, 233, 0.4);
+}
+
 .project-total {
   font-size: 0.95rem;
   color: var(--text-muted);
@@ -139,6 +163,45 @@
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.project-priority {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.priority-label {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.priority-stars {
+  display: flex;
+  gap: 0.15rem;
+}
+
+.priority-stars .star {
+  font-size: 0.875rem;
+}
+
+.priority-stars .star-filled {
+  color: #fbbf24;
+}
+
+.priority-stars .star-empty {
+  color: rgba(148, 163, 184, 0.2);
+}
+
+.priority-value {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+  margin-left: 0.25rem;
 }
 
 .project-stats {

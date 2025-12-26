@@ -72,11 +72,14 @@ class Settings(BaseSettings):
     # Server
     # ===========================================
     HOST: str = "0.0.0.0"
-    PORT: int = 8080
+    PORT: int = 8000
     ALLOWED_ORIGINS: List[str] = Field(
-        default=["http://localhost:3000", "http://localhost:5173"]
+        default=["http://localhost:3000", "http://localhost:5173", "*"]
     )
 
+    # URL for accessing the backend (for storage and callbacks)
+    BASE_URL: str = "http://localhost:8000"
+    
     # ===========================================
     # Scheduler (Quiet Hours)
     # ===========================================

@@ -13,7 +13,9 @@ from app.infrastructure.local.task_repository import SqliteTaskRepository
 from app.infrastructure.local.memory_repository import SqliteMemoryRepository
 from app.infrastructure.local.agent_task_repository import SqliteAgentTaskRepository
 from app.infrastructure.local.capture_repository import SqliteCaptureRepository
+from app.infrastructure.local.chat_session_repository import SqliteChatSessionRepository
 from app.infrastructure.local.gemini_api_provider import GeminiAPIProvider
+from app.infrastructure.local.project_repository import SqliteProjectRepository
 from app.core.config import get_settings
 
 
@@ -27,17 +29,21 @@ async def test_agent_service_initialization(session_factory, test_user_id):
         pytest.skip("GOOGLE_API_KEY not configured")
 
     task_repo = SqliteTaskRepository(session_factory=session_factory)
+    project_repo = SqliteProjectRepository(session_factory=session_factory)
     memory_repo = SqliteMemoryRepository(session_factory=session_factory)
     agent_task_repo = SqliteAgentTaskRepository(session_factory=session_factory)
     capture_repo = SqliteCaptureRepository(session_factory=session_factory)
+    chat_repo = SqliteChatSessionRepository(session_factory=session_factory)
     llm_provider = GeminiAPIProvider(settings.GEMINI_MODEL)
 
     service = AgentService(
         llm_provider=llm_provider,
         task_repo=task_repo,
+        project_repo=project_repo,
         memory_repo=memory_repo,
         agent_task_repo=agent_task_repo,
         capture_repo=capture_repo,
+        chat_repo=chat_repo,
     )
 
     assert service is not None
@@ -53,17 +59,21 @@ async def test_agent_service_process_chat(session_factory, test_user_id):
         pytest.skip("GOOGLE_API_KEY not configured")
 
     task_repo = SqliteTaskRepository(session_factory=session_factory)
+    project_repo = SqliteProjectRepository(session_factory=session_factory)
     memory_repo = SqliteMemoryRepository(session_factory=session_factory)
     agent_task_repo = SqliteAgentTaskRepository(session_factory=session_factory)
     capture_repo = SqliteCaptureRepository(session_factory=session_factory)
+    chat_repo = SqliteChatSessionRepository(session_factory=session_factory)
     llm_provider = GeminiAPIProvider(settings.GEMINI_MODEL)
 
     service = AgentService(
         llm_provider=llm_provider,
         task_repo=task_repo,
+        project_repo=project_repo,
         memory_repo=memory_repo,
         agent_task_repo=agent_task_repo,
         capture_repo=capture_repo,
+        chat_repo=chat_repo,
     )
 
     request = ChatRequest(
@@ -92,17 +102,21 @@ async def test_agent_service_creates_capture(session_factory, test_user_id):
         pytest.skip("GOOGLE_API_KEY not configured")
 
     task_repo = SqliteTaskRepository(session_factory=session_factory)
+    project_repo = SqliteProjectRepository(session_factory=session_factory)
     memory_repo = SqliteMemoryRepository(session_factory=session_factory)
     agent_task_repo = SqliteAgentTaskRepository(session_factory=session_factory)
     capture_repo = SqliteCaptureRepository(session_factory=session_factory)
+    chat_repo = SqliteChatSessionRepository(session_factory=session_factory)
     llm_provider = GeminiAPIProvider(settings.GEMINI_MODEL)
 
     service = AgentService(
         llm_provider=llm_provider,
         task_repo=task_repo,
+        project_repo=project_repo,
         memory_repo=memory_repo,
         agent_task_repo=agent_task_repo,
         capture_repo=capture_repo,
+        chat_repo=chat_repo,
     )
 
     request = ChatRequest(

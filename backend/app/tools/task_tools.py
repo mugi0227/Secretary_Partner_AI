@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from app.core.config import get_settings
 from app.interfaces.llm_provider import ILLMProvider
 from app.interfaces.memory_repository import IMemoryRepository
+from app.interfaces.project_repository import IProjectRepository
 from app.interfaces.task_repository import ITaskRepository
 from app.models.enums import CreatedBy, EnergyLevel, Priority
 from app.models.task import Task, TaskCreate, TaskUpdate
@@ -45,6 +46,10 @@ class CreateTaskInput(BaseModel):
     )
     estimated_minutes: Optional[int] = Field(None, ge=1, le=480, description="見積もり時間（分）")
     due_date: Optional[str] = Field(None, description="期限（ISO形式: YYYY-MM-DDTHH:MM:SS）")
+    dependency_ids: list[str] = Field(
+        default_factory=list,
+        description="このタスクが依存する他のタスクのIDリスト（UUID文字列のリスト）"
+    )
 
     model_config = {"populate_by_name": True}
 
@@ -91,6 +96,25 @@ class BreakdownTaskInput(BaseModel):
     )
 
 
+class ListTasksInput(BaseModel):
+    """Input for list_tasks tool."""
+
+    project_id: Optional[str] = Field(
+        None,
+        description="プロジェクトID（指定時はそのプロジェクト内のみ取得）"
+    )
+    status_filter: Optional[list[str]] = Field(
+        None,
+        description="ステータスフィルタ（例: ['TODO', 'IN_PROGRESS']）。指定なしで全ステータス取得"
+    )
+    limit: int = Field(
+        50,
+        ge=1,
+        le=100,
+        description="取得件数上限（デフォルト: 50、最大: 100）"
+    )
+
+
 # ===========================================
 # Tool Functions
 # ===========================================
@@ -123,6 +147,15 @@ async def create_task(
         except ValueError:
             pass  # Invalid date format, ignore
 
+    # Parse dependency_ids if provided
+    dependency_ids = []
+    for dep_id_str in input_data.dependency_ids:
+        try:
+            dependency_ids.append(UUID(dep_id_str))
+        except (ValueError, AttributeError):
+            # Invalid UUID format, skip this dependency
+            pass
+
     task_data = TaskCreate(
         title=input_data.title,
         description=input_data.description,
@@ -132,6 +165,7 @@ async def create_task(
         energy_level=input_data.energy_level,
         estimated_minutes=input_data.estimated_minutes,
         due_date=due_date,
+        dependency_ids=dependency_ids,
         created_by=CreatedBy.AGENT,
     )
 
@@ -196,6 +230,55 @@ async def delete_task(
     }
 
 
+async def list_tasks(
+    user_id: str,
+    repo: ITaskRepository,
+    input_data: ListTasksInput,
+) -> dict:
+    """
+    List tasks with optional filters.
+
+    Args:
+        user_id: User ID
+        repo: Task repository
+        input_data: List parameters
+
+    Returns:
+        List of tasks matching the filters
+    """
+    # Parse project_id if provided
+    project_id = None
+    if input_data.project_id and input_data.project_id.strip():
+        try:
+            project_id = UUID(input_data.project_id)
+        except (ValueError, AttributeError):
+            # Invalid UUID format, ignore
+            pass
+
+    # Get tasks - we'll filter by status in Python since repo.list doesn't support multiple statuses
+    all_tasks = await repo.list(
+        user_id,
+        project_id=project_id,
+        parent_id=None,  # Only root tasks (not subtasks)
+    )
+
+    # Filter by status if specified
+    if input_data.status_filter:
+        status_set = set(s.upper() for s in input_data.status_filter)
+        filtered_tasks = [t for t in all_tasks if t.status.value in status_set]
+    else:
+        filtered_tasks = all_tasks
+
+    # Apply limit
+    limited_tasks = filtered_tasks[:input_data.limit]
+
+    return {
+        "tasks": [task.model_dump(mode="json") for task in limited_tasks],
+        "count": len(limited_tasks),
+        "total_matching": len(filtered_tasks),
+    }
+
+
 async def search_similar_tasks(
     user_id: str,
     repo: ITaskRepository,
@@ -253,6 +336,13 @@ def create_task_tool(repo: ITaskRepository, user_id: str) -> FunctionTool:
     async def _tool(input_data: dict) -> dict:
         """create_task: 新しいタスクを作成します。作成前にsearch_similar_tasksで重複チェック推奨。
 
+        **⚠️ 依存関係の設定（重要）**:
+        タスク作成時には、以下の手順で依存関係を判断してください：
+        1. list_tasks で同じプロジェクト内の未完了タスク（TODO/IN_PROGRESS）を取得
+        2. 新しいタスクが既存タスクの完了を前提とする場合、dependency_ids に設定
+        3. 例: 「確定申告書を提出する」を作る場合 → 「領収書を整理する」が未完了なら依存関係を設定
+        4. 並行実行可能なタスク（関係ないタスク）には依存関係を設定しない
+
         Parameters:
             title (str): タスクのタイトル（必須）※task_titleでも可
             description (str, optional): タスクの詳細説明
@@ -262,6 +352,7 @@ def create_task_tool(repo: ITaskRepository, user_id: str) -> FunctionTool:
             energy_level (str, optional): 必要エネルギー (HIGH/LOW)、デフォルト: LOW
             estimated_minutes (int, optional): 見積もり時間（分）
             due_date (str, optional): 期限（ISO形式）
+            dependency_ids (list[str], optional): このタスクが依存する他のタスクのIDリスト（UUID文字列）
 
         Returns:
             dict: 作成されたタスク情報
@@ -330,11 +421,31 @@ def search_similar_tasks_tool(repo: ITaskRepository, user_id: str) -> FunctionTo
     return FunctionTool(func=_tool)
 
 
+def list_tasks_tool(repo: ITaskRepository, user_id: str) -> FunctionTool:
+    """Create ADK tool for listing tasks."""
+    async def _tool(input_data: dict) -> dict:
+        """list_tasks: タスク一覧を取得します（依存関係判断に利用）。
+
+        Parameters:
+            project_id (str, optional): プロジェクトID（指定時はそのプロジェクト内のみ取得）
+            status_filter (list[str], optional): ステータスフィルタ（例: ["TODO", "IN_PROGRESS"]）
+            limit (int, optional): 取得件数上限（デフォルト: 50、最大: 100）
+
+        Returns:
+            dict: タスク一覧（各タスクにはid, title, description, status, dependency_ids等を含む）
+        """
+        return await list_tasks(user_id, repo, ListTasksInput(**input_data))
+
+    _tool.__name__ = "list_tasks"
+    return FunctionTool(func=_tool)
+
+
 async def breakdown_task(
     user_id: str,
     task_repo: ITaskRepository,
     memory_repo: IMemoryRepository,
     llm_provider: ILLMProvider,
+    project_repo: Optional[IProjectRepository],
     input_data: BreakdownTaskInput,
 ) -> dict:
     """
@@ -345,6 +456,7 @@ async def breakdown_task(
         task_repo: Task repository
         memory_repo: Memory repository
         llm_provider: LLM provider
+        project_repo: Project repository (optional)
         input_data: Breakdown parameters
 
     Returns:
@@ -356,6 +468,7 @@ async def breakdown_task(
         llm_provider=llm_provider,
         task_repo=task_repo,
         memory_repo=memory_repo,
+        project_repo=project_repo,
     )
 
     result = await service.breakdown_task(
@@ -372,10 +485,13 @@ def breakdown_task_tool(
     memory_repo: IMemoryRepository,
     llm_provider: ILLMProvider,
     user_id: str,
+    project_repo: Optional[IProjectRepository] = None,
 ) -> FunctionTool:
     """Create ADK tool for breaking down tasks into subtasks."""
     async def _tool(input_data: dict) -> dict:
         """breakdown_task: タスクを3-5個のサブタスクに分解します（Planner Agentを使用）。
+
+        タスクがプロジェクトに属している場合、プロジェクトの目標・重要ポイント・READMEを考慮して分解します。
 
         Parameters:
             task_id (str): 分解するタスクのID（UUID文字列、必須）
@@ -385,7 +501,7 @@ def breakdown_task_tool(
             dict: 分解結果（steps: ステップリスト、subtasks_created: サブタスク作成有無、subtask_ids: 作成されたサブタスクIDリスト、markdown_guide: Markdownガイド）
         """
         return await breakdown_task(
-            user_id, repo, memory_repo, llm_provider, BreakdownTaskInput(**input_data)
+            user_id, repo, memory_repo, llm_provider, project_repo, BreakdownTaskInput(**input_data)
         )
 
     _tool.__name__ = "breakdown_task"

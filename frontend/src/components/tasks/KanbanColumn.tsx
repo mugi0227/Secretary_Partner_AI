@@ -6,6 +6,7 @@ interface KanbanColumnProps {
   status: TaskStatus;
   title: string;
   tasks: Task[];
+  allTasks: Task[];
   subtasksMap: Record<string, Task[]>;
   onEditTask?: (task: Task) => void;
   onDeleteTask?: (id: string) => void;
@@ -17,6 +18,7 @@ export function KanbanColumn({
   status,
   title,
   tasks,
+  allTasks,
   subtasksMap,
   onEditTask,
   onDeleteTask,
@@ -66,6 +68,7 @@ export function KanbanColumn({
             <KanbanCard
               task={task}
               subtasks={subtasksMap[task.id] || []}
+              allTasks={allTasks}
               onEdit={onEditTask}
               onDelete={onDeleteTask}
               onClick={onTaskClick}

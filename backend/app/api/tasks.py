@@ -4,18 +4,44 @@ Tasks API endpoints.
 CRUD operations for tasks and task breakdown.
 """
 
+from datetime import date
 from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.api.deps import CurrentUser, LLMProvider, MemoryRepo, TaskRepo
+from app.api.deps import CurrentUser, LLMProvider, MemoryRepo, ProjectRepo, TaskRepo
 from app.core.exceptions import LLMValidationError, NotFoundError
 from app.models.breakdown import BreakdownRequest, BreakdownResponse
+from app.models.schedule import ScheduleResponse, TodayTasksResponse
 from app.models.task import Task, TaskCreate, TaskUpdate
 from app.services.planner_service import PlannerService
+from app.services.scheduler_service import SchedulerService
 
 router = APIRouter()
+
+
+def get_scheduler_service() -> SchedulerService:
+    """Get SchedulerService instance."""
+    return SchedulerService()
+
+
+def apply_capacity_buffer(
+    scheduler_service: SchedulerService,
+    capacity_hours: Optional[float],
+    buffer_hours: Optional[float],
+) -> Optional[float]:
+    """Apply buffer hours to capacity hours."""
+    if buffer_hours is None:
+        return capacity_hours
+    base_hours = capacity_hours if capacity_hours is not None else scheduler_service.default_capacity_hours
+    return max(0.0, base_hours - buffer_hours)
+
+
+async def load_project_priorities(project_repo: ProjectRepo, user_id: str) -> dict[UUID, int]:
+    """Load project priorities for scheduling."""
+    projects = await project_repo.list(user_id, limit=1000)
+    return {project.id: project.priority for project in projects}
 
 
 @router.post("", response_model=Task, status_code=status.HTTP_201_CREATED)
@@ -26,22 +52,6 @@ async def create_task(
 ):
     """Create a new task."""
     return await repo.create(user.id, task)
-
-
-@router.get("/{task_id}", response_model=Task)
-async def get_task(
-    task_id: UUID,
-    user: CurrentUser,
-    repo: TaskRepo,
-):
-    """Get a task by ID."""
-    task = await repo.get(user.id, task_id)
-    if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task {task_id} not found",
-        )
-    return task
 
 
 @router.get("", response_model=list[Task])
@@ -63,6 +73,76 @@ async def list_tasks(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get("/schedule", response_model=ScheduleResponse)
+async def get_task_schedule(
+    user: CurrentUser,
+    repo: TaskRepo,
+    project_repo: ProjectRepo,
+    scheduler_service: SchedulerService = Depends(get_scheduler_service),
+    start_date: Optional[date] = Query(None, description="Schedule start date"),
+    capacity_hours: Optional[float] = Query(None, description="Daily capacity in hours (default: 8)"),
+    buffer_hours: Optional[float] = Query(None, description="Daily buffer hours"),
+    max_days: int = Query(60, ge=1, le=365, description="Maximum days to schedule"),
+):
+    """Build a multi-day schedule for tasks."""
+    tasks = await repo.list(user.id, include_done=True, limit=1000)
+    project_priorities = await load_project_priorities(project_repo, user.id)
+    effective_capacity = apply_capacity_buffer(scheduler_service, capacity_hours, buffer_hours)
+    return scheduler_service.build_schedule(
+        tasks,
+        project_priorities=project_priorities,
+        start_date=start_date,
+        capacity_hours=effective_capacity,
+        max_days=max_days,
+    )
+
+
+@router.get("/today", response_model=TodayTasksResponse)
+async def get_today_tasks(
+    user: CurrentUser,
+    repo: TaskRepo,
+    project_repo: ProjectRepo,
+    scheduler_service: SchedulerService = Depends(get_scheduler_service),
+    target_date: Optional[date] = Query(None, description="Target date (default: today)"),
+    capacity_hours: Optional[float] = Query(None, description="Daily capacity in hours (default: 8)"),
+    buffer_hours: Optional[float] = Query(None, description="Daily buffer hours"),
+    max_days: int = Query(30, ge=1, le=365, description="Maximum days to schedule"),
+):
+    """Get today's tasks derived from the schedule."""
+    tasks = await repo.list(user.id, include_done=True, limit=1000)
+    project_priorities = await load_project_priorities(project_repo, user.id)
+    effective_capacity = apply_capacity_buffer(scheduler_service, capacity_hours, buffer_hours)
+    schedule = scheduler_service.build_schedule(
+        tasks,
+        project_priorities=project_priorities,
+        start_date=target_date,
+        capacity_hours=effective_capacity,
+        max_days=max_days,
+    )
+    return scheduler_service.get_today_tasks(
+        schedule,
+        tasks,
+        project_priorities=project_priorities,
+        today=target_date or date.today(),
+    )
+
+
+@router.get("/{task_id}", response_model=Task)
+async def get_task(
+    task_id: UUID,
+    user: CurrentUser,
+    repo: TaskRepo,
+):
+    """Get a task by ID."""
+    task = await repo.get(user.id, task_id)
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Task {task_id} not found",
+        )
+    return task
 
 
 @router.patch("/{task_id}", response_model=Task)

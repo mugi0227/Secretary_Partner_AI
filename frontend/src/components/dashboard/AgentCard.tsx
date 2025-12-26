@@ -10,31 +10,45 @@ export function AgentCard() {
   };
 
   const getAdviceMessage = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) {
-      return 'タスクのエネルギーレベルに合わせて優先順位を調整しています。';
-    }
-    return 'タスクのエネルギーレベルに合わせて優先順位を調整しています。';
+    // デザイナー注: ここは動的なメッセージに将来的に置き換え可能
+    return 'タスクのエネルギーレベルと優先度を分析しました。本日の推奨アクションはこちらです。';
   };
 
   return (
     <div className="agent-card">
-      <div className="agent-status">
-        <div className="agent-avatar">
-          <div className="pulse-ring"></div>
-          <div className="pulse-ring"></div>
-          <FaRobot />
+      <div className="agent-card-glass"></div>
+      <div className="agent-content">
+        <div className="agent-status-section">
+          <div className="agent-avatar-container">
+            <div className="avatar-glow"></div>
+            <div className="pulse-rings">
+              <div className="ring"></div>
+              <div className="ring"></div>
+              <div className="ring"></div>
+            </div>
+            <div className="agent-avatar-icon">
+              <FaRobot />
+            </div>
+          </div>
+
+          <div className="agent-text-content">
+            <span className="agent-badge">AI ASSISTANT</span>
+            <h2 className="agent-greeting">{getGreeting()}, Shuhei!</h2>
+            <p className="agent-message">{getAdviceMessage()}</p>
+          </div>
         </div>
-        <div className="agent-message">
-          <h2>{getGreeting()}, Shuhei!</h2>
-          <p>{getAdviceMessage()}</p>
+
+        <div className="agent-actions-section">
+          <button className="primary-action-btn" onClick={() => alert('ブリーフィング機能を開始します...')}>
+            <div className="btn-icon">
+              <FaPlay />
+            </div>
+            <div className="btn-text">
+              <span className="btn-label">デイリーブリーフィング</span>
+              <span className="btn-subtext">3分で今日を把握</span>
+            </div>
+          </button>
         </div>
-      </div>
-      <div className="agent-actions">
-        <button className="secondary-btn" onClick={() => alert('朝のブリーフィング機能は開発中です！')}>
-          <FaPlay />
-          <span>朝のブリーフィング</span>
-        </button>
       </div>
     </div>
   );

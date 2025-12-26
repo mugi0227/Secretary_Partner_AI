@@ -55,6 +55,7 @@ Thumbs.db
 !package.json
 !package-lock.json
 !tsconfig.json
+!manifest.json
 
 # Node.js
 node_modules/

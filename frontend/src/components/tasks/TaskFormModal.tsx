@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react';
-import { FaTimes, FaSave } from 'react-icons/fa';
+import { useState, useMemo, type FormEvent } from 'react';
+import { FaTimes, FaSave, FaLock } from 'react-icons/fa';
 import { motion } from 'framer-motion';
 import { useProjects } from '../../hooks/useProjects';
 import type { Task, TaskCreate, TaskUpdate, Priority, EnergyLevel } from '../../api/types';
@@ -7,25 +7,36 @@ import './TaskFormModal.css';
 
 interface TaskFormModalProps {
   task?: Task;
+  initialData?: Partial<TaskCreate>;
+  allTasks?: Task[];
   onClose: () => void;
   onSubmit: (data: TaskCreate | TaskUpdate) => void;
   isSubmitting?: boolean;
 }
 
-export function TaskFormModal({ task, onClose, onSubmit, isSubmitting }: TaskFormModalProps) {
+export function TaskFormModal({ task, initialData, allTasks = [], onClose, onSubmit, isSubmitting }: TaskFormModalProps) {
   const { projects } = useProjects();
   const isEditMode = !!task;
 
   const [formData, setFormData] = useState({
-    title: task?.title || '',
-    description: task?.description || '',
-    importance: task?.importance || 'MEDIUM' as Priority,
-    urgency: task?.urgency || 'MEDIUM' as Priority,
-    energy_level: task?.energy_level || 'LOW' as EnergyLevel,
-    estimated_minutes: task?.estimated_minutes?.toString() || '',
-    due_date: task?.due_date ? new Date(task.due_date).toISOString().slice(0, 16) : '',
-    project_id: task?.project_id || '',
+    title: task?.title || initialData?.title || '',
+    description: task?.description || initialData?.description || '',
+    importance: task?.importance || initialData?.importance || 'MEDIUM' as Priority,
+    urgency: task?.urgency || initialData?.urgency || 'MEDIUM' as Priority,
+    estimated_minutes: task?.estimated_minutes?.toString() || initialData?.estimated_minutes?.toString() || '',
+    due_date: task?.due_date ? new Date(task.due_date).toISOString().slice(0, 16) : (initialData?.due_date ? new Date(initialData.due_date).toISOString().slice(0, 16) : ''),
+    project_id: task?.project_id || initialData?.project_id || '',
+    dependency_ids: task?.dependency_ids || initialData?.dependency_ids || [] as string[],
+    energy_level: task?.energy_level || initialData?.energy_level || 'LOW' as EnergyLevel,
   });
+
+  // Filter available tasks for dependencies (exclude self and completed tasks)
+  const availableDependencyTasks = useMemo(() => {
+    return allTasks.filter(t =>
+      t.id !== task?.id && // Exclude self
+      t.status !== 'DONE'  // Exclude completed tasks
+    );
+  }, [allTasks, task?.id]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -39,9 +50,19 @@ export function TaskFormModal({ task, onClose, onSubmit, isSubmitting }: TaskFor
       estimated_minutes: formData.estimated_minutes ? parseInt(formData.estimated_minutes) : undefined,
       due_date: formData.due_date || undefined,
       project_id: formData.project_id || undefined,
+      dependency_ids: formData.dependency_ids.length > 0 ? formData.dependency_ids : undefined,
     };
 
     onSubmit(submitData);
+  };
+
+  const handleToggleDependency = (taskId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      dependency_ids: prev.dependency_ids.includes(taskId)
+        ? prev.dependency_ids.filter(id => id !== taskId)
+        : [...prev.dependency_ids, taskId]
+    }));
   };
 
   return (
@@ -176,6 +197,37 @@ export function TaskFormModal({ task, onClose, onSubmit, isSubmitting }: TaskFor
               ))}
             </select>
           </div>
+
+          {/* Dependencies */}
+          {availableDependencyTasks.length > 0 && (
+            <div className="form-group">
+              <label>
+                <FaLock style={{ marginRight: '0.5rem' }} />
+                依存関係（先に完了が必要なタスク）
+              </label>
+              <p className="field-hint">このタスクを開始する前に完了が必要なタスクを選択してください</p>
+              <div className="dependency-checkboxes">
+                {availableDependencyTasks.map((depTask) => (
+                  <label key={depTask.id} className="dependency-checkbox-item">
+                    <input
+                      type="checkbox"
+                      checked={formData.dependency_ids.includes(depTask.id)}
+                      onChange={() => handleToggleDependency(depTask.id)}
+                    />
+                    <span className="checkbox-label">{depTask.title}</span>
+                    <span className={`checkbox-status status-${depTask.status.toLowerCase()}`}>
+                      {depTask.status === 'TODO' ? '未着手' :
+                        depTask.status === 'IN_PROGRESS' ? '進行中' :
+                          depTask.status === 'WAITING' ? '待機中' : depTask.status}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {formData.dependency_ids.length > 0 && (
+                <p className="selected-count">{formData.dependency_ids.length}個のタスクに依存</p>
+              )}
+            </div>
+          )}
 
           {/* Actions */}
           <div className="form-actions">

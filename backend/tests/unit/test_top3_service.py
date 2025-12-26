@@ -55,7 +55,7 @@ async def test_get_top3_no_tasks(top3_service, mock_task_repo):
 
     result = await top3_service.get_top3("test_user")
 
-    assert result == []
+    assert result["tasks"] == []
 
 
 @pytest.mark.asyncio
@@ -68,9 +68,10 @@ async def test_get_top3_less_than_3_tasks(top3_service, mock_task_repo):
     mock_task_repo.list.return_value = tasks
 
     result = await top3_service.get_top3("test_user")
+    tasks = result["tasks"]
 
-    assert len(result) == 2
-    assert result[0].title == "Task 1"  # Higher importance first
+    assert len(tasks) == 2
+    assert tasks[0].title == "Task 1"  # Higher importance first
 
 
 @pytest.mark.asyncio
@@ -84,11 +85,12 @@ async def test_get_top3_importance_scoring(top3_service, mock_task_repo):
     mock_task_repo.list.return_value = tasks
 
     result = await top3_service.get_top3("test_user")
+    tasks = result["tasks"]
 
     # Should prioritize HIGH importance
-    assert result[0].title == "High importance"
-    assert result[1].title == "Medium importance"
-    assert result[2].title == "Low importance"
+    assert tasks[0].title == "High importance"
+    assert tasks[1].title == "Medium importance"
+    assert tasks[2].title == "Low importance"
 
 
 @pytest.mark.asyncio
@@ -102,9 +104,10 @@ async def test_get_top3_urgency_scoring(top3_service, mock_task_repo):
     mock_task_repo.list.return_value = tasks
 
     result = await top3_service.get_top3("test_user")
+    tasks = result["tasks"]
 
     # Should prioritize HIGH urgency
-    assert result[0].title == "High urgency"
+    assert tasks[0].title == "High urgency"
 
 
 @pytest.mark.asyncio
@@ -120,10 +123,11 @@ async def test_get_top3_due_date_scoring(top3_service, mock_task_repo):
     mock_task_repo.list.return_value = tasks
 
     result = await top3_service.get_top3("test_user")
+    tasks = result["tasks"]
 
     # Overdue tasks should be highest priority
-    assert result[0].title == "Overdue"
-    assert result[1].title == "Due tomorrow"
+    assert tasks[0].title == "Overdue"
+    assert tasks[1].title == "Due tomorrow"
 
 
 @pytest.mark.asyncio
@@ -158,8 +162,9 @@ async def test_get_top3_combined_scoring(top3_service, mock_task_repo):
     mock_task_repo.list.return_value = tasks
 
     result = await top3_service.get_top3("test_user")
+    tasks = result["tasks"]
 
-    assert len(result) == 3
+    assert len(tasks) == 3
     # Task D should be first (HIGH importance + overdue)
     # Task B should be second (HIGH importance + urgency + due tomorrow)
     # Task C should be third (MEDIUM importance/urgency)

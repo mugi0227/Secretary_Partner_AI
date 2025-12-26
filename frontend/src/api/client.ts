@@ -25,6 +25,7 @@ export async function apiClient<T>(
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      'Authorization': 'Bearer dev_user', // Fixed token for local dev
       ...options?.headers,
     },
   });

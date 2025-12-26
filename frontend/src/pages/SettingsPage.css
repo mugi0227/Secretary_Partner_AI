@@ -109,6 +109,20 @@
   cursor: not-allowed;
 }
 
+/* Capacity Input */
+.capacity-input {
+  max-width: 200px;
+  font-weight: 600;
+  font-size: 1rem;
+  text-align: center;
+}
+
+.capacity-input::-webkit-inner-spin-button,
+.capacity-input::-webkit-outer-spin-button {
+  opacity: 1;
+  height: 30px;
+}
+
 /* Toggle Button */
 .toggle-btn {
   position: relative;

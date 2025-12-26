@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import get_settings
 
@@ -47,7 +48,7 @@ def create_app() -> FastAPI:
     # CORS middleware
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.ALLOWED_ORIGINS,
+        allow_origins=["http://localhost:5173", "http://localhost:3000", "*"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -64,6 +65,14 @@ def create_app() -> FastAPI:
     app.include_router(memories.router, prefix="/api/memories", tags=["memories"])
     app.include_router(heartbeat.router, prefix="/api/heartbeat", tags=["heartbeat"])
     app.include_router(today.router, prefix="/api/today", tags=["today"])
+
+    # Mount storage for local development
+    storage_path = settings.STORAGE_BASE_PATH
+    if not os.path.isabs(storage_path):
+        storage_path = os.path.join(os.getcwd(), storage_path)
+    
+    if os.path.exists(storage_path):
+        app.mount("/storage", StaticFiles(directory=storage_path), name="storage")
 
     @app.get("/health")
     async def health_check():

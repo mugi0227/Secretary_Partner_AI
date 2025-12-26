@@ -1,7 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { chatApi, type StreamChunk } from '../api/chat';
-import type { ChatRequest, ChatResponse, ChatMode } from '../api/types';
+import type { ChatRequest, ChatResponse, ChatMode, ChatSession, ChatHistoryMessage } from '../api/types';
 
 export interface ToolCall {
   id: string;
@@ -20,11 +20,27 @@ interface Message {
   isStreaming?: boolean;
 }
 
+const SESSION_STORAGE_KEY = 'chat_session_id';
+
 export function useChat() {
   const queryClient = useQueryClient();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [sessionId, setSessionId] = useState<string | undefined>();
+  const [sessionId, setSessionIdState] = useState<string | undefined>(() => {
+    return localStorage.getItem(SESSION_STORAGE_KEY) || undefined;
+  });
   const [isStreaming, setIsStreaming] = useState(false);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  const setSessionId = useCallback((id?: string) => {
+    setSessionIdState(id);
+    if (id) {
+      localStorage.setItem(SESSION_STORAGE_KEY, id);
+    } else {
+      localStorage.removeItem(SESSION_STORAGE_KEY);
+    }
+  }, []);
 
   const mutation = useMutation({
     mutationFn: (request: ChatRequest) => chatApi.sendMessage(request),
@@ -47,8 +63,45 @@ export function useChat() {
     },
   });
 
+  const fetchSessions = useCallback(async () => {
+    setIsLoadingSessions(true);
+    try {
+      const data = await chatApi.listSessions();
+      setSessions(data);
+    } finally {
+      setIsLoadingSessions(false);
+    }
+  }, []);
+
+  const loadHistory = useCallback(async (targetSessionId: string) => {
+    setIsLoadingHistory(true);
+    try {
+      const history = await chatApi.getHistory(targetSessionId);
+      const mapped = history
+        .filter((item) => item.role !== 'system')
+        .map((item: ChatHistoryMessage) => ({
+          id: crypto.randomUUID(),
+          role: item.role === 'assistant' ? 'assistant' : 'user',
+          content: item.content,
+          timestamp: item.created_at ? new Date(item.created_at) : new Date(),
+        }));
+      setMessages(mapped);
+      setSessionId(targetSessionId);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, [setSessionId]);
+
+  const initialSessionId = useRef(sessionId);
+
+  useEffect(() => {
+    if (initialSessionId.current) {
+      loadHistory(initialSessionId.current);
+    }
+  }, [loadHistory]);
+
   const sendMessageStream = useCallback(
-    async (text: string, mode?: ChatMode) => {
+    async (text: string, imageBase64?: string, mode?: ChatMode) => {
       // Add user message
       const userMessage: Message = {
         id: crypto.randomUUID(),
@@ -76,6 +129,7 @@ export function useChat() {
         // Stream response
         for await (const chunk of chatApi.streamMessage({
           text,
+          image_base64: imageBase64,
           mode,
           session_id: sessionId,
         })) {
@@ -221,13 +275,19 @@ export function useChat() {
   const clearChat = useCallback(() => {
     setMessages([]);
     setSessionId(undefined);
-  }, []);
+  }, [setSessionId]);
 
   return {
     messages,
     sendMessage,
     sendMessageStream,
     clearChat,
+    sessions,
+    fetchSessions,
+    loadHistory,
+    sessionId,
+    isLoadingSessions,
+    isLoadingHistory,
     isLoading: mutation.isPending || isStreaming,
     error: mutation.error,
   };

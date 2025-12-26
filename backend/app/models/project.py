@@ -11,6 +11,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.models.enums import ProjectStatus
+from app.models.project_kpi import ProjectKpiConfig
 
 
 class ProjectBase(BaseModel):
@@ -22,6 +23,28 @@ class ProjectBase(BaseModel):
         None,
         max_length=5000,
         description="RAGや会話から抽出された文脈サマリー",
+    )
+    context: Optional[str] = Field(
+        None,
+        description="詳細コンテキスト（README的な内容、Markdown形式）",
+    )
+    priority: int = Field(
+        default=5,
+        ge=1,
+        le=10,
+        description="プロジェクト優先度（1=低、10=高）",
+    )
+    goals: list[str] = Field(
+        default_factory=list,
+        description="プロジェクトのゴールリスト",
+    )
+    key_points: list[str] = Field(
+        default_factory=list,
+        description="重要なポイント・注意事項リスト",
+    )
+    kpi_config: Optional[ProjectKpiConfig] = Field(
+        None,
+        description="KPI configuration",
     )
 
 
@@ -38,6 +61,11 @@ class ProjectUpdate(BaseModel):
     description: Optional[str] = Field(None, max_length=2000)
     status: Optional[ProjectStatus] = None
     context_summary: Optional[str] = Field(None, max_length=5000)
+    context: Optional[str] = None
+    priority: Optional[int] = Field(None, ge=1, le=10)
+    goals: Optional[list[str]] = None
+    key_points: Optional[list[str]] = None
+    kpi_config: Optional[ProjectKpiConfig] = None
 
 
 class Project(ProjectBase):

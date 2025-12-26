@@ -1,5 +1,5 @@
 import { api } from './client';
-import type { ChatRequest, ChatResponse } from './types';
+import type { ChatRequest, ChatResponse, ChatSession, ChatHistoryMessage } from './types';
 
 export interface StreamChunk {
   chunk_type: 'tool_start' | 'tool_end' | 'text' | 'done' | 'error';
@@ -15,19 +15,25 @@ export interface StreamChunk {
 export const chatApi = {
   sendMessage: (request: ChatRequest) =>
     api.post<ChatResponse>('/chat', request),
+  listSessions: () =>
+    api.get<ChatSession[]>('/chat/sessions'),
+  getHistory: (sessionId: string) =>
+    api.get<ChatHistoryMessage[]>(`/chat/history/${sessionId}`),
 
   /**
    * Stream chat response using Server-Sent Events
    */
   async *streamMessage(request: ChatRequest): AsyncGenerator<StreamChunk, void, unknown> {
     const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
-    const token = localStorage.getItem('token');
+    // For local dev, we fixed the token to 'dev_user' in client.ts
+    // We should do the same here until we have real auth
+    const token = 'dev_user';
 
     const response = await fetch(`${baseURL}/chat/stream`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` }),
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(request),
     });

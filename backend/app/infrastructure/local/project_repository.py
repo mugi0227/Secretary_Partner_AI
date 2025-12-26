@@ -33,6 +33,11 @@ class SqliteProjectRepository(IProjectRepository):
             description=orm.description,
             status=ProjectStatus(orm.status),
             context_summary=orm.context_summary,
+            context=orm.context,
+            priority=orm.priority if orm.priority is not None else 5,
+            goals=orm.goals if orm.goals is not None else [],
+            key_points=orm.key_points if orm.key_points is not None else [],
+            kpi_config=orm.kpi_config,
             created_at=orm.created_at,
             updated_at=orm.updated_at,
         )
@@ -40,12 +45,18 @@ class SqliteProjectRepository(IProjectRepository):
     async def create(self, user_id: str, project: ProjectCreate) -> Project:
         """Create a new project."""
         async with self._session_factory() as session:
+            kpi_config = project.kpi_config.model_dump() if project.kpi_config else None
             orm = ProjectORM(
                 id=str(uuid4()),
                 user_id=user_id,
                 name=project.name,
                 description=project.description,
                 context_summary=project.context_summary,
+                context=project.context,
+                priority=project.priority,
+                goals=project.goals,
+                key_points=project.key_points,
+                kpi_config=kpi_config,
             )
             session.add(orm)
             await session.commit()
@@ -151,6 +162,8 @@ class SqliteProjectRepository(IProjectRepository):
             update_data = update.model_dump(exclude_unset=True)
             for field, value in update_data.items():
                 if value is not None:
+                    if field == "kpi_config" and hasattr(value, "model_dump"):
+                        value = value.model_dump()
                     if hasattr(value, "value"):  # Enum
                         value = value.value
                     setattr(orm, field, value)

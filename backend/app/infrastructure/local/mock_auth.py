@@ -29,6 +29,12 @@ class MockAuthProvider(IAuthProvider):
                 email="test@example.com",
                 display_name="Test User",
             ),
+            # Token used by Chrome Extension to act as dev_user
+            "secret-token-123": User(
+                id="dev_user",
+                email="dev@example.com",
+                display_name="Developer",
+            ),
         }
 
     async def verify_token(self, token: str) -> User:

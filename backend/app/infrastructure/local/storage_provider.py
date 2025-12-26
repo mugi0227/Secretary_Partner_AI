@@ -88,10 +88,10 @@ class LocalStorageProvider(IStorageProvider):
         """
         Get a public URL for a file.
 
-        For local storage, returns file:// URL.
+        For local storage, returns HTTP URL relative to BASE_URL.
         """
-        file_path = self._resolve_path(path)
-        return f"file://{file_path.absolute()}"
+        settings = get_settings()
+        return f"{settings.BASE_URL}/storage/{path}"
 
     def _resolve_path(self, path: str) -> Path:
         """Resolve path to absolute Path object."""

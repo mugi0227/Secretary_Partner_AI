@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Secretary Partner AI - The Eye",
+  "version": "1.0",
+  "description": "Capture context and send to Secretary Agent",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "sidePanel",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "service_worker.js"
+  },
+  "action": {
+    "default_title": "Open Secretary Agent"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  }
+}

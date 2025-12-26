@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h2>Secretary Eye</h2>
+        </div>
+
+        <div id="status-area" class="status-box">
+            <span class="status-dot"></span>
+            <span id="status-text">Disconnected</span>
+        </div>
+
+        <div class="actions">
+            <button id="capture-btn" class="primary-btn">
+                <span class="icon">📸</span>
+                Capture This Tab
+            </button>
+        </div>
+
+        <div id="result-message" class="hidden"></div>
+    </div>
+    <script src="popup.js"></script>
+</body>
+
+</html>

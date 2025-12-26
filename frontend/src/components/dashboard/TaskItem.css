@@ -199,6 +199,18 @@
   color: var(--accent-pink);
 }
 
+.task-dependency-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(251, 146, 60, 0.15);
+  color: var(--accent-orange);
+}
+
 .task-action-btn {
   width: 32px;
   height: 32px;

@@ -46,6 +46,7 @@ class SqliteTaskRepository(ITaskRepository):
             estimated_minutes=orm.estimated_minutes,
             due_date=orm.due_date,
             parent_id=UUID(orm.parent_id) if orm.parent_id else None,
+            dependency_ids=[UUID(dep_id) for dep_id in (orm.dependency_ids or [])],
             source_capture_id=UUID(orm.source_capture_id) if orm.source_capture_id else None,
             created_by=orm.created_by,
             created_at=orm.created_at,
@@ -67,6 +68,7 @@ class SqliteTaskRepository(ITaskRepository):
                 estimated_minutes=task.estimated_minutes,
                 due_date=task.due_date,
                 parent_id=str(task.parent_id) if task.parent_id else None,
+                dependency_ids=[str(dep_id) for dep_id in task.dependency_ids],
                 source_capture_id=str(task.source_capture_id) if task.source_capture_id else None,
                 created_by=task.created_by.value,
             )
@@ -131,15 +133,31 @@ class SqliteTaskRepository(ITaskRepository):
                 raise NotFoundError(f"Task {task_id} not found")
 
             update_data = update.model_dump(exclude_unset=True)
+            status_value = None
             for field, value in update_data.items():
                 if value is not None:
                     if field in ("project_id", "parent_id"):
                         value = str(value) if value else None
+                    elif field == "dependency_ids":
+                        value = [str(dep_id) for dep_id in value]
                     elif hasattr(value, "value"):  # Enum
                         value = value.value
+                    if field == "status":
+                        status_value = value
                     setattr(orm, field, value)
 
             orm.updated_at = datetime.utcnow()
+
+            if status_value is not None:
+                subtask_result = await session.execute(
+                    select(TaskORM).where(
+                        and_(TaskORM.parent_id == str(task_id), TaskORM.user_id == user_id)
+                    )
+                )
+                for subtask in subtask_result.scalars().all():
+                    subtask.status = status_value
+                    subtask.updated_at = datetime.utcnow()
+
             await session.commit()
             await session.refresh(orm)
             return self._orm_to_model(orm)

@@ -1,5 +1,5 @@
 import { FaCheck } from 'react-icons/fa';
-import { FaFire, FaClock, FaLeaf, FaBatteryFull, FaBatteryQuarter, FaEllipsis } from 'react-icons/fa6';
+import { FaFire, FaClock, FaLeaf, FaBatteryFull, FaBatteryQuarter, FaEllipsis, FaLock } from 'react-icons/fa6';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Task } from '../../api/types';
 import './TaskItem.css';
@@ -9,9 +9,24 @@ interface TaskItemProps {
   onCheck?: (taskId: string) => void;
   onClick?: (task: Task) => void;
   isRemoving?: boolean;
+  allowToggleDone?: boolean;
+  isBlocked?: boolean;
+  blockedReason?: string;
 }
 
-export function TaskItem({ task, onCheck, onClick, isRemoving = false }: TaskItemProps) {
+const TEXT = {
+  blocked: '\u30d6\u30ed\u30c3\u30af\u4e2d',
+};
+
+export function TaskItem({
+  task,
+  onCheck,
+  onClick,
+  isRemoving = false,
+  allowToggleDone = false,
+  isBlocked = false,
+  blockedReason,
+}: TaskItemProps) {
   const getPriorityIcon = (level: string) => {
     switch (level) {
       case 'HIGH': return <FaFire />;
@@ -37,7 +52,7 @@ export function TaskItem({ task, onCheck, onClick, isRemoving = false }: TaskIte
 
   const handleCheckClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (onCheck && task.status !== 'DONE') {
+    if (onCheck && (allowToggleDone || task.status !== 'DONE')) {
       onCheck(task.id);
     }
   };
@@ -84,6 +99,12 @@ export function TaskItem({ task, onCheck, onClick, isRemoving = false }: TaskIte
         <span className="task-title">{task.title}</span>
 
         <div className="task-meta">
+          {isBlocked && (
+            <span className="task-dependency-indicator" title={blockedReason ?? TEXT.blocked}>
+              <FaLock />
+              <span>{TEXT.blocked}</span>
+            </span>
+          )}
           <span className={`meta-tag urgency-${task.urgency.toLowerCase()}`}>
             {getPriorityIcon(task.urgency)}
             <span>{task.urgency === 'HIGH' ? 'High Urgency' : task.urgency === 'MEDIUM' ? 'Medium' : 'Low'}</span>

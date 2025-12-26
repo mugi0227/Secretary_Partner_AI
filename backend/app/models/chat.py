@@ -18,6 +18,7 @@ class ChatRequest(BaseModel):
     text: Optional[str] = Field(None, max_length=10000, description="テキスト入力")
     audio_url: Optional[str] = Field(None, description="音声ファイルURL")
     image_url: Optional[str] = Field(None, description="画像ファイルURL")
+    image_base64: Optional[str] = Field(None, description="Base64エンコードされた画像データ（data:image/...形式）")
     mode: ChatMode = Field(ChatMode.DUMP, description="チャットモード")
     session_id: Optional[str] = Field(None, description="セッションID（継続会話用）")
     context: dict[str, Any] = Field(default_factory=dict, description="追加コンテキスト")

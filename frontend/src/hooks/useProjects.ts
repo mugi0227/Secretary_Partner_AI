@@ -36,6 +36,7 @@ export function useProjects() {
     projects: query.data ?? [],
     isLoading: query.isLoading,
     error: query.error,
+    refetch: query.refetch,
     createProject: (data: ProjectCreate) => createMutation.mutate(data),
     updateProject: (id: string, data: ProjectUpdate) =>
       updateMutation.mutate({ id, data }),

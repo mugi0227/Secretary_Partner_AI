@@ -68,14 +68,23 @@ export function ChatMessage({ role, content, timestamp, toolCalls, isStreaming }
         )}
 
         {/* Message Text */}
-        {content && (
+        {content ? (
           <div className="message-text markdown-content">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>
               {content}
             </ReactMarkdown>
             {isStreaming && <span className="streaming-cursor">▋</span>}
           </div>
-        )}
+        ) : isStreaming && (!toolCalls || toolCalls.length === 0) ? (
+          <div className="thinking-animation">
+            <div className="thinking-dots">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <span className="thinking-text">Thinking...</span>
+          </div>
+        ) : null}
 
         <div className="message-time">{formatTime(timestamp)}</div>
       </div>
