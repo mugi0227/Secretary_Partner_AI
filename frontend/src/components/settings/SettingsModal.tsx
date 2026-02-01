@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FaTimes, FaMoon, FaSun, FaBell, FaUser, FaClock, FaCog } from 'react-icons/fa';
+import { FaTimes, FaMoon, FaSun, FaBell, FaUser, FaClock, FaCog, FaCalendarAlt } from 'react-icons/fa';
 import { motion } from 'framer-motion';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '../../context/ThemeContext';
@@ -112,6 +112,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const [quietHoursEnd, setQuietHoursEnd] = useState(
     () => userStorage.get('quietHoursEnd') || '07:00'
   );
+  const [calendarIntegrationEnabled, setCalendarIntegrationEnabled] = useState(
+    () => userStorage.get('calendarIntegrationEnabled') === 'true'
+  );
 
   useEffect(() => {
     if (!currentUser) return;
@@ -196,6 +199,11 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     userStorage.set('quietHoursEnd', value);
   };
 
+  const handleCalendarIntegrationToggle = () => {
+    const newValue = !calendarIntegrationEnabled;
+    setCalendarIntegrationEnabled(newValue);
+    userStorage.set('calendarIntegrationEnabled', String(newValue));
+  };
 
   const hasAccountChanges = () => {
     const nextUserName = userName.trim();
@@ -672,6 +680,30 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+
+          <div className="settings-section">
+            <h3 className="section-title">
+              <FaCalendarAlt />
+              外部カレンダー連携
+            </h3>
+            <div className="setting-item">
+              <div className="setting-row">
+                <div className="setting-label-group">
+                  <span className="setting-label">外部カレンダー連携済み</span>
+                  <p className="setting-description">
+                    ONにすると「今週の会議情報が追加されていません」の通知が非表示になります。
+                    将来的にGoogle Calendar / Outlook連携を実装予定です。
+                  </p>
+                </div>
+                <button
+                  className={`toggle-btn ${calendarIntegrationEnabled ? 'active' : ''}`}
+                  onClick={handleCalendarIntegrationToggle}
+                >
+                  <span className="toggle-slider"></span>
+                </button>
+              </div>
             </div>
           </div>
 

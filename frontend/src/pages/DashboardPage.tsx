@@ -6,6 +6,7 @@ import { TodayTasksCard } from '../components/dashboard/TodayTasksCard';
 import { OverdueCheckinCard } from '../components/dashboard/OverdueCheckinCard';
 import { ScheduleOverviewCard } from '../components/dashboard/ScheduleOverviewCard';
 import { WeeklyMeetingsCard } from '../components/dashboard/WeeklyMeetingsCard';
+import { WeeklyMeetingNotificationBanner } from '../components/dashboard/WeeklyMeetingNotificationBanner';
 import { useTaskModal } from '../hooks/useTaskModal';
 import { useTasks } from '../hooks/useTasks';
 import './DashboardPage.css';
@@ -63,6 +64,10 @@ export function DashboardPage() {
         variants={itemVariants}
       >
         <AgentCard onOpenDailyBriefing={() => setIsBriefingOpen(true)} />
+      </motion.div>
+
+      <motion.div variants={itemVariants}>
+        <WeeklyMeetingNotificationBanner />
       </motion.div>
 
       <motion.div variants={itemVariants}>
