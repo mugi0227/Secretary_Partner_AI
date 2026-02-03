@@ -1024,11 +1024,8 @@ class SchedulerService:
                 if completed_dt.astimezone(tz).date() == today_date:
                     today_task_ids.append(task.id)
                     today_task_id_set.add(task.id)
-                    task_minutes = get_effective_estimated_minutes(task, tasks)
-                    if task_minutes <= 0:
-                        task_minutes = self.default_task_minutes
-                    allocation_minutes_by_task[task.id] = task_minutes
-                    allocated_minutes += task_minutes
+                    # Completed tasks are visible but don't count toward capacity
+                    allocation_minutes_by_task[task.id] = 0
 
         today_tasks = [task_map[task_id] for task_id in today_task_ids if task_id in task_map]
         today_allocations: list[TodayTaskAllocation] = []
@@ -1041,7 +1038,9 @@ class SchedulerService:
             total_minutes = get_effective_estimated_minutes(task, tasks)
             if total_minutes <= 0:
                 total_minutes = self.default_task_minutes
-            if remaining_mins <= 0:
+            # For completed tasks, remaining is genuinely 0; only reset for
+            # non-completed tasks that lack an estimate/progress.
+            if remaining_mins <= 0 and task.status != TaskStatus.DONE:
                 remaining_mins = total_minutes
 
             allocated_for_day = allocation_minutes_by_task.get(task_id, 0)
