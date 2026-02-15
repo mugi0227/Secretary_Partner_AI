@@ -6,22 +6,22 @@
 .user-search-field {
     width: 100%;
     padding: 0.625rem 0.875rem;
-    border: 1px solid rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--border-color, rgba(0, 0, 0, 0.15));
     border-radius: 8px;
-    background: #ffffff;
-    color: #111827;
+    background: var(--bg-card, #ffffff);
+    color: var(--text-main, #111827);
     font-size: 0.875rem;
     transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .user-search-field::placeholder {
-    color: #6b7280;
+    color: var(--text-muted, #6b7280);
 }
 
 .user-search-field:focus {
     outline: none;
-    border-color: var(--color-accent, #6366f1);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    border-color: var(--primary, #0ea5e9);
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
 }
 
 .user-search-field:disabled {
@@ -34,7 +34,7 @@
     right: 12px;
     top: 50%;
     transform: translateY(-50%);
-    color: var(--color-text-muted, #94a3b8);
+    color: var(--text-muted, #94a3b8);
     font-size: 0.75rem;
 }
 
@@ -45,14 +45,18 @@
     right: 0;
     margin-top: 4px;
     padding: 4px 0;
-    background: var(--color-bg-card, #1e293b);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--bg-card, #ffffff);
+    border: 1px solid var(--border-color, rgba(0, 0, 0, 0.1));
     border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
     list-style: none;
     max-height: 280px;
     overflow-y: auto;
     z-index: 100;
+}
+
+[data-theme="dark"] .user-search-dropdown {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
 .user-search-item {
@@ -63,7 +67,7 @@
 
 .user-search-item:hover,
 .user-search-item.highlighted {
-    background: rgba(99, 102, 241, 0.15);
+    background: rgba(14, 165, 233, 0.1);
 }
 
 .user-search-item-main {
@@ -74,17 +78,17 @@
 
 .user-search-name {
     font-weight: 500;
-    color: var(--color-text-primary, #f1f5f9);
+    color: var(--text-main, #f1f5f9);
 }
 
 .user-search-username {
     font-size: 0.8125rem;
-    color: var(--color-text-muted, #94a3b8);
+    color: var(--text-muted, #94a3b8);
 }
 
 .user-search-email {
     display: block;
     font-size: 0.75rem;
-    color: var(--color-text-muted, #94a3b8);
+    color: var(--text-muted, #94a3b8);
     margin-top: 2px;
 }

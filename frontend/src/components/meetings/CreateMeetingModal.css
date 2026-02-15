@@ -36,7 +36,7 @@
   font-size: 18px;
   font-weight: 700;
   margin: 0;
-  color: var(--text-primary, #1a1a2e);
+  color: var(--text-main, #1a1a2e);
 }
 
 .create-meeting-modal-close {
@@ -50,8 +50,12 @@
 }
 
 .create-meeting-modal-close:hover {
-  background: var(--bg-hover, #f3f4f6);
-  color: var(--text-primary, #1a1a2e);
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-main, #1a1a2e);
+}
+
+[data-theme="dark"] .create-meeting-modal-close:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 /* Form layout */
@@ -71,7 +75,7 @@
 .create-meeting-form-row label {
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-secondary, #6b7280);
+  color: var(--text-muted, #6b7280);
   letter-spacing: 0.02em;
 }
 
@@ -92,10 +96,17 @@
   font-size: 14px;
   border: 1px solid var(--border-color, #e5e7eb);
   border-radius: 8px;
-  background: var(--bg-input, #fff);
-  color: var(--text-primary, #1a1a2e);
+  background: var(--bg-card, #fff);
+  color: var(--text-main, #1a1a2e);
   transition: border-color 0.15s ease;
   box-sizing: border-box;
+}
+
+[data-theme="dark"] .create-meeting-form input[type="text"],
+[data-theme="dark"] .create-meeting-form input[type="date"],
+[data-theme="dark"] .create-meeting-form input[type="time"],
+[data-theme="dark"] .create-meeting-form textarea {
+  color-scheme: dark;
 }
 
 .create-meeting-form input:focus,
@@ -117,7 +128,7 @@
   gap: 8px;
   font-size: 13px;
   font-weight: 500;
-  color: var(--text-primary, #1a1a2e);
+  color: var(--text-main, #1a1a2e);
   cursor: pointer;
   padding-bottom: 4px;
 }
@@ -162,7 +173,7 @@
 }
 
 .create-meeting-submit-btn:hover:not(:disabled) {
-  background: #2563eb;
+  background: var(--primary-hover, #2563eb);
 }
 
 .create-meeting-submit-btn:disabled {
@@ -174,8 +185,8 @@
   padding: 8px 20px;
   font-size: 14px;
   font-weight: 500;
-  color: var(--text-secondary, #6b7280);
-  background: var(--bg-hover, #f3f4f6);
+  color: var(--text-muted, #6b7280);
+  background: rgba(0, 0, 0, 0.04);
   border: 1px solid var(--border-color, #e5e7eb);
   border-radius: 8px;
   cursor: pointer;
@@ -183,7 +194,15 @@
 }
 
 .create-meeting-cancel-btn:hover {
-  background: var(--bg-input, #e5e7eb);
+  background: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="dark"] .create-meeting-cancel-btn {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .create-meeting-cancel-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 /* Select (project dropdown) */
@@ -193,10 +212,14 @@
   font-size: 14px;
   border: 1px solid var(--border-color, #e5e7eb);
   border-radius: 8px;
-  background: var(--bg-input, #fff);
-  color: var(--text-primary, #1a1a2e);
+  background: var(--bg-card, #fff);
+  color: var(--text-main, #1a1a2e);
   transition: border-color 0.15s ease;
   box-sizing: border-box;
+}
+
+[data-theme="dark"] .create-meeting-form select {
+  color-scheme: dark;
 }
 
 .create-meeting-form select:focus {

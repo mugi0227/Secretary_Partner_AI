@@ -94,11 +94,15 @@
 .detail-value-pre {
   white-space: pre-wrap;
   word-break: break-word;
-  background: rgba(255, 255, 255, 0.5);
+  background: rgba(0, 0, 0, 0.03);
   padding: 8px;
   border-radius: var(--radius-sm);
   font-family: inherit;
   font-size: 12px;
+}
+
+[data-theme="dark"] .detail-value-pre {
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .detail-list {
@@ -172,13 +176,13 @@
 }
 
 .proposal-btn.reject {
-  background: white;
+  background: var(--bg-card);
   color: #ef4444;
   border: 1.5px solid #ef4444;
 }
 
 .proposal-btn.reject:hover:not(:disabled) {
-  background: #fef2f2;
+  background: rgba(239, 68, 68, 0.08);
   transform: translateY(-2px);
 }
 
@@ -244,10 +248,14 @@
 
 .proposal-meeting-track {
   position: relative;
-  background: rgba(255, 255, 255, 0.75);
+  background: rgba(0, 0, 0, 0.02);
   border-radius: 8px;
   border: 1px solid rgba(148, 163, 184, 0.25);
   overflow: hidden;
+}
+
+[data-theme="dark"] .proposal-meeting-track {
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .proposal-meeting-lines {
@@ -296,10 +304,14 @@
 }
 
 .phase-breakdown-item {
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(0, 0, 0, 0.02);
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 10px;
   padding: 10px 12px;
+}
+
+[data-theme="dark"] .phase-breakdown-item {
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .phase-breakdown-title {

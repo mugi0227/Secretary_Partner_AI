@@ -401,8 +401,13 @@
 }
 
 .status-badge-lg.status-todo {
-  background: #f1f5f9;
+  background: rgba(0, 0, 0, 0.04);
   color: #64748b;
+}
+
+[data-theme="dark"] .status-badge-lg.status-todo {
+  background: rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
 }
 
 .status-badge-lg.status-in_progress {
@@ -594,10 +599,14 @@
   align-items: center;
   gap: 1rem;
   padding: 1rem 1.25rem;
-  background: #fcfcfc;
-  border: 1px solid #f1f5f9;
+  background: rgba(0, 0, 0, 0.01);
+  border: 1px solid var(--border-color, #f1f5f9);
   border-radius: 12px;
   cursor: pointer;
+}
+
+[data-theme="dark"] .subtask-item {
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .subtask-check-wrapper {
@@ -705,10 +714,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f1f5f9;
+  background: rgba(0, 0, 0, 0.04);
   color: var(--text-muted);
   transition: all 0.2s;
   font-size: 1rem;
+}
+
+[data-theme="dark"] .back-btn,
+[data-theme="dark"] .guide-edit-btn {
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .back-btn:hover {
@@ -786,7 +800,7 @@
 }
 
 .guide-delete-btn:hover {
-  background: #fee2e2;
+  background: rgba(239, 68, 68, 0.1);
   color: #ef4444;
 }
 
@@ -856,8 +870,13 @@
 }
 
 .status-badge.status-todo {
-  background: #f1f5f9;
+  background: rgba(0, 0, 0, 0.04);
   color: #64748b;
+}
+
+[data-theme="dark"] .status-badge.status-todo {
+  background: rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
 }
 
 .status-badge.status-in_progress {

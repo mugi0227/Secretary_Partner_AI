@@ -125,7 +125,7 @@
 }
 
 .datetime-btn.save:hover {
-  background: #0369a1;
+  background: var(--primary-hover, #0369a1);
 }
 
 .datetime-btn.clear {

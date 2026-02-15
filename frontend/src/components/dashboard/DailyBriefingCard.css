@@ -11,6 +11,18 @@
   --brief-accent-soft: rgba(56, 189, 248, 0.18);
   --brief-mint: #2dd4bf;
   --brief-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
+}
+
+[data-theme="dark"] .daily-briefing-card {
+  --brief-bg: #0f172a;
+  --brief-panel: rgba(30, 41, 59, 0.7);
+  --brief-border: rgba(148, 163, 184, 0.2);
+  --brief-ink: #f8fafc;
+  --brief-muted: #94a3b8;
+  --brief-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+}
+
+.daily-briefing-card {
   --brief-progress: 25%;
   font-family: 'Sora', 'Noto Sans JP', sans-serif;
   color: var(--brief-ink);
@@ -46,6 +58,10 @@
   filter: blur(10px);
 }
 
+[data-theme="dark"] .daily-briefing-card::before {
+  background: rgba(56, 189, 248, 0.08);
+}
+
 .daily-briefing-card::after {
   width: 220px;
   height: 220px;
@@ -53,6 +69,10 @@
   bottom: -120px;
   left: -80px;
   filter: blur(8px);
+}
+
+[data-theme="dark"] .daily-briefing-card::after {
+  background: rgba(45, 212, 191, 0.06);
 }
 
 .briefing-progress {
@@ -93,6 +113,10 @@
   background: rgba(148, 163, 184, 0.12);
   padding: 6px 12px;
   border-radius: 999px;
+}
+
+[data-theme="dark"] .briefing-step {
+  background: rgba(148, 163, 184, 0.15);
 }
 
 .briefing-slides {
@@ -204,6 +228,11 @@
   padding: 16px;
 }
 
+[data-theme="dark"] .briefing-stat-card {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(148, 163, 184, 0.15);
+}
+
 .briefing-stat-label {
   font-size: 12px;
   color: var(--brief-muted);
@@ -294,6 +323,11 @@
   text-align: center;
 }
 
+[data-theme="dark"] .briefing-focus-card {
+  background: radial-gradient(circle at top, rgba(56, 189, 248, 0.15), rgba(30, 41, 59, 0.7));
+  border-color: rgba(56, 189, 248, 0.25);
+}
+
 .focus-eyebrow {
   font-size: 11px;
   letter-spacing: 0.18em;
@@ -326,6 +360,11 @@
   text-align: center;
   border: 1px dashed rgba(56, 189, 248, 0.6);
   background: rgba(255, 255, 255, 0.75);
+}
+
+[data-theme="dark"] .briefing-ignite {
+  background: rgba(30, 41, 59, 0.75);
+  border-color: rgba(56, 189, 248, 0.4);
 }
 
 .ignite-label {

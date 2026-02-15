@@ -1,3 +1,5 @@
+※本READMEは主にAIによって記述されています。
+
 # nagi
 
 **自律型秘書AI** - タスク管理を自律的にサポートし、ユーザーを支えるパートナー的存在
@@ -104,7 +106,7 @@ nagiは、指示待ちではなく、自らの判断でユーザーを管理・�
 |------|------|
 | FastAPI (Python 3.11+) | Webフレームワーク |
 | Google ADK | エージェントフレームワーク |
-| Gemini 2.5 Flash | メインLLM |
+| Gemini 3 Pro/Flash | メインLLM |
 | LiteLLM | マルチLLMプロバイダー (Claude, GPT等) |
 | SQLite / Firestore | データベース (Local / GCP) |
 | APScheduler | バックグラウンドジョブ |
@@ -314,4 +316,3 @@ GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
 
 ---
 
-**Made with ❤ by nagi Team**
