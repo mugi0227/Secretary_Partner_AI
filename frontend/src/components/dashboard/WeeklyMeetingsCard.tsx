@@ -1391,7 +1391,7 @@ export function WeeklyMeetingsCard({
                 setCreateMeetingPrefill(null);
                 setShowCreateMeeting(true);
               }}
-              title="ミ�EチE��ングを作�E"
+              title="ミーティングを作成"
             >
               +
             </button>
@@ -1402,7 +1402,7 @@ export function WeeklyMeetingsCard({
       {showPlanNotice && (
         <div className={`weekly-plan-banner ${planState}`}>
           <div className="weekly-plan-icon">
-            {planState === 'forecast' ? '◁E : '◁E}
+            {planState === 'forecast' ? '○' : '●'}
           </div>
           <div className="weekly-plan-banner-text">
             <span className="weekly-plan-badge">
@@ -1575,9 +1575,9 @@ export function WeeklyMeetingsCard({
                             className={`weekly-block-check ${effectiveStatus === 'DONE' ? 'checked' : ''}`}
                             onClick={(e) => handleToggleComplete(meeting.taskId, effectiveStatus, e)}
                             disabled={isSubmitting === meeting.taskId}
-                            title={effectiveStatus === 'DONE' ? '未完亁E��戻ぁE : '完亁E��する'}
+                            title={effectiveStatus === 'DONE' ? '未完了に戻す' : '完了にする'}
                           >
-                            {effectiveStatus === 'DONE' ? '✁E : ''}
+                            {effectiveStatus === 'DONE' ? '✓' : ''}
                           </button>
                           {meeting.kind === 'auto' && effectiveStatus !== 'DONE' && !isToday && (
                             <button
@@ -1585,9 +1585,9 @@ export function WeeklyMeetingsCard({
                               className="weekly-block-do-today"
                               onClick={(e) => handleDoToday(meeting.taskId, e)}
                               disabled={isSubmitting === meeting.taskId}
-                              title="今日めE��"
+                              title="今日やる"
                             >
-                              ↁE
+                              ←
                             </button>
                           )}
                           {meeting.kind === 'auto' && effectiveStatus !== 'DONE' && (
