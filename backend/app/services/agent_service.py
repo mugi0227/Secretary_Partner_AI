@@ -146,11 +146,7 @@ class AgentService:
         """
         routing_mode = ""
         if isinstance(routing_context, dict):
-            routing_mode = str(
-                routing_context.get("extension_agent_mode")
-                or routing_context.get("agent_mode")
-                or ""
-            ).strip().lower()
+            routing_mode = str(routing_context.get("extension_agent_mode") or "").strip().lower()
         use_cache = not (routing_message or "").strip() and not routing_mode
         effective_model_key = model_id or "default"
         cache_key = (user_id, session_id, effective_model_key, routing_mode or "default")

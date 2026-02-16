@@ -104,6 +104,24 @@ def parse_iso_to_utc(iso_string: str) -> datetime:
     return dt.astimezone(UTC)
 
 
+def parse_iso_to_utc_with_user_timezone(
+    iso_string: str,
+    user_timezone: Optional[str],
+) -> datetime:
+    """
+    Parse ISO datetime string to UTC with user-timezone fallback.
+
+    Rules:
+    - If ISO contains timezone offset/Z, respect it and convert to UTC.
+    - If ISO is naive (no timezone), interpret it as user local time.
+    """
+    normalized = iso_string.replace("Z", "+00:00")
+    dt = datetime.fromisoformat(normalized)
+    if dt.tzinfo is None:
+        return user_datetime_to_utc(dt, normalize_timezone(user_timezone))
+    return dt.astimezone(UTC)
+
+
 def ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
     """
     Ensure datetime is timezone-aware and in UTC.

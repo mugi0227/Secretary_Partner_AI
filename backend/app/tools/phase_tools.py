@@ -18,20 +18,38 @@ from app.interfaces.phase_repository import IPhaseRepository
 from app.interfaces.project_member_repository import IProjectMemberRepository
 from app.interfaces.project_repository import IProjectRepository
 from app.interfaces.proposal_repository import IProposalRepository
+from app.interfaces.user_repository import IUserRepository
 from app.models.milestone import MilestoneCreate
 from app.models.phase import PhaseCreate
 from app.services.project_permissions import ProjectAction
 from app.tools.approval_tools import create_tool_action_proposal
 from app.tools.permissions import require_project_action, require_project_member
+from app.utils.datetime_utils import normalize_timezone, parse_iso_to_utc_with_user_timezone
 
 
-def _parse_optional_datetime(value: Optional[str]) -> Optional[datetime]:
+def _parse_optional_datetime(
+    value: Optional[str],
+    user_timezone: Optional[str] = None,
+) -> Optional[datetime]:
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return parse_iso_to_utc_with_user_timezone(value, user_timezone)
     except ValueError:
         return None
+
+
+async def _resolve_user_timezone(
+    user_id: str,
+    user_repo: Optional[IUserRepository],
+) -> str:
+    if user_repo is None:
+        return normalize_timezone(None)
+    try:
+        user = await user_repo.get(UUID(user_id))
+    except (TypeError, ValueError):
+        user = None
+    return normalize_timezone(user.timezone if user else None)
 
 
 async def apply_phase_plan(
@@ -43,6 +61,7 @@ async def apply_phase_plan(
     member_repo: IProjectMemberRepository,
     phases: list[dict],
     create_milestones: bool = True,
+    user_repo: Optional[IUserRepository] = None,
 ) -> dict:
     created_phase_ids: list[str] = []
     created_milestone_ids: list[str] = []
@@ -57,6 +76,8 @@ async def apply_phase_plan(
     if isinstance(access, dict):
         return access
 
+    timezone_name = await _resolve_user_timezone(access.owner_id, user_repo)
+
     existing_phases = await phase_repo.list_by_project(access.owner_id, project_id)
     next_order = len(existing_phases) + 1
 
@@ -68,8 +89,8 @@ async def apply_phase_plan(
             continue
 
         description = phase.get("description")
-        start_date = _parse_optional_datetime(phase.get("start_date"))
-        end_date = _parse_optional_datetime(phase.get("end_date"))
+        start_date = _parse_optional_datetime(phase.get("start_date"), timezone_name)
+        end_date = _parse_optional_datetime(phase.get("end_date"), timezone_name)
 
         phase_create = PhaseCreate(
             project_id=project_id,
@@ -97,7 +118,7 @@ async def apply_phase_plan(
             if not isinstance(title, str) or not title.strip():
                 continue
             milestone_description = milestone.get("description")
-            due_date = _parse_optional_datetime(milestone.get("due_date"))
+            due_date = _parse_optional_datetime(milestone.get("due_date"), timezone_name)
             milestone_create = MilestoneCreate(
                 project_id=project_id,
                 phase_id=created_phase.id,
@@ -137,8 +158,18 @@ class UpdatePhaseInput(BaseModel):
     description: Optional[str] = Field(None, description="フェーズの説明")
     status: Optional[str] = Field(None, description="ステータス (ACTIVE/COMPLETED/ARCHIVED)")
     order_in_project: Optional[int] = Field(None, ge=1, description="プロジェクト内での順序")
-    start_date: Optional[str] = Field(None, description="開始予定日（ISO形式）")
-    end_date: Optional[str] = Field(None, description="終了予定日（ISO形式）")
+    start_date: Optional[str] = Field(
+        None,
+        description=(
+            "Planned start datetime in ISO 8601. If timezone offset is omitted, interpreted as user's local timezone."
+        ),
+    )
+    end_date: Optional[str] = Field(
+        None,
+        description=(
+            "Planned end datetime in ISO 8601. If timezone offset is omitted, interpreted as user's local timezone."
+        ),
+    )
 
 
 async def list_phases(
@@ -304,6 +335,7 @@ async def update_phase(
     project_repo: IProjectRepository,
     member_repo: IProjectMemberRepository,
     input_data: UpdatePhaseInput,
+    user_repo: Optional[IUserRepository] = None,
 ) -> dict:
     """Update phase information."""
     from app.models.enums import PhaseStatus
@@ -328,6 +360,8 @@ async def update_phase(
             return access
         owner_id = access.owner_id
 
+    timezone_name = await _resolve_user_timezone(owner_id, user_repo)
+
     update_fields: dict = {}
 
     if input_data.name is not None:
@@ -342,9 +376,9 @@ async def update_phase(
     if input_data.order_in_project is not None:
         update_fields["order_in_project"] = input_data.order_in_project
     if input_data.start_date is not None:
-        update_fields["start_date"] = _parse_optional_datetime(input_data.start_date)
+        update_fields["start_date"] = _parse_optional_datetime(input_data.start_date, timezone_name)
     if input_data.end_date is not None:
-        update_fields["end_date"] = _parse_optional_datetime(input_data.end_date)
+        update_fields["end_date"] = _parse_optional_datetime(input_data.end_date, timezone_name)
 
     if not update_fields:
         return {"error": "No fields to update"}
@@ -362,6 +396,7 @@ def update_phase_tool(
     proposal_repo: Optional[IProposalRepository] = None,
     session_id: Optional[str] = None,
     auto_approve: bool = True,
+    user_repo: Optional[IUserRepository] = None,
 ) -> FunctionTool:
     """Create ADK tool for updating phases."""
 
@@ -417,6 +452,7 @@ def update_phase_tool(
             project_repo,
             member_repo,
             UpdatePhaseInput(**payload),
+            user_repo=user_repo,
         )
 
     _tool.__name__ = "update_phase"
@@ -435,8 +471,18 @@ class CreatePhaseInput(BaseModel):
     name: str = Field(..., description="フェーズ名")
     description: Optional[str] = Field(None, description="フェーズの説明")
     order_in_project: Optional[int] = Field(None, ge=1, description="プロジェクト内での順序")
-    start_date: Optional[str] = Field(None, description="開始予定日（ISO形式）")
-    end_date: Optional[str] = Field(None, description="終了予定日（ISO形式）")
+    start_date: Optional[str] = Field(
+        None,
+        description=(
+            "Planned start datetime in ISO 8601. If timezone offset is omitted, interpreted as user's local timezone."
+        ),
+    )
+    end_date: Optional[str] = Field(
+        None,
+        description=(
+            "Planned end datetime in ISO 8601. If timezone offset is omitted, interpreted as user's local timezone."
+        ),
+    )
 
 
 class DeletePhaseInput(BaseModel):
@@ -453,7 +499,12 @@ class CreateMilestoneInput(BaseModel):
     title: str = Field(..., description="マイルストーン名")
     description: Optional[str] = Field(None, description="マイルストーンの説明")
     order_in_phase: Optional[int] = Field(None, ge=1, description="フェーズ内での順序")
-    due_date: Optional[str] = Field(None, description="期限日（ISO形式）")
+    due_date: Optional[str] = Field(
+        None,
+        description=(
+            "Due datetime in ISO 8601. If timezone offset is omitted, interpreted as user's local timezone."
+        ),
+    )
 
 
 class UpdateMilestoneInput(BaseModel):
@@ -463,7 +514,12 @@ class UpdateMilestoneInput(BaseModel):
     title: Optional[str] = Field(None, description="マイルストーン名")
     description: Optional[str] = Field(None, description="マイルストーンの説明")
     order_in_phase: Optional[int] = Field(None, ge=1, description="フェーズ内での順序")
-    due_date: Optional[str] = Field(None, description="期限日（ISO形式）")
+    due_date: Optional[str] = Field(
+        None,
+        description=(
+            "Due datetime in ISO 8601. If timezone offset is omitted, interpreted as user's local timezone."
+        ),
+    )
     is_completed: Optional[bool] = Field(None, description="完了フラグ")
 
 
@@ -576,6 +632,7 @@ def create_phase_tool(
     proposal_repo: Optional[IProposalRepository] = None,
     session_id: Optional[str] = None,
     auto_approve: bool = True,
+    user_repo: Optional[IUserRepository] = None,
 ) -> FunctionTool:
     """Create ADK tool for simple phase creation (no AI)."""
 
@@ -624,6 +681,8 @@ def create_phase_tool(
         if isinstance(access, dict):
             return access
 
+        timezone_name = await _resolve_user_timezone(access.owner_id, user_repo)
+
         # Get max order if not specified
         order = payload.order_in_project
         if order is None:
@@ -635,8 +694,8 @@ def create_phase_tool(
             name=payload.name,
             description=payload.description,
             order_in_project=order,
-            start_date=_parse_optional_datetime(payload.start_date),
-            end_date=_parse_optional_datetime(payload.end_date),
+            start_date=_parse_optional_datetime(payload.start_date, timezone_name),
+            end_date=_parse_optional_datetime(payload.end_date, timezone_name),
         )
 
         created_phase = await phase_repo.create(access.owner_id, phase_create)
@@ -718,6 +777,7 @@ def create_milestone_tool(
     proposal_repo: Optional[IProposalRepository] = None,
     session_id: Optional[str] = None,
     auto_approve: bool = True,
+    user_repo: Optional[IUserRepository] = None,
 ) -> FunctionTool:
     """Create ADK tool for simple milestone creation (no AI)."""
 
@@ -766,6 +826,8 @@ def create_milestone_tool(
         if isinstance(access, dict):
             return access
 
+        timezone_name = await _resolve_user_timezone(access.owner_id, user_repo)
+
         # Get max order if not specified
         order = payload.order_in_phase
         if order is None:
@@ -778,7 +840,7 @@ def create_milestone_tool(
             title=payload.title,
             description=payload.description,
             order_in_phase=order,
-            due_date=_parse_optional_datetime(payload.due_date),
+            due_date=_parse_optional_datetime(payload.due_date, timezone_name),
         )
 
         created_milestone = await milestone_repo.create(access.owner_id, milestone_create)
@@ -796,6 +858,7 @@ def update_milestone_tool(
     proposal_repo: Optional[IProposalRepository] = None,
     session_id: Optional[str] = None,
     auto_approve: bool = True,
+    user_repo: Optional[IUserRepository] = None,
 ) -> FunctionTool:
     """Create ADK tool for milestone update."""
 
@@ -849,6 +912,8 @@ def update_milestone_tool(
                 return access
             owner_id = access.owner_id
 
+        timezone_name = await _resolve_user_timezone(owner_id, user_repo)
+
         update_fields: dict = {}
         if payload.title is not None:
             update_fields["title"] = payload.title
@@ -857,7 +922,7 @@ def update_milestone_tool(
         if payload.order_in_phase is not None:
             update_fields["order_in_phase"] = payload.order_in_phase
         if payload.due_date is not None:
-            update_fields["due_date"] = _parse_optional_datetime(payload.due_date)
+            update_fields["due_date"] = _parse_optional_datetime(payload.due_date, timezone_name)
         if payload.is_completed is not None:
             update_fields["is_completed"] = payload.is_completed
 

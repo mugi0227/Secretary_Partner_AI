@@ -37,7 +37,6 @@ from app.services.work_memory_service import (
     get_work_memory_index,
     select_relevant_work_memories,
 )
-from app.utils.datetime_utils import normalize_timezone, now_utc
 from app.tools import (
     add_agenda_item_tool,
     add_to_memory_tool,
@@ -95,6 +94,7 @@ from app.tools import (
     update_recurring_task_tool,
     update_task_tool,
 )
+from app.utils.datetime_utils import normalize_timezone, now_utc
 
 _TOOL_HELP: dict[str, str] = {
     "get_current_datetime": "日時基準が必要なとき",
@@ -220,6 +220,14 @@ _TOOL_CATALOG_SECTIONS: dict[str, tuple[str, ...]] = {
     ),
 }
 
+_BROWSER_TOOL_NAMES = frozenset(
+    {
+        "run_browser_task",
+        "run_hybrid_rpa",
+        "register_browser_work_memory",
+    }
+)
+
 
 async def _resolve_user_timezone(user_id: str, user_repo: IUserRepository | None) -> str:
     if user_repo is None:
@@ -241,14 +249,6 @@ def get_current_datetime_section(user_timezone: str) -> str:
         f"{now.year:04d}-{now.month:02d}-{now.day:02d} "
         f"{now.hour:02d}:{now.minute:02d} {resolved_timezone} ({weekday})"
     )
-
-
-def _filter_tools_by_name(tools: list[Any], allowed_tool_names: frozenset[str]) -> list[Any]:
-    filtered = [tool for tool in tools if getattr(tool, "name", "") in allowed_tool_names]
-    if filtered:
-        return filtered
-    fallback_names = {"get_current_datetime", "ask_user_questions"}
-    return [tool for tool in tools if getattr(tool, "name", "") in fallback_names]
 
 
 def _format_tools_for_prompt(
@@ -320,10 +320,7 @@ def _resolve_runtime_routing_options(
     if not isinstance(routing_context, dict):
         return False, None
 
-    raw_mode = (
-        routing_context.get("extension_agent_mode")
-        or routing_context.get("agent_mode")
-    )
+    raw_mode = routing_context.get("extension_agent_mode")
     normalized_mode = str(raw_mode or "").strip().lower().replace("-", "_")
     if normalized_mode in {"browser", "browser_agent"}:
         return True, "browser"
@@ -411,6 +408,7 @@ async def create_secretary_agent(
             user_id,
             session_id,
             auto_approve=auto_approve,
+            user_repo=user_repo,
         ),
         list_kpi_templates_tool(),
         project_creation_tool,
@@ -505,6 +503,7 @@ async def create_secretary_agent(
             proposal_repo=proposal_repo,
             session_id=session_id,
             auto_approve=auto_approve,
+            user_repo=user_repo,
         ),
         apply_schedule_request_tool(
             task_repo,
@@ -526,6 +525,7 @@ async def create_secretary_agent(
             proposal_repo=proposal_repo,
             session_id=session_id,
             auto_approve=auto_approve,
+            user_repo=user_repo,
         ),
         create_phase_tool(
             phase_repo,
@@ -535,6 +535,7 @@ async def create_secretary_agent(
             proposal_repo=proposal_repo,
             session_id=session_id,
             auto_approve=auto_approve,
+            user_repo=user_repo,
         ),
         delete_phase_tool(
             phase_repo,
@@ -553,6 +554,7 @@ async def create_secretary_agent(
             proposal_repo=proposal_repo,
             session_id=session_id,
             auto_approve=auto_approve,
+            user_repo=user_repo,
         ),
         update_milestone_tool(
             milestone_repo,
@@ -562,6 +564,7 @@ async def create_secretary_agent(
             proposal_repo=proposal_repo,
             session_id=session_id,
             auto_approve=auto_approve,
+            user_repo=user_repo,
         ),
         delete_milestone_tool(
             milestone_repo,
@@ -663,13 +666,23 @@ async def create_secretary_agent(
         delete_recurring_task_tool(recurring_task_repo, user_id),
         load_work_memory_tool(memory_repo, user_id),
         list_work_memory_index_tool(memory_repo, user_id),
-        run_browser_task_tool(),
-        run_hybrid_rpa_tool(),
-        register_browser_work_memory_tool(),
         ask_user_questions_tool(),
     ]
 
-    tools = _filter_tools_by_name(all_tools, routing.tool_names)
+    tools = list(all_tools)
+    if allow_browser:
+        tools.extend(
+            [
+                run_browser_task_tool(),
+                run_hybrid_rpa_tool(),
+                register_browser_work_memory_tool(),
+            ]
+        )
+
+    # Browser tools must not be exposed outside extension browser mode.
+    if not allow_browser:
+        tools = [tool for tool in tools if getattr(tool, "name", "") not in _BROWSER_TOOL_NAMES]
+
     enabled_tool_names = [getattr(tool, "name", "") for tool in tools if getattr(tool, "name", "")]
     system_prompt = await build_system_prompt_with_work_memory(
         user_id=user_id,
@@ -681,8 +694,9 @@ async def create_secretary_agent(
         user_repo=user_repo,
     )
     logger.info(
-        "secretary_runtime profiles=%s tools=%s",
+        "secretary_runtime profiles=%s allow_browser=%s tools=%s",
         ",".join(routing.profiles),
+        allow_browser,
         ",".join(getattr(tool, "name", "") for tool in tools),
     )
 

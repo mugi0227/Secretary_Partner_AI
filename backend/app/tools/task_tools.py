@@ -28,7 +28,11 @@ from app.services.project_permissions import ProjectAction
 from app.services.task_utils import renumber_siblings
 from app.tools.approval_tools import create_tool_action_proposal
 from app.tools.permissions import require_project_action, require_project_member
-from app.utils.datetime_utils import all_day_bounds_to_utc, normalize_timezone, parse_iso_to_utc
+from app.utils.datetime_utils import (
+    all_day_bounds_to_utc,
+    normalize_timezone,
+    parse_iso_to_utc_with_user_timezone,
+)
 
 # ===========================================
 # Tool Input Models
@@ -77,10 +81,17 @@ class CreateTaskInput(BaseModel):
         EnergyLevel.MEDIUM, description="必要エネルギー (HIGH=重い, MEDIUM=中程度, LOW=軽い)"
     )
     estimated_minutes: Optional[int] = Field(None, ge=1, description="見積もり時間（分）")
-    due_date: Optional[str] = Field(None, description="期限（ISO形式: YYYY-MM-DDTHH:MM:SS）")
+    due_date: Optional[str] = Field(
+        None,
+        description=(
+            "Due datetime in ISO 8601. If timezone offset is omitted, interpreted as user's local timezone."
+        ),
+    )
     start_not_before: Optional[str] = Field(
         None,
-        description="着手可能日時（ISO形式: YYYY-MM-DDTHH:MM:SS）",
+        description=(
+            "Earliest start datetime in ISO 8601. If timezone offset is omitted, interpreted as user's local timezone."
+        ),
     )
     dependency_ids: list[str] = Field(
         default_factory=list,
@@ -95,8 +106,18 @@ class CreateTaskInput(BaseModel):
     # Meeting fields (optional, only for fixed-time events)
     is_fixed_time: bool = Field(False, description="会議・固定時間イベントの場合true")
     is_all_day: bool = Field(False, description="終日タスク（休暇・出張など、その日のキャパシティを0にする）")
-    start_time: Optional[str] = Field(None, description="開始時刻（ISO形式、is_fixed_time=trueの場合必須、is_all_day=trueの場合不要）")
-    end_time: Optional[str] = Field(None, description="終了時刻（ISO形式、is_fixed_time=trueの場合必須、is_all_day=trueの場合不要）")
+    start_time: Optional[str] = Field(
+        None,
+        description=(
+            "Start datetime in ISO 8601. If timezone offset is omitted, interpreted as user's local timezone."
+        ),
+    )
+    end_time: Optional[str] = Field(
+        None,
+        description=(
+            "End datetime in ISO 8601. If timezone offset is omitted, interpreted as user's local timezone."
+        ),
+    )
     location: Optional[str] = Field(None, description="場所（会議用）")
     attendees: list[str] = Field(default_factory=list, description="参加者リスト（会議用）")
     meeting_notes: Optional[str] = Field(None, description="議事録・メモ（会議用）")
@@ -138,10 +159,17 @@ class UpdateTaskInput(BaseModel):
     urgency: Optional[Priority] = Field(None, description="緊急度")
     energy_level: Optional[EnergyLevel] = Field(None, description="必要エネルギー (HIGH/MEDIUM/LOW)")
     estimated_minutes: Optional[int] = Field(None, ge=1, description="見積もり時間（分）")
-    due_date: Optional[str] = Field(None, description="期限（ISO形式: YYYY-MM-DDTHH:MM:SS）")
+    due_date: Optional[str] = Field(
+        None,
+        description=(
+            "Due datetime in ISO 8601. If timezone offset is omitted, interpreted as user's local timezone."
+        ),
+    )
     start_not_before: Optional[str] = Field(
         None,
-        description="着手可能日時（ISO形式: YYYY-MM-DDTHH:MM:SS）",
+        description=(
+            "Earliest start datetime in ISO 8601. If timezone offset is omitted, interpreted as user's local timezone."
+        ),
     )
     parent_id: Optional[str] = Field(None, description="親タスクID（UUID文字列、サブタスク化/解除）")
     order_in_parent: Optional[int] = Field(None, ge=1, description="親タスク内での順序")
@@ -167,8 +195,18 @@ class UpdateTaskInput(BaseModel):
     # Meeting fields
     is_fixed_time: Optional[bool] = Field(None, description="会議・固定時間イベントの場合true")
     is_all_day: Optional[bool] = Field(None, description="終日タスク（休暇・出張など、その日のキャパシティを0にする）")
-    start_time: Optional[str] = Field(None, description="開始時刻（ISO形式）")
-    end_time: Optional[str] = Field(None, description="終了時刻（ISO形式）")
+    start_time: Optional[str] = Field(
+        None,
+        description=(
+            "Start datetime in ISO 8601. If timezone offset is omitted, interpreted as user's local timezone."
+        ),
+    )
+    end_time: Optional[str] = Field(
+        None,
+        description=(
+            "End datetime in ISO 8601. If timezone offset is omitted, interpreted as user's local timezone."
+        ),
+    )
     location: Optional[str] = Field(None, description="場所（会議用）")
     attendees: Optional[list[str]] = Field(None, description="参加者リスト（会議用）")
     meeting_notes: Optional[str] = Field(None, description="議事録・メモ（会議用）")
@@ -208,8 +246,18 @@ class CreateMeetingInput(BaseModel):
     """Input for create_meeting tool."""
 
     title: str = Field(..., description="会議タイトル")
-    start_time: str = Field(..., description="開始時刻（ISO形式: YYYY-MM-DDTHH:MM）")
-    end_time: str = Field(..., description="終了時刻（ISO形式: YYYY-MM-DDTHH:MM）")
+    start_time: str = Field(
+        ...,
+        description=(
+            "Start datetime in ISO 8601. If timezone offset is omitted, interpreted as user's local timezone."
+        ),
+    )
+    end_time: str = Field(
+        ...,
+        description=(
+            "End datetime in ISO 8601. If timezone offset is omitted, interpreted as user's local timezone."
+        ),
+    )
     location: Optional[str] = Field(None, description="場所（オンライン/会議室名）")
     attendees: list[str] = Field(default_factory=list, description="参加者リスト")
     description: Optional[str] = Field(None, description="会議の目的・議題")
@@ -601,11 +649,13 @@ async def create_task(
                 "error": "parent_id and project_id mismatch",
             }
 
+    timezone_name = await _resolve_user_timezone(owner_id or user_id, user_repo)
+
     # Parse due_date if provided
     due_date = None
     if input_data.due_date:
         try:
-            due_date = parse_iso_to_utc(input_data.due_date)
+            due_date = parse_iso_to_utc_with_user_timezone(input_data.due_date, timezone_name)
         except ValueError:
             pass  # Invalid date format, ignore
 
@@ -613,7 +663,10 @@ async def create_task(
     start_not_before = None
     if input_data.start_not_before:
         try:
-            start_not_before = parse_iso_to_utc(input_data.start_not_before)
+            start_not_before = parse_iso_to_utc_with_user_timezone(
+                input_data.start_not_before,
+                timezone_name,
+            )
         except ValueError:
             pass  # Invalid date format, ignore
 
@@ -657,8 +710,8 @@ async def create_task(
     end_time = None
     if input_data.is_fixed_time and input_data.start_time and input_data.end_time:
         try:
-            start_time = parse_iso_to_utc(input_data.start_time)
-            end_time = parse_iso_to_utc(input_data.end_time)
+            start_time = parse_iso_to_utc_with_user_timezone(input_data.start_time, timezone_name)
+            end_time = parse_iso_to_utc_with_user_timezone(input_data.end_time, timezone_name)
         except ValueError:
             pass  # Invalid date format, ignore
 
@@ -886,11 +939,13 @@ async def update_task(
             except (ValueError, AttributeError):
                 pass  # Invalid UUID format, skip this dependency
 
+    timezone_name = await _resolve_user_timezone(owner_id or user_id, user_repo)
+
     # Parse due_date if provided
     due_date = None
     if input_data.due_date:
         try:
-            due_date = parse_iso_to_utc(input_data.due_date)
+            due_date = parse_iso_to_utc_with_user_timezone(input_data.due_date, timezone_name)
         except ValueError:
             pass  # Invalid date format, ignore
 
@@ -898,7 +953,10 @@ async def update_task(
     start_not_before = None
     if input_data.start_not_before:
         try:
-            start_not_before = parse_iso_to_utc(input_data.start_not_before)
+            start_not_before = parse_iso_to_utc_with_user_timezone(
+                input_data.start_not_before,
+                timezone_name,
+            )
         except ValueError:
             pass  # Invalid date format, ignore
 
@@ -907,18 +965,17 @@ async def update_task(
     end_time = None
     if input_data.start_time:
         try:
-            start_time = parse_iso_to_utc(input_data.start_time)
+            start_time = parse_iso_to_utc_with_user_timezone(input_data.start_time, timezone_name)
         except ValueError:
             pass  # Invalid date format, ignore
     if input_data.end_time:
         try:
-            end_time = parse_iso_to_utc(input_data.end_time)
+            end_time = parse_iso_to_utc_with_user_timezone(input_data.end_time, timezone_name)
         except ValueError:
             pass  # Invalid date format, ignore
 
     is_fixed_time = input_data.is_fixed_time
     if input_data.is_all_day is True:
-        timezone_name = await _resolve_user_timezone(owner_id, user_repo)
         reference = (
             start_time
             or due_date
@@ -1257,6 +1314,7 @@ async def create_meeting(
     input_data: CreateMeetingInput,
     project_repo: Optional[IProjectRepository] = None,
     member_repo: Optional[IProjectMemberRepository] = None,
+    user_repo: Optional[IUserRepository] = None,
 ) -> dict:
     """
     Create a meeting task with fixed time.
@@ -1269,17 +1327,6 @@ async def create_meeting(
     Returns:
         Created meeting task as dict
     """
-    # Parse timestamps
-    start_dt = datetime.fromisoformat(input_data.start_time.replace("Z", "+00:00"))
-    end_dt = datetime.fromisoformat(input_data.end_time.replace("Z", "+00:00"))
-
-    # Validate time range
-    if end_dt <= start_dt:
-        raise ValueError("終了時刻は開始時刻より後である必要があります")
-
-    # Calculate duration
-    duration_minutes = int((end_dt - start_dt).total_seconds() / 60)
-
     project_id, owner_id, access_error = await _resolve_project_access(
         user_id,
         input_data.project_id,
@@ -1288,6 +1335,18 @@ async def create_meeting(
     )
     if access_error:
         return access_error
+
+    timezone_name = await _resolve_user_timezone(owner_id or user_id, user_repo)
+    # Naive ISO input is treated as user's local time.
+    start_dt = parse_iso_to_utc_with_user_timezone(input_data.start_time, timezone_name)
+    end_dt = parse_iso_to_utc_with_user_timezone(input_data.end_time, timezone_name)
+
+    # Validate time range
+    if end_dt <= start_dt:
+        raise ValueError("終了時刻は開始時刻より後である必要があります")
+
+    # Calculate duration
+    duration_minutes = int((end_dt - start_dt).total_seconds() / 60)
 
     existing = await _find_existing_meeting(
         repo,
@@ -1855,6 +1914,7 @@ def create_meeting_tool(
     user_id: str,
     session_id: str,
     auto_approve: bool = True,
+    user_repo: Optional[IUserRepository] = None,
 ) -> FunctionTool:
     """Create ADK tool for creating meetings."""
     async def _tool(input_data: dict) -> dict:
@@ -1868,8 +1928,8 @@ def create_meeting_tool(
 
         Parameters:
             title (str): Meeting title
-            start_time (str): Start time (ISO)
-            end_time (str): End time (ISO)
+            start_time (str): Start time (ISO, interpreted in user timezone when offset is omitted)
+            end_time (str): End time (ISO, interpreted in user timezone when offset is omitted)
             location (str, optional): Location
             attendees (list[str], optional): Attendees
             description (str, optional): Agenda / description
@@ -1880,13 +1940,6 @@ def create_meeting_tool(
             dict: Meeting task info or proposal id
         """
         meeting_input = CreateMeetingInput(**input_data)
-        start_dt = datetime.fromisoformat(meeting_input.start_time.replace("Z", "+00:00"))
-        end_dt = datetime.fromisoformat(meeting_input.end_time.replace("Z", "+00:00"))
-
-        if end_dt <= start_dt:
-            raise ValueError("End time must be after start time.")
-
-        duration_minutes = int((end_dt - start_dt).total_seconds() / 60)
         project_id, owner_id, access_error = await _resolve_project_access(
             user_id,
             meeting_input.project_id,
@@ -1895,6 +1948,14 @@ def create_meeting_tool(
         )
         if access_error:
             return access_error
+
+        timezone_name = await _resolve_user_timezone(owner_id or user_id, user_repo)
+        start_dt = parse_iso_to_utc_with_user_timezone(meeting_input.start_time, timezone_name)
+        end_dt = parse_iso_to_utc_with_user_timezone(meeting_input.end_time, timezone_name)
+        if end_dt <= start_dt:
+            raise ValueError("End time must be after start time.")
+
+        duration_minutes = int((end_dt - start_dt).total_seconds() / 60)
 
         existing = await _find_existing_meeting(
             repo,
@@ -1931,6 +1992,7 @@ def create_meeting_tool(
                 None,
                 project_repo,
                 member_repo,
+                user_repo,
             )
         return await propose_task(
             user_id,
@@ -1943,6 +2005,7 @@ def create_meeting_tool(
             None,
             project_repo,
             member_repo,
+            user_repo,
         )
 
     _tool.__name__ = "create_meeting"

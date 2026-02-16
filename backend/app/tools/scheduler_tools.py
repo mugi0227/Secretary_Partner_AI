@@ -26,7 +26,13 @@ from app.models.enums import ActionType, ProjectVisibility, TaskStatus
 from app.models.task import Task, TaskUpdate
 from app.services.task_utils import is_parent_task
 from app.tools.approval_tools import create_tool_action_proposal
-from app.utils.datetime_utils import get_user_today, normalize_timezone, now_utc, user_date_to_utc
+from app.utils.datetime_utils import (
+    get_user_today,
+    normalize_timezone,
+    now_utc,
+    parse_iso_to_utc_with_user_timezone,
+    user_date_to_utc,
+)
 
 # ===========================================
 # Tool Input Models
@@ -37,7 +43,12 @@ class ScheduleAgentTaskInput(BaseModel):
     """Input for schedule_agent_task tool."""
 
     action_type: ActionType = Field(..., description="アクションタイプ")
-    execute_at: str = Field(..., description="実行時刻（ISO形式: YYYY-MM-DDTHH:MM:SS）")
+    execute_at: str = Field(
+        ...,
+        description=(
+            "Execution datetime in ISO 8601. If timezone offset is omitted, interpreted as user's local timezone."
+        ),
+    )
     target_task_id: Optional[str] = Field(None, description="対象タスクID（UUID文字列）")
     message_tone: str = Field("neutral", description="メッセージのトーン (gentle/neutral/firm)")
     custom_message: Optional[str] = Field(None, description="カスタムメッセージ")
@@ -88,6 +99,7 @@ async def schedule_agent_task(
     user_id: str,
     repo: IAgentTaskRepository,
     input_data: ScheduleAgentTaskInput,
+    user_repo: Optional[IUserRepository] = None,
 ) -> dict:
     """
     Schedule an autonomous agent action.
@@ -100,10 +112,13 @@ async def schedule_agent_task(
     Returns:
         Created agent task as dict
     """
-    # Parse execute_at
+    timezone = await _resolve_user_timezone(user_id, user_repo)
+
+    # Parse execute_at (naive ISO is interpreted in user's timezone)
     try:
-        trigger_time = datetime.fromisoformat(
-            input_data.execute_at.replace("Z", "+00:00")
+        trigger_time = parse_iso_to_utc_with_user_timezone(
+            input_data.execute_at,
+            timezone,
         )
     except ValueError:
         raise ValueError(f"Invalid date format: {input_data.execute_at}")
@@ -395,6 +410,7 @@ def schedule_agent_task_tool(
     proposal_repo: Optional[IProposalRepository] = None,
     session_id: Optional[str] = None,
     auto_approve: bool = True,
+    user_repo: Optional[IUserRepository] = None,
 ) -> FunctionTool:
     """Create ADK tool for scheduling agent tasks."""
     async def _tool(input_data: dict) -> dict:
@@ -422,7 +438,12 @@ def schedule_agent_task_tool(
                 payload,
                 proposal_desc,
             )
-        return await schedule_agent_task(user_id, repo, ScheduleAgentTaskInput(**payload))
+        return await schedule_agent_task(
+            user_id,
+            repo,
+            ScheduleAgentTaskInput(**payload),
+            user_repo=user_repo,
+        )
 
     _tool.__name__ = "schedule_agent_task"
     return FunctionTool(func=_tool)
