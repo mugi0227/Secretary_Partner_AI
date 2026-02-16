@@ -138,8 +138,13 @@ AIが対話的に処理
 - **ファイル**: 最大400行を目安
 - 長くなる場合は責任を分割して複数ファイルに
 ## Timezone Policy
-- Use Luxon for all date/time parsing and formatting in the frontend.
-- Always apply the user timezone via utils/dateTime helpers (currentUser.timezone or stored fallback).
+- Backend is UTC-first: store timestamps in UTC and run backend internal time calculations in UTC.
+- Frontend is timezone-aware: render and interpret date/time values in the user's timezone.
+- Use shared frontend date/time helpers for parsing and formatting; avoid ad-hoc `new Date(...)` timezone logic.
+- Timezone resolution order is:
+  1. `currentUser.timezone` (server-saved user preference)
+  2. Browser timezone from `Intl.DateTimeFormat().resolvedOptions().timeZone` when user timezone is unset
+- `all_day` tasks are fixed to the user's local day boundary (`00:00` to `23:59`) and converted to UTC for persistence.
 
 
 ## Prompt Layering Policy

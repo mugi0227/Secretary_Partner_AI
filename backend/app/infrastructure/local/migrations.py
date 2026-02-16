@@ -197,10 +197,10 @@ async def run_migrations():
         if "password_hash" not in user_columns:
             await conn.execute(text("ALTER TABLE users ADD COLUMN password_hash VARCHAR(255)"))
         if "timezone" not in user_columns:
-            # Add timezone column with default Asia/Tokyo
-            await conn.execute(text("ALTER TABLE users ADD COLUMN timezone VARCHAR(50) DEFAULT 'Asia/Tokyo' NOT NULL"))
-            # Set existing users to Asia/Tokyo (in case DEFAULT doesn't apply to existing rows)
-            await conn.execute(text("UPDATE users SET timezone = 'Asia/Tokyo' WHERE timezone IS NULL"))
+            # Add timezone column with default UTC
+            await conn.execute(text("ALTER TABLE users ADD COLUMN timezone VARCHAR(50) DEFAULT 'UTC' NOT NULL"))
+            # Set existing users to UTC (in case DEFAULT doesn't apply to existing rows)
+            await conn.execute(text("UPDATE users SET timezone = 'UTC' WHERE timezone IS NULL"))
         if "first_name" not in user_columns:
             await conn.execute(text("ALTER TABLE users ADD COLUMN first_name VARCHAR(100)"))
         if "last_name" not in user_columns:
@@ -866,7 +866,7 @@ async def _ensure_username_unique(conn):
                 last_name VARCHAR(100),
                 username VARCHAR(255),
                 password_hash VARCHAR(255),
-                timezone VARCHAR(50) NOT NULL DEFAULT 'Asia/Tokyo',
+                timezone VARCHAR(50) NOT NULL DEFAULT 'UTC',
                 enable_weekly_meeting_reminder BOOLEAN NOT NULL DEFAULT 0,
                 created_at DATETIME,
                 updated_at DATETIME,
@@ -888,7 +888,7 @@ async def _ensure_username_unique(conn):
             SELECT
                 id, provider_issuer, provider_sub, email, display_name,
                 first_name, last_name, username, password_hash,
-                COALESCE(timezone, 'Asia/Tokyo'),
+                COALESCE(timezone, 'UTC'),
                 COALESCE(enable_weekly_meeting_reminder, 0),
                 created_at, updated_at
             FROM users_old

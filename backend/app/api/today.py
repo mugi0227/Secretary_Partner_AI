@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from app.api.deps import CurrentUser, ProjectRepo, TaskAssignmentRepo, TaskRepo, UserRepo
 from app.models.task import Task
 from app.services.scheduler_service import SchedulerService
-from app.utils.datetime_utils import get_user_today
+from app.utils.datetime_utils import get_user_today, normalize_timezone
 
 router = APIRouter()
 
@@ -126,7 +126,7 @@ async def get_top3_tasks(
     # Get user account to access timezone
     from uuid import UUID
     user_account = await user_repo.get(UUID(user.id))
-    user_timezone = user_account.timezone if user_account else "Asia/Tokyo"
+    user_timezone = normalize_timezone(user_account.timezone if user_account else None)
     today = get_user_today(user_timezone)
 
     # 1. Get assigned tasks

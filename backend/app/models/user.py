@@ -22,7 +22,7 @@ class UserCreate(BaseModel):
     last_name: Optional[str] = Field(None, max_length=100)
     username: Optional[str] = Field(None, max_length=255)
     password_hash: Optional[str] = Field(None, max_length=255)
-    timezone: str = Field(default="Asia/Tokyo", max_length=50, description="IANA timezone (e.g., Asia/Tokyo, America/New_York)")
+    timezone: str = Field(default="UTC", max_length=50, description="IANA timezone (e.g., Asia/Tokyo, America/New_York)")
     enable_weekly_meeting_reminder: bool = Field(default=False, description="Enable weekly meeting registration reminder tasks")
 
 
@@ -38,7 +38,7 @@ class UserAccount(BaseModel):
     last_name: Optional[str] = None
     username: Optional[str] = None
     password_hash: Optional[str] = None
-    timezone: str = "Asia/Tokyo"
+    timezone: str = "UTC"
     enable_weekly_meeting_reminder: bool = False
     created_at: datetime
     updated_at: datetime

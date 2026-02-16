@@ -14,6 +14,7 @@ from app.api.deps import CurrentUser, UserRepo
 from app.core.config import get_settings
 from app.core.security import hash_password, verify_password
 from app.models.user import UserUpdate
+from app.utils.datetime_utils import is_valid_timezone, normalize_timezone
 
 router = APIRouter()
 
@@ -30,7 +31,7 @@ class UserProfile(BaseModel):
     username: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
-    timezone: Optional[str] = "Asia/Tokyo"
+    timezone: Optional[str] = None
     is_developer: bool = False
 
 
@@ -112,7 +113,7 @@ async def get_current_user_profile(
         username=record.username,
         first_name=record.first_name,
         last_name=record.last_name,
-        timezone=record.timezone,
+        timezone=normalize_timezone(record.timezone),
         is_developer=is_dev,
     )
 
@@ -206,8 +207,15 @@ async def update_credentials(
 
     if data.timezone:
         timezone_val = data.timezone.strip()
-        if timezone_val and timezone_val != record.timezone:
-            update_fields.timezone = timezone_val
+        if timezone_val:
+            if not is_valid_timezone(timezone_val):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid timezone: {timezone_val}",
+                )
+            normalized_timezone = normalize_timezone(timezone_val)
+            if normalized_timezone != record.timezone:
+                update_fields.timezone = normalized_timezone
 
     if not any(
         value is not None
@@ -233,5 +241,5 @@ async def update_credentials(
         username=updated.username,
         first_name=updated.first_name,
         last_name=updated.last_name,
-        timezone=updated.timezone,
+        timezone=normalize_timezone(updated.timezone),
     )

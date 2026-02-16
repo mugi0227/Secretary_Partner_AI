@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { DateTime } from 'luxon';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FaCheck, FaClock, FaEdit, FaTimes, FaTrash } from 'react-icons/fa';
+import { getStoredTimezone } from '../../utils/dateTime';
 import './EditableDateTime.css';
 
 interface EditableDateTimeProps {
@@ -22,7 +23,7 @@ export function EditableDateTime({
   placeholder = '未設定',
   className = '',
   disabled = false,
-  timezone = 'Asia/Tokyo',
+  timezone = getStoredTimezone(),
   showTime = true,
   icon,
   formatDisplay,

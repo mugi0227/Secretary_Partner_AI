@@ -5,6 +5,7 @@ Recurring meeting API endpoints.
 from datetime import datetime, timedelta
 from typing import Optional
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query, status
 
@@ -15,6 +16,7 @@ from app.api.deps import (
     ProjectRepo,
     RecurringMeetingRepo,
     TaskRepo,
+    UserRepo,
 )
 from app.api.permissions import require_project_action
 from app.core.exceptions import NotFoundError
@@ -25,6 +27,7 @@ from app.models.recurring_meeting import (
 )
 from app.services.project_permissions import ProjectAction
 from app.services.recurring_meeting_service import RecurringMeetingService
+from app.utils.datetime_utils import normalize_timezone, now_utc
 
 router = APIRouter()
 
@@ -36,7 +39,7 @@ def _align_to_weekday(current, target_weekday: int):
 
 def _compute_anchor_date(start_time, weekday: int, now: datetime):
     candidate_date = _align_to_weekday(now.date(), weekday)
-    candidate_dt = datetime.combine(candidate_date, start_time)
+    candidate_dt = datetime.combine(candidate_date, start_time, tzinfo=now.tzinfo)
     if candidate_dt <= now:
         candidate_date += timedelta(days=7)
     return candidate_date
@@ -90,12 +93,19 @@ async def create_recurring_meeting(
     checkin_repo: CheckinRepo,
     project_repo: ProjectRepo,
     member_repo: ProjectMemberRepo,
+    user_repo: UserRepo,
 ):
     """Create a new recurring meeting series."""
+    try:
+        user_account = await user_repo.get(UUID(user.id))
+    except (TypeError, ValueError):
+        user_account = None
+    user_timezone = normalize_timezone(user_account.timezone if user_account else None)
+    now_local = now_utc().astimezone(ZoneInfo(user_timezone))
     anchor_date = payload.anchor_date or _compute_anchor_date(
         payload.start_time,
         payload.weekday,
-        datetime.now(),
+        now_local,
     )
     if anchor_date.weekday() != payload.weekday:
         raise HTTPException(
@@ -116,6 +126,7 @@ async def create_recurring_meeting(
     service = RecurringMeetingService(
         repo, task_repo, checkin_repo,
         project_repo=project_repo, member_repo=member_repo,
+        user_repo=user_repo,
     )
     await service.ensure_upcoming_meetings(owner_id)
     return created
@@ -214,6 +225,7 @@ async def generate_meeting_tasks(
     checkin_repo: CheckinRepo,
     project_repo: ProjectRepo,
     member_repo: ProjectMemberRepo,
+    user_repo: UserRepo,
     lookahead_days: int = Query(30, ge=1, le=180, description="Generate tasks for the next N days"),
 ):
     """
@@ -235,6 +247,7 @@ async def generate_meeting_tasks(
         lookahead_days=lookahead_days,
         project_repo=project_repo,
         member_repo=member_repo,
+        user_repo=user_repo,
     )
 
     result = await service.ensure_upcoming_meetings(owner_id)

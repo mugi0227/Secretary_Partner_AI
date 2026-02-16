@@ -26,7 +26,7 @@ from app.models.enums import ActionType, ProjectVisibility, TaskStatus
 from app.models.task import Task, TaskUpdate
 from app.services.task_utils import is_parent_task
 from app.tools.approval_tools import create_tool_action_proposal
-from app.utils.datetime_utils import get_user_today
+from app.utils.datetime_utils import get_user_today, normalize_timezone, now_utc, user_date_to_utc
 
 # ===========================================
 # Tool Input Models
@@ -68,7 +68,7 @@ def get_current_datetime() -> dict:
     Returns:
         Current datetime information in various formats
     """
-    now = datetime.now()
+    now = now_utc()
     return {
         "current_datetime": now.isoformat(),
         "date": now.strftime("%Y-%m-%d"),
@@ -179,14 +179,12 @@ async def _resolve_user_timezone(
     user_repo: Optional[IUserRepository],
 ) -> str:
     if user_repo is None:
-        return "Asia/Tokyo"
+        return normalize_timezone(None)
     try:
         user = await user_repo.get(UUID(user_id))
     except (TypeError, ValueError):
-        return "Asia/Tokyo"
-    if user and user.timezone:
-        return user.timezone
-    return "Asia/Tokyo"
+        return normalize_timezone(None)
+    return normalize_timezone(user.timezone if user else None)
 
 
 async def _list_owned_tasks(
@@ -240,7 +238,7 @@ async def apply_schedule_request(
 ) -> dict:
     timezone = await _resolve_user_timezone(user_id, user_repo)
     today = get_user_today(timezone)
-    today_datetime = datetime.combine(today, datetime.min.time())
+    today_datetime = user_date_to_utc(today, timezone)
 
     focus_keywords = _normalize_keywords(input_data.focus_keywords)
     if not focus_keywords:
@@ -528,10 +526,10 @@ async def get_postpone_stats(
     days: int = 7,
 ) -> dict:
     """Get aggregate postponement statistics."""
-    from datetime import date, timedelta
+    from datetime import timedelta
     from uuid import UUID as _UUID
 
-    since = date.today() - timedelta(days=days)
+    since = get_user_today(normalize_timezone(None)) - timedelta(days=days)
     events = await postpone_repo.list_by_user(user_id, since=since)
 
     task_counts: dict[str, int] = {}

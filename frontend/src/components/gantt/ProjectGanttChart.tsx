@@ -1495,8 +1495,8 @@ export const ProjectGanttChart: React.FC<ProjectGanttChartProps> = ({
       // Use due_date first, then start_not_before as fallback
       const dateStrA = a.due_date || a.start_not_before;
       const dateStrB = b.due_date || b.start_not_before;
-      const dateA = dateStrA ? new Date(dateStrA).getTime() : Infinity;
-      const dateB = dateStrB ? new Date(dateStrB).getTime() : Infinity;
+      const dateA = dateStrA ? toDateTime(dateStrA, timezone).toMillis() : Infinity;
+      const dateB = dateStrB ? toDateTime(dateStrB, timezone).toMillis() : Infinity;
       return dateA - dateB;
     };
 
@@ -1523,8 +1523,8 @@ export const ProjectGanttChart: React.FC<ProjectGanttChartProps> = ({
 
       // Sort milestones by due_date
       const sortedMilestones = [...phaseMilestones].sort((a, b) => {
-        const dateA = a.due_date ? new Date(a.due_date).getTime() : Infinity;
-        const dateB = b.due_date ? new Date(b.due_date).getTime() : Infinity;
+        const dateA = a.due_date ? toDateTime(a.due_date, timezone).toMillis() : Infinity;
+        const dateB = b.due_date ? toDateTime(b.due_date, timezone).toMillis() : Infinity;
         return dateA - dateB;
       });
 
@@ -1552,7 +1552,7 @@ export const ProjectGanttChart: React.FC<ProjectGanttChartProps> = ({
     });
 
     setTaskOrderMap(newOrderMap);
-  }, [tasks, phases, tasksByPhase, milestonesByPhase, milestones]);
+  }, [tasks, phases, tasksByPhase, milestonesByPhase, milestones, timezone]);
 
   // Handle sidebar drag over for milestone highlighting
   const handleSidebarDragOver = useCallback((event: DragOverEvent) => {

@@ -5,14 +5,16 @@ Recurring task API endpoints.
 from datetime import date, datetime, timedelta
 from typing import Optional
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.api.deps import CurrentUser, RecurringTaskRepo, TaskRepo
+from app.api.deps import CurrentUser, RecurringTaskRepo, TaskRepo, UserRepo
 from app.core.exceptions import NotFoundError
 from app.models.enums import RecurringTaskFrequency
 from app.models.recurring_task import RecurringTask, RecurringTaskCreate, RecurringTaskUpdate
 from app.services.recurring_task_service import RecurringTaskService
+from app.utils.datetime_utils import normalize_timezone, now_utc
 
 router = APIRouter()
 
@@ -61,13 +63,20 @@ async def create_recurring_task(
     user: CurrentUser,
     repo: RecurringTaskRepo,
     task_repo: TaskRepo,
+    user_repo: UserRepo,
 ):
     """Create a new recurring task definition and generate upcoming instances."""
+    try:
+        user_account = await user_repo.get(UUID(user.id))
+    except (TypeError, ValueError):
+        user_account = None
+    user_timezone = normalize_timezone(user_account.timezone if user_account else None)
+    now_local = now_utc().astimezone(ZoneInfo(user_timezone))
     anchor_date = payload.anchor_date or _compute_anchor_date(
         payload.frequency,
         payload.weekday,
         payload.day_of_month,
-        datetime.now(),
+        now_local,
     )
     created = await repo.create(
         user.id,
@@ -77,6 +86,7 @@ async def create_recurring_task(
     service = RecurringTaskService(
         recurring_repo=repo,
         task_repo=task_repo,
+        user_repo=user_repo,
     )
     await service.ensure_upcoming_tasks(user.id)
 
@@ -167,6 +177,7 @@ async def generate_tasks(
     user: CurrentUser,
     repo: RecurringTaskRepo,
     task_repo: TaskRepo,
+    user_repo: UserRepo,
     lookahead_days: int = Query(30, ge=1, le=180, description="Generate tasks for the next N days"),
 ):
     """Manually trigger task generation for a recurring task definition."""
@@ -181,5 +192,6 @@ async def generate_tasks(
         recurring_repo=repo,
         task_repo=task_repo,
         lookahead_days=lookahead_days,
+        user_repo=user_repo,
     )
     return await service.ensure_upcoming_tasks(user.id)

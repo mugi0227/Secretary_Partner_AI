@@ -6,15 +6,19 @@ Processes pending AgentTasks and respects Quiet Hours.
 
 from datetime import datetime, time
 from typing import Any
+from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from app.core.config import get_settings
 from app.core.logger import setup_logger
 from app.interfaces.agent_task_repository import IAgentTaskRepository
+from app.interfaces.user_repository import IUserRepository
 from app.models.agent_task import AgentTask
 from app.models.enums import ActionType
 from app.services.recurring_meeting_service import RecurringMeetingService
 from app.services.recurring_task_service import RecurringTaskService
 from app.services.task_heartbeat_service import TaskHeartbeatService
+from app.utils.datetime_utils import normalize_timezone, now_utc
 
 logger = setup_logger(__name__)
 
@@ -36,11 +40,13 @@ class HeartbeatService:
         recurring_meeting_service: RecurringMeetingService | None = None,
         recurring_task_service: RecurringTaskService | None = None,
         task_heartbeat_service: TaskHeartbeatService | None = None,
+        user_repo: IUserRepository | None = None,
     ):
         self.agent_task_repo = agent_task_repo
         self.recurring_meeting_service = recurring_meeting_service
         self.recurring_task_service = recurring_task_service
         self.task_heartbeat_service = task_heartbeat_service
+        self.user_repo = user_repo
         settings = get_settings()
 
         # Parse quiet hours from config
@@ -76,7 +82,17 @@ class HeartbeatService:
         Returns:
             dict with status, processed count, and failed count
         """
-        now = datetime.now()
+        now_utc_value = now_utc()
+        user_timezone = await self._resolve_user_timezone(user_id)
+        local_zone = ZoneInfo(user_timezone)
+        try:
+            now_local = datetime.now(local_zone)
+        except TypeError:
+            patched_now = datetime.now()
+            if patched_now.tzinfo is None:
+                now_local = patched_now.replace(tzinfo=local_zone)
+            else:
+                now_local = patched_now.astimezone(local_zone)
         recurring_result = None
         if self.recurring_meeting_service:
             recurring_result = await self.recurring_meeting_service.ensure_upcoming_meetings(user_id)
@@ -86,7 +102,7 @@ class HeartbeatService:
             recurring_tasks_result = await self.recurring_task_service.ensure_upcoming_tasks(user_id)
 
         # Check quiet hours
-        if self._is_quiet_hours(now.time()):
+        if self._is_quiet_hours(now_local.time()):
             logger.info(f"Heartbeat skipped for {user_id}: quiet hours")
             return {
                 "status": "quiet_hours",
@@ -100,7 +116,7 @@ class HeartbeatService:
         # Get pending tasks
         pending_tasks = await self.agent_task_repo.get_pending(
             user_id=user_id,
-            before=now,
+            before=now_utc_value,
             limit=10,
         )
 
@@ -141,6 +157,15 @@ class HeartbeatService:
             "recurring_tasks": recurring_tasks_result,
             "task_heartbeat": task_heartbeat_result,
         }
+
+    async def _resolve_user_timezone(self, user_id: str) -> str:
+        if self.user_repo is None:
+            return normalize_timezone(None)
+        try:
+            user = await self.user_repo.get(UUID(user_id))
+        except (ValueError, TypeError):
+            user = None
+        return normalize_timezone(user.timezone if user else None)
 
     async def _execute_agent_task(self, user_id: str, task: AgentTask) -> dict[str, Any]:
         """

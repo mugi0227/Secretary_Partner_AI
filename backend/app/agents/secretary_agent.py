@@ -4,8 +4,9 @@ Main Secretary Agent implementation using Google ADK.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 from typing import Any
+from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from google.adk import Agent
 
@@ -36,6 +37,7 @@ from app.services.work_memory_service import (
     get_work_memory_index,
     select_relevant_work_memories,
 )
+from app.utils.datetime_utils import normalize_timezone, now_utc
 from app.tools import (
     add_agenda_item_tool,
     add_to_memory_tool,
@@ -219,12 +221,26 @@ _TOOL_CATALOG_SECTIONS: dict[str, tuple[str, ...]] = {
 }
 
 
-def get_current_datetime_section() -> str:
-    jst = timezone(timedelta(hours=9))
-    now = datetime.now(jst)
+async def _resolve_user_timezone(user_id: str, user_repo: IUserRepository | None) -> str:
+    if user_repo is None:
+        return normalize_timezone(None)
+    try:
+        user = await user_repo.get(UUID(user_id))
+    except (ValueError, TypeError):
+        user = None
+    return normalize_timezone(user.timezone if user else None)
+
+
+def get_current_datetime_section(user_timezone: str) -> str:
+    resolved_timezone = normalize_timezone(user_timezone)
+    now = now_utc().astimezone(ZoneInfo(resolved_timezone))
     weekday_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     weekday = weekday_names[now.weekday()]
-    return f"## Current DateTime\n{now.year:04d}-{now.month:02d}-{now.day:02d} {now.hour:02d}:{now.minute:02d} JST ({weekday})"
+    return (
+        "## Current DateTime\n"
+        f"{now.year:04d}-{now.month:02d}-{now.day:02d} "
+        f"{now.hour:02d}:{now.minute:02d} {resolved_timezone} ({weekday})"
+    )
 
 
 def _filter_tools_by_name(tools: list[Any], allowed_tool_names: frozenset[str]) -> list[Any]:
@@ -263,8 +279,10 @@ async def build_system_prompt_with_work_memory(
     profiles: tuple[str, ...],
     enabled_tool_names: list[str],
     include_tool_catalog: bool,
+    user_repo: IUserRepository | None = None,
 ) -> str:
-    datetime_section = get_current_datetime_section()
+    user_timezone = await _resolve_user_timezone(user_id, user_repo)
+    datetime_section = get_current_datetime_section(user_timezone)
     profile_skill_section = format_profile_skill_prompts(profiles)
 
     work_memories = await get_work_memory_index(user_id, memory_repo, limit=30)
@@ -352,6 +370,7 @@ async def create_secretary_agent(
         session_id=session_id,
         auto_approve=auto_approve,
         assignment_repo=task_assignment_repo,
+        user_repo=user_repo,
     )
     task_assignment_tool = assign_task_tool(
         task_assignment_repo,
@@ -436,6 +455,7 @@ async def create_secretary_agent(
             proposal_repo=proposal_repo,
             session_id=session_id,
             auto_approve=auto_approve,
+            user_repo=user_repo,
         ),
         delete_task_tool(
             task_repo,
@@ -658,6 +678,7 @@ async def create_secretary_agent(
         profiles=routing.profiles,
         enabled_tool_names=enabled_tool_names,
         include_tool_catalog="capability" in routing.profiles,
+        user_repo=user_repo,
     )
     logger.info(
         "secretary_runtime profiles=%s tools=%s",

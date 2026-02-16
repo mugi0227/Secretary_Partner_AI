@@ -25,7 +25,7 @@ import {
   type WorkBreak,
   type WorkdayHours,
 } from '../../utils/capacitySettings';
-import { setStoredTimezone } from '../../utils/dateTime';
+import { getStoredTimezone, setStoredTimezone } from '../../utils/dateTime';
 import { userStorage } from '../../utils/userStorage';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { usersApi } from '../../api/users';
@@ -149,7 +149,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const [userLastName, setUserLastName] = useState('');
   const [userFirstName, setUserFirstName] = useState('');
   const [userEmail, setUserEmail] = useState('');
-  const [userTimezone, setUserTimezone] = useState('Asia/Tokyo');
+  const [userTimezone, setUserTimezone] = useState(() => getStoredTimezone());
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [accountError, setAccountError] = useState<string | null>(null);
@@ -207,8 +207,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     setUserLastName(currentUser.last_name || '');
     setUserFirstName(currentUser.first_name || '');
     setUserEmail(currentUser.email || '');
-    setUserTimezone(currentUser.timezone || 'Asia/Tokyo');
-    setStoredTimezone(currentUser.timezone || 'Asia/Tokyo');
+    const resolvedTimezone = currentUser.timezone || getStoredTimezone();
+    setUserTimezone(resolvedTimezone);
+    setStoredTimezone(resolvedTimezone);
     setEnableWeeklyMeetingReminder(currentUser.enable_weekly_meeting_reminder ?? false);
   }, [currentUser]);
 
@@ -450,7 +451,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     const currentUserFirstName = currentUser?.first_name || '';
     const currentUserLastName = currentUser?.last_name || '';
     const currentUserEmail = currentUser?.email || '';
-    const currentUserTimezone = currentUser?.timezone || 'Asia/Tokyo';
+    const currentUserTimezone = currentUser?.timezone || getStoredTimezone();
     const currentEnableWeeklyMeetingReminder = currentUser?.enable_weekly_meeting_reminder ?? false;
 
     return (
@@ -515,7 +516,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     const currentUserFirstName = currentUser?.first_name || '';
     const currentUserLastName = currentUser?.last_name || '';
     const currentUserEmail = currentUser?.email || '';
-    const currentUserTimezone = currentUser?.timezone || 'Asia/Tokyo';
+    const currentUserTimezone = currentUser?.timezone || getStoredTimezone();
     const currentEnableWeeklyMeetingReminder = currentUser?.enable_weekly_meeting_reminder ?? false;
 
     if (nextUserName && nextUserName !== currentUserName) {

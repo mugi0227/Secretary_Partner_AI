@@ -29,6 +29,7 @@ from app.services.task_utils import (
     get_remaining_minutes,
     is_parent_task,
 )
+from app.utils.datetime_utils import normalize_timezone
 
 logger = setup_logger(__name__)
 
@@ -193,7 +194,7 @@ class SchedulerService:
     @staticmethod
     def _to_local_datetime(value: datetime, timezone: str) -> datetime:
         """Convert a datetime to the user's local timezone."""
-        tz = ZoneInfo(timezone)
+        tz = ZoneInfo(normalize_timezone(timezone))
         if value.tzinfo is None:
             return value.replace(tzinfo=tz)
         return value.astimezone(tz)
@@ -202,7 +203,7 @@ class SchedulerService:
         self,
         tasks: list[Task],
         target_date: date,
-        user_timezone: str = "Asia/Tokyo",
+        user_timezone: str = "UTC",
     ) -> tuple[list[Task], int]:
         """
         Get meetings scheduled for a specific day and calculate total duration.
@@ -266,7 +267,7 @@ class SchedulerService:
     def _calculate_meeting_minutes_per_user(
         self,
         meetings: list[Task],
-        user_timezone: str = "Asia/Tokyo",
+        user_timezone: str = "UTC",
     ) -> dict[str, int]:
         """
         Calculate meeting minutes per user, handling overlapping meetings.
@@ -342,7 +343,7 @@ class SchedulerService:
         members: Optional[list[ProjectMember]] = None,
         filter_by_assignee: bool = False,
         planned_window_by_task: Optional[dict[UUID, tuple[Optional[date], Optional[date]]]] = None,
-        user_timezone: str = "Asia/Tokyo",
+        user_timezone: str = "UTC",
         team_project_ids: Optional[set[UUID]] = None,
     ) -> ScheduleResponse:
         """
@@ -352,6 +353,7 @@ class SchedulerService:
         - Dependencies are respected.
         - Supports multi-user capacity if members and assignments are provided.
         """
+        user_timezone = normalize_timezone(user_timezone)
         local_today = datetime.now(ZoneInfo(user_timezone)).date()
         if not tasks:
             start = start_date or local_today
@@ -1051,9 +1053,10 @@ class SchedulerService:
         tasks: list[Task],
         project_priorities: dict[UUID, int] | None = None,
         today: Optional[date] = None,
-        user_timezone: str = "Asia/Tokyo",
+        user_timezone: str = "UTC",
     ) -> TodayTasksResponse:
         """Extract today's tasks and top3 from schedule."""
+        user_timezone = normalize_timezone(user_timezone)
         today_date = today or datetime.now(ZoneInfo(user_timezone)).date()
         task_map = {task.id: task for task in tasks}
         project_priorities = project_priorities or {}

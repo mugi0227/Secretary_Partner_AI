@@ -31,7 +31,7 @@ from app.models.project import Project
 from app.models.task import Task
 from app.services.llm_utils import generate_text
 from app.services.task_utils import get_effective_estimated_minutes, is_parent_task
-from app.utils.datetime_utils import UTC, ensure_utc, now_utc
+from app.utils.datetime_utils import UTC, ensure_utc, normalize_timezone, now_utc
 
 HEARTBEAT_SESSION_PREFIX = "heartbeat-"
 LLM_MESSAGE_MAX_LENGTH = 900
@@ -201,9 +201,7 @@ class TaskHeartbeatService:
             user = await self._user_repo.get(UUID(user_id))
         except ValueError:
             user = None
-        if user and user.timezone:
-            return user.timezone
-        return "Asia/Tokyo"
+        return normalize_timezone(user.timezone if user else None)
 
     async def _get_tasks_for_user(self, user_id: str) -> list[Task]:
         tasks = await self._task_repo.list(

@@ -22,6 +22,7 @@ from app.api.deps import (
     TaskAssignmentRepo,
     TaskRepo,
     UserRepo,
+    get_user_repository,
 )
 from app.core.exceptions import BusinessLogicError, NotFoundError
 from app.models.collaboration import (
@@ -42,7 +43,12 @@ from app.services.assignee_utils import is_invitation_assignee
 from app.services.daily_schedule_plan_service import DEFAULT_PLAN_DAYS, DailySchedulePlanService
 from app.services.scheduler_service import SchedulerService
 from app.services.task_utils import renumber_siblings
-from app.utils.datetime_utils import get_user_today
+from app.utils.datetime_utils import (
+    all_day_bounds_to_utc,
+    get_user_today,
+    normalize_timezone,
+    user_date_to_utc,
+)
 from app.utils.dependency_validator import DependencyValidator
 
 router = APIRouter()
@@ -83,6 +89,18 @@ async def _validate_assignees_are_project_members(
 def get_scheduler_service() -> SchedulerService:
     """Get SchedulerService instance."""
     return SchedulerService()
+
+
+async def _resolve_user_timezone(
+    user_id: str,
+    user_repo: Optional[UserRepo] = None,
+) -> str:
+    repo = user_repo or get_user_repository()
+    try:
+        user_account = await repo.get(UUID(user_id))
+    except (TypeError, ValueError):
+        user_account = None
+    return normalize_timezone(user_account.timezone if user_account else None)
 
 
 async def load_plan_windows(
@@ -219,6 +237,14 @@ async def create_task(
                     TaskUpdate(order_in_parent=sibling.order_in_parent + 1),
                     project_id=task_project_id,
                 )
+
+    if task.is_all_day:
+        timezone_name = await _resolve_user_timezone(owner_user_id)
+        reference = task.start_time or task.due_date or task.start_not_before
+        start_utc, end_utc = all_day_bounds_to_utc(timezone_name, reference=reference)
+        task.start_time = start_utc
+        task.end_time = end_utc
+        task.is_fixed_time = True
 
     created_task = await repo.create(owner_user_id, task)
 
@@ -492,13 +518,7 @@ async def get_today_tasks(
     apply_plan_constraints: bool = Query(True, description="Apply project plan windows"),
 ):
     """Get today's tasks derived from the schedule."""
-    user_timezone = "Asia/Tokyo"
-    try:
-        user_account = await user_repo.get(UUID(user.id))
-    except (TypeError, ValueError):
-        user_account = None
-    if user_account and user_account.timezone:
-        user_timezone = user_account.timezone
+    user_timezone = await _resolve_user_timezone(user.id, user_repo)
 
     plan_service = DailySchedulePlanService(
         task_repo=repo,
@@ -545,7 +565,8 @@ async def get_postpone_stats(
     """Get aggregate postponement statistics for the user."""
     from datetime import timedelta
 
-    since = date.today() - timedelta(days=days)
+    user_timezone = await _resolve_user_timezone(user.id)
+    since = get_user_today(user_timezone) - timedelta(days=days)
     events = await postpone_repo.list_by_user(user.id, since=since)
 
     task_counts: dict[UUID, int] = {}
@@ -558,7 +579,7 @@ async def get_postpone_stats(
     sorted_tasks = sorted(task_counts.items(), key=lambda x: x[1], reverse=True)[:5]
     for tid, count in sorted_tasks:
         task = await repo.get_by_id(user.id, tid)
-        title = task.title if task else "不明"
+        title = task.title if task else "Unknown"
         most_postponed.append(
             PostponeTaskSummary(task_id=tid, task_title=title, postpone_count=count)
         )
@@ -642,6 +663,21 @@ async def update_task(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Task {task_id} not found",
         )
+
+    if update.is_all_day is True:
+        user_timezone = await _resolve_user_timezone(task_owner_user_id)
+        reference = (
+            update.start_time
+            or update.due_date
+            or update.start_not_before
+            or current_task.start_time
+            or current_task.due_date
+            or current_task.start_not_before
+        )
+        start_utc, end_utc = all_day_bounds_to_utc(user_timezone, reference=reference)
+        update.start_time = start_utc
+        update.end_time = end_utc
+        update.is_fixed_time = True
 
     # Guard: requires_all_completion tasks cannot be directly set to DONE
     if update.status == TaskStatus.DONE and current_task.requires_all_completion:
@@ -1076,10 +1112,7 @@ async def postpone_task(
     task, owner_user_id = await _get_task_or_404(user, repo, task_id, project_repo)
 
     # Calculate "from" date (today in user's timezone)
-    user_timezone = "Asia/Tokyo"
-    user_account = await user_repo.get(UUID(user.id))
-    if user_account and user_account.timezone:
-        user_timezone = user_account.timezone
+    user_timezone = await _resolve_user_timezone(user.id, user_repo)
     from_date = get_user_today(user_timezone)
 
     # Record postpone event
@@ -1093,9 +1126,7 @@ async def postpone_task(
     )
 
     # Build update: set start_not_before to target date
-    from datetime import datetime as dt
-
-    target_datetime = dt.combine(request.to_date, dt.min.time())
+    target_datetime = user_date_to_utc(request.to_date, user_timezone)
     update_data = TaskUpdate(start_not_before=target_datetime)
 
     if request.pin:
@@ -1119,14 +1150,9 @@ async def do_today(
     """Pull a task into today's schedule."""
     task, owner_user_id = await _get_task_or_404(user, repo, task_id, project_repo)
 
-    user_timezone = "Asia/Tokyo"
-    user_account = await user_repo.get(UUID(user.id))
-    if user_account and user_account.timezone:
-        user_timezone = user_account.timezone
+    user_timezone = await _resolve_user_timezone(user.id, user_repo)
     today = get_user_today(user_timezone)
-    from datetime import datetime as dt
-
-    today_datetime = dt.combine(today, dt.min.time())
+    today_datetime = user_date_to_utc(today, user_timezone)
 
     update_data = TaskUpdate()
 

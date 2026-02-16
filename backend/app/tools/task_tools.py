@@ -19,6 +19,7 @@ from app.interfaces.project_repository import IProjectRepository
 from app.interfaces.proposal_repository import IProposalRepository
 from app.interfaces.task_assignment_repository import ITaskAssignmentRepository
 from app.interfaces.task_repository import ITaskRepository
+from app.interfaces.user_repository import IUserRepository
 from app.models.collaboration import TaskAssignmentCreate, TaskAssignmentsCreate
 from app.models.enums import CreatedBy, EnergyLevel, Priority
 from app.models.proposal import Proposal, ProposalType
@@ -27,7 +28,7 @@ from app.services.project_permissions import ProjectAction
 from app.services.task_utils import renumber_siblings
 from app.tools.approval_tools import create_tool_action_proposal
 from app.tools.permissions import require_project_action, require_project_member
-from app.utils.datetime_utils import parse_iso_to_utc
+from app.utils.datetime_utils import all_day_bounds_to_utc, normalize_timezone, parse_iso_to_utc
 
 # ===========================================
 # Tool Input Models
@@ -348,6 +349,19 @@ def _within_minutes(left: datetime, right: datetime, minutes: int) -> bool:
     return delta_seconds <= minutes * 60
 
 
+async def _resolve_user_timezone(
+    user_id: str,
+    user_repo: Optional[IUserRepository],
+) -> str:
+    if user_repo is None:
+        return normalize_timezone(None)
+    try:
+        user = await user_repo.get(UUID(user_id))
+    except (ValueError, TypeError):
+        user = None
+    return normalize_timezone(user.timezone if user else None)
+
+
 async def _resolve_task_access(
     user_id: str,
     task_id: UUID,
@@ -444,6 +458,7 @@ async def propose_task(
     assignment_repo: Optional[ITaskAssignmentRepository] = None,
     project_repo: Optional[IProjectRepository] = None,
     member_repo: Optional[IProjectMemberRepository] = None,
+    user_repo: Optional[IUserRepository] = None,
 ) -> dict:
     """
     Propose a task for user approval, or auto-approve if configured.
@@ -486,6 +501,7 @@ async def propose_task(
             assignment_repo=assignment_repo,
             project_repo=project_repo,
             member_repo=member_repo,
+            user_repo=user_repo,
         )
         return {
             "auto_approved": True,
@@ -533,6 +549,7 @@ async def create_task(
     assignment_repo: Optional[ITaskAssignmentRepository] = None,
     project_repo: Optional[IProjectRepository] = None,
     member_repo: Optional[IProjectMemberRepository] = None,
+    user_repo: Optional[IUserRepository] = None,
 ) -> dict:
     """
     Create a new task.
@@ -645,7 +662,14 @@ async def create_task(
         except ValueError:
             pass  # Invalid date format, ignore
 
-    if input_data.is_fixed_time and start_time and end_time:
+    is_fixed_time = input_data.is_fixed_time
+    if input_data.is_all_day:
+        timezone_name = await _resolve_user_timezone(owner_id, user_repo)
+        reference = start_time or due_date or start_not_before
+        start_time, end_time = all_day_bounds_to_utc(timezone_name, reference=reference)
+        is_fixed_time = True
+
+    if is_fixed_time and start_time and end_time:
         existing = await _find_existing_meeting(
             repo,
             owner_id,
@@ -681,7 +705,7 @@ async def create_task(
         order_in_parent=order_in_parent,
         guide=input_data.guide,
         # Meeting fields
-        is_fixed_time=input_data.is_fixed_time,
+        is_fixed_time=is_fixed_time,
         is_all_day=input_data.is_all_day,
         start_time=start_time,
         end_time=end_time,
@@ -783,6 +807,7 @@ async def update_task(
     input_data: UpdateTaskInput,
     project_repo: Optional[IProjectRepository] = None,
     member_repo: Optional[IProjectMemberRepository] = None,
+    user_repo: Optional[IUserRepository] = None,
 ) -> dict:
     """
     Update an existing task.
@@ -797,7 +822,7 @@ async def update_task(
     """
     task_id = UUID(input_data.task_id)
 
-    _, owner_id, current_project_id, access_error = await _resolve_task_access(
+    current_task, owner_id, current_project_id, access_error = await _resolve_task_access(
         user_id,
         task_id,
         repo,
@@ -891,6 +916,20 @@ async def update_task(
         except ValueError:
             pass  # Invalid date format, ignore
 
+    is_fixed_time = input_data.is_fixed_time
+    if input_data.is_all_day is True:
+        timezone_name = await _resolve_user_timezone(owner_id, user_repo)
+        reference = (
+            start_time
+            or due_date
+            or start_not_before
+            or (current_task.start_time if current_task else None)
+            or (current_task.due_date if current_task else None)
+            or (current_task.start_not_before if current_task else None)
+        )
+        start_time, end_time = all_day_bounds_to_utc(timezone_name, reference=reference)
+        is_fixed_time = True
+
     update_data = TaskUpdate(
         title=input_data.title,
         description=input_data.description,
@@ -918,7 +957,7 @@ async def update_task(
         touchpoint_gap_days=input_data.touchpoint_gap_days,
         touchpoint_steps=input_data.touchpoint_steps,
         # Meeting fields
-        is_fixed_time=input_data.is_fixed_time,
+        is_fixed_time=is_fixed_time,
         is_all_day=input_data.is_all_day,
         start_time=start_time,
         end_time=end_time,
@@ -1484,6 +1523,7 @@ def create_task_tool(
     session_id: Optional[str] = None,
     auto_approve: bool = True,
     assignment_repo: Optional[ITaskAssignmentRepository] = None,
+    user_repo: Optional[IUserRepository] = None,
 ) -> FunctionTool:
     """Create ADK tool for creating tasks."""
     async def _tool(input_data: dict) -> dict:
@@ -1543,6 +1583,7 @@ def create_task_tool(
                 assignment_repo,
                 project_repo,
                 member_repo,
+                user_repo,
             )
         return await create_task(
             user_id,
@@ -1551,6 +1592,7 @@ def create_task_tool(
             assignment_repo,
             project_repo,
             member_repo,
+            user_repo,
         )
 
     _tool.__name__ = "create_task"
@@ -1565,6 +1607,7 @@ def update_task_tool(
     proposal_repo: Optional[IProposalRepository] = None,
     session_id: Optional[str] = None,
     auto_approve: bool = True,
+    user_repo: Optional[IUserRepository] = None,
 ) -> FunctionTool:
     """Create ADK tool for updating tasks."""
     async def _tool(input_data: dict) -> dict:
@@ -1624,6 +1667,7 @@ def update_task_tool(
             UpdateTaskInput(**payload),
             project_repo,
             member_repo,
+            user_repo,
         )
 
     _tool.__name__ = "update_task"

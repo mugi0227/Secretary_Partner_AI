@@ -19,7 +19,7 @@ import {
 } from 'react-icons/fa6';
 import { projectAchievementsApi } from '../../api/projectAchievements';
 import type { ProjectAchievement, ProjectAchievementUpdate, MemberContribution } from '../../api/types';
-import { formatDate, todayInTimezone } from '../../utils/dateTime';
+import { formatDate, todayInTimezone, toUtcIsoString } from '../../utils/dateTime';
 import { useTimezone } from '../../hooks/useTimezone';
 import './ProjectAchievementsSection.css';
 
@@ -691,12 +691,18 @@ export function ProjectAchievementsSection({ projectId }: ProjectAchievementsSec
   });
 
   const generateMutation = useMutation({
-    mutationFn: () =>
-      projectAchievementsApi.create(projectId, {
-        period_start: new Date(periodStart).toISOString(),
-        period_end: new Date(periodEnd).toISOString(),
+    mutationFn: () => {
+      const periodStartUtc = toUtcIsoString(`${periodStart}T00:00`, timezone);
+      const periodEndUtc = toUtcIsoString(`${periodEnd}T23:59`, timezone);
+      if (!periodStartUtc || !periodEndUtc) {
+        throw new Error('Invalid period');
+      }
+      return projectAchievementsApi.create(projectId, {
+        period_start: periodStartUtc,
+        period_end: periodEndUtc,
         period_label: `${periodStart} - ${periodEnd}`,
-      }),
+      });
+    },
     onMutate: () => setErrorMessage(null),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project-achievements', projectId] });

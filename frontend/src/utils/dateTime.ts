@@ -2,21 +2,42 @@ import { DateTime } from 'luxon';
 import { userStorage } from './userStorage';
 
 const TIMEZONE_STORAGE_KEY = 'userTimezone';
-const DEFAULT_TIMEZONE = 'Asia/Tokyo';
+const DEFAULT_TIMEZONE = 'UTC';
+
+export const getBrowserTimezone = () => {
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (!timezone) return DEFAULT_TIMEZONE;
+  try {
+    Intl.DateTimeFormat('en-US', { timeZone: timezone }).format(new Date());
+    return timezone;
+  } catch {
+    return DEFAULT_TIMEZONE;
+  }
+};
+
+const isValidTimezone = (timezone: string) => {
+  if (!timezone) return false;
+  try {
+    Intl.DateTimeFormat('en-US', { timeZone: timezone }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 const isDateOnly = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 const hasTimezoneInfo = (value: string) => /([zZ]|[+-]\d{2}:?\d{2})$/.test(value);
 
 export const getStoredTimezone = () => {
-  return (
-    userStorage.get(TIMEZONE_STORAGE_KEY) ||
-    Intl.DateTimeFormat().resolvedOptions().timeZone ||
-    DEFAULT_TIMEZONE
-  );
+  const stored = userStorage.get(TIMEZONE_STORAGE_KEY);
+  if (stored && isValidTimezone(stored)) {
+    return stored;
+  }
+  return getBrowserTimezone();
 };
 
 export const setStoredTimezone = (timezone: string) => {
-  if (!timezone) return;
+  if (!timezone || !isValidTimezone(timezone)) return;
   userStorage.set(TIMEZONE_STORAGE_KEY, timezone);
 };
 

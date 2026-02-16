@@ -37,7 +37,7 @@ from app.models.schedule_plan import (
 )
 from app.models.task import Task, TaskUpdate
 from app.services.scheduler_service import SchedulerService
-from app.utils.datetime_utils import get_user_today, now_utc
+from app.utils.datetime_utils import get_user_today, normalize_timezone, now_utc
 
 DEFAULT_PLAN_DAYS = 30
 
@@ -133,7 +133,7 @@ def _clip_intervals_end(intervals: list[TimeInterval], end_minutes: int) -> list
 
 
 def _to_local_datetime(value: datetime, timezone: str) -> datetime:
-    tz = ZoneInfo(timezone)
+    tz = ZoneInfo(normalize_timezone(timezone))
     if value.tzinfo is None:
         return value.replace(tzinfo=tz)
     return value.astimezone(tz)
@@ -622,9 +622,7 @@ class DailySchedulePlanService:
             user = await self._user_repo.get(UUID(user_id))
         except (TypeError, ValueError):
             user = None
-        if user and user.timezone:
-            return user.timezone
-        return "Asia/Tokyo"
+        return normalize_timezone(user.timezone if user else None)
 
     async def _load_project_priorities(self, user_id: str) -> dict[UUID, int]:
         projects = await self._project_repo.list(user_id, limit=1000)

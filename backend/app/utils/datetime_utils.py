@@ -5,12 +5,43 @@ This module provides utilities for working with timezone-aware datetimes,
 ensuring consistent handling across the application.
 """
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
 
 # UTC timezone constant
 UTC = timezone.utc
+DEFAULT_TIMEZONE = "UTC"
+
+
+def is_valid_timezone(value: str) -> bool:
+    """
+    Return True when the provided IANA timezone name is valid.
+    """
+    try:
+        ZoneInfo(value)
+        return True
+    except Exception:
+        return False
+
+
+def normalize_timezone(user_timezone: Optional[str], fallback: str = DEFAULT_TIMEZONE) -> str:
+    """
+    Normalize timezone string and return a safe timezone name.
+    """
+    if user_timezone:
+        tz_name = user_timezone.strip()
+        if tz_name and is_valid_timezone(tz_name):
+            return tz_name
+    return fallback if is_valid_timezone(fallback) else DEFAULT_TIMEZONE
+
+
+def get_user_now(user_timezone: Optional[str]) -> datetime:
+    """
+    Get current datetime in the user's timezone.
+    """
+    tz = ZoneInfo(normalize_timezone(user_timezone))
+    return now_utc().astimezone(tz)
 
 
 def now_utc() -> datetime:
@@ -25,7 +56,7 @@ def now_utc() -> datetime:
     return datetime.now(UTC)
 
 
-def get_user_today(user_timezone: str) -> date:
+def get_user_today(user_timezone: Optional[str]) -> date:
     """
     Get today's date in the user's timezone.
 
@@ -39,8 +70,7 @@ def get_user_today(user_timezone: str) -> date:
         >>> get_user_today("Asia/Tokyo")  # When UTC is 2024-01-19 23:00
         date(2024, 1, 20)  # JST is 2024-01-20 08:00
     """
-    tz = ZoneInfo(user_timezone)
-    return datetime.now(UTC).astimezone(tz).date()
+    return get_user_now(user_timezone).date()
 
 
 def parse_iso_to_utc(iso_string: str) -> datetime:
@@ -114,6 +144,40 @@ def user_datetime_to_utc(dt: datetime, user_timezone: str) -> datetime:
         >>> user_datetime_to_utc(dt, "Asia/Tokyo")
         datetime(2024, 1, 20, 0, 0, 0, tzinfo=timezone.utc)  # UTC 00:00
     """
-    tz = ZoneInfo(user_timezone)
+    tz = ZoneInfo(normalize_timezone(user_timezone))
     localized = dt.replace(tzinfo=tz)
     return localized.astimezone(UTC)
+
+
+def user_date_to_utc(
+    local_date: date,
+    user_timezone: Optional[str],
+    *,
+    end_of_day: bool = False,
+) -> datetime:
+    """
+    Convert a date in user's timezone into UTC datetime.
+    """
+    tz = ZoneInfo(normalize_timezone(user_timezone))
+    local_time = time(23, 59, 59) if end_of_day else time.min
+    local_dt = datetime.combine(local_date, local_time, tzinfo=tz)
+    return local_dt.astimezone(UTC)
+
+
+def all_day_bounds_to_utc(
+    user_timezone: Optional[str],
+    *,
+    reference: Optional[datetime] = None,
+) -> tuple[datetime, datetime]:
+    """
+    Build all-day UTC start/end datetimes for the local date in user's timezone.
+    """
+    tz = ZoneInfo(normalize_timezone(user_timezone))
+    if reference is None:
+        reference_local = now_utc().astimezone(tz)
+    else:
+        reference_local = ensure_utc(reference).astimezone(tz)
+    target_date = reference_local.date()
+    start_local = datetime.combine(target_date, time.min, tzinfo=tz)
+    end_local = datetime.combine(target_date, time(23, 59, 59), tzinfo=tz)
+    return start_local.astimezone(UTC), end_local.astimezone(UTC)

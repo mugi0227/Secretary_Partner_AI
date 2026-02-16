@@ -18,6 +18,7 @@ from app.api.deps import CurrentUser, UserRepo
 from app.core.config import Settings, get_settings
 from app.core.security import create_access_token, hash_password, verify_password
 from app.models.user import UserCreate
+from app.utils.datetime_utils import normalize_timezone
 
 router = APIRouter()
 
@@ -32,7 +33,7 @@ class RegisterRequest(BaseModel):
     password: str = Field(..., min_length=8, max_length=128)
     first_name: Optional[str] = Field(None, max_length=100)
     last_name: Optional[str] = Field(None, max_length=100)
-    timezone: str = Field(default="Asia/Tokyo", max_length=50, description="IANA timezone")
+    timezone: str = Field(default="UTC", max_length=50, description="IANA timezone")
 
 
 class LoginRequest(BaseModel):
@@ -269,7 +270,7 @@ async def register(
             last_name=last_name,
             username=username,
             password_hash=password_hash,
-            timezone=data.timezone,
+            timezone=normalize_timezone(data.timezone),
         )
     )
     token = create_access_token(str(user.id), settings)

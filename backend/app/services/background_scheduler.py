@@ -38,7 +38,7 @@ from app.services.daily_schedule_plan_service import DEFAULT_PLAN_DAYS, DailySch
 from app.services.project_achievement_service import generate_project_achievement
 from app.services.task_heartbeat_service import TaskHeartbeatService
 from app.services.weekly_meeting_reminder_service import ensure_weekly_meeting_reminders
-from app.utils.datetime_utils import get_user_today
+from app.utils.datetime_utils import get_user_today, normalize_timezone
 
 
 class BackgroundScheduler:
@@ -466,7 +466,7 @@ class BackgroundScheduler:
         )
 
         for user in users:
-            timezone = user.timezone or "Asia/Tokyo"
+            timezone = normalize_timezone(user.timezone)
             today = get_user_today(timezone)
             existing = await self._schedule_plan_repo.get_by_date(str(user.id), today)
             if existing:

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTasks } from '../../hooks/useTasks';
 import { useProjects } from '../../hooks/useProjects';
 import { useTimezone } from '../../hooks/useTimezone';
-import { todayInTimezone } from '../../utils/dateTime';
+import { toDateTime, todayInTimezone } from '../../utils/dateTime';
 import type { ProjectWithTaskCount } from '../../api/types';
 import './OverdueCheckinCard.css';
 
@@ -45,9 +45,9 @@ export function OverdueCheckinCard() {
       if (task.is_fixed_time) return;
 
       if (task.due_date < todayStr) {
-        const overdueDays = Math.floor(
-          (new Date(todayStr).getTime() - new Date(task.due_date).getTime()) / (1000 * 60 * 60 * 24),
-        );
+        const due = toDateTime(task.due_date, timezone).startOf('day');
+        const today = todayInTimezone(timezone).startOf('day');
+        const overdueDays = Math.floor(today.diff(due, 'days').days);
         if (overdueDays <= 0) return;
 
         const existing = grouped.get(task.project_id) ?? { count: 0, maxDays: 0 };
@@ -66,7 +66,7 @@ export function OverdueCheckinCard() {
 
     result.sort((a, b) => b.maxOverdueDays - a.maxOverdueDays);
     return result;
-  }, [tasks, todayStr, teamProjectMap]);
+  }, [tasks, todayStr, teamProjectMap, timezone]);
 
   if (overdueProjects.length === 0) return null;
 

@@ -98,6 +98,7 @@ def get_heartbeat_service(
     recurring_task_repo: RecurringTaskRepo,
     task_repo: TaskRepo,
     checkin_repo: CheckinRepo,
+    user_repo: UserRepo,
     task_heartbeat_service: TaskHeartbeatService = Depends(get_task_heartbeat_service),
 ) -> HeartbeatService:
     """Get HeartbeatService instance."""
@@ -105,16 +106,19 @@ def get_heartbeat_service(
         recurring_repo=recurring_meeting_repo,
         task_repo=task_repo,
         checkin_repo=checkin_repo,
+        user_repo=user_repo,
     )
     recurring_task_service = RecurringTaskService(
         recurring_repo=recurring_task_repo,
         task_repo=task_repo,
+        user_repo=user_repo,
     )
     return HeartbeatService(
         agent_task_repo=agent_task_repo,
         recurring_meeting_service=recurring_service,
         recurring_task_service=recurring_task_service,
         task_heartbeat_service=task_heartbeat_service,
+        user_repo=user_repo,
     )
 
 

@@ -2,7 +2,8 @@ import { useMemo } from 'react';
 import type { Task, TaskAssignment, TaskStatus } from '../../api/types';
 import { KanbanColumn } from './KanbanColumn';
 import { sortTasksByStepNumber } from '../../utils/taskSort';
-import { todayInTimezone } from '../../utils/dateTime';
+import { toDateTime, todayInTimezone } from '../../utils/dateTime';
+import { useTimezone } from '../../hooks/useTimezone';
 import './KanbanBoard.css';
 
 export type KanbanItem =
@@ -74,6 +75,8 @@ export function KanbanBoard({
   onDeleteGeneratedTasks,
   onGenerateTasks,
 }: KanbanBoardProps) {
+  const timezone = useTimezone();
+
   // Group tasks: parent tasks only (no parent_id)
   const parentTasks = useMemo(() => {
     return tasks.filter(task => !task.parent_id);
@@ -150,9 +153,15 @@ export function KanbanBoard({
     });
 
     if (sortBy === 'dueDate') {
-      const todayMs = todayInTimezone().toMillis();
+      const toMillis = (value: string | undefined) => {
+        if (!value) return Infinity;
+        const dt = toDateTime(value, timezone);
+        return dt.isValid ? dt.toMillis() : Infinity;
+      };
+
+      const todayMs = todayInTimezone(timezone).toMillis();
       const isActionable = (t: Task) =>
-        !t.start_not_before || new Date(t.start_not_before).getTime() <= todayMs;
+        !t.start_not_before || toMillis(t.start_not_before) <= todayMs;
 
       const getItemSortKey = (item: KanbanItem) => {
         if (item.type === 'task') return item.task;
@@ -162,7 +171,7 @@ export function KanbanBoard({
           .sort((a, b) => {
             if (!a.due_date) return 1;
             if (!b.due_date) return -1;
-            return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+            return toMillis(a.due_date) - toMillis(b.due_date);
           });
         return upcoming[0] ?? item.tasks[0];
       };
@@ -174,12 +183,12 @@ export function KanbanBoard({
         const bOk = isActionable(bTask);
         if (aOk !== bOk) return aOk ? -1 : 1;
         if (!aOk && !bOk) {
-          return new Date(aTask.start_not_before!).getTime() - new Date(bTask.start_not_before!).getTime();
+          return toMillis(aTask.start_not_before) - toMillis(bTask.start_not_before);
         }
         if (!aTask.due_date && !bTask.due_date) return 0;
         if (!aTask.due_date) return 1;
         if (!bTask.due_date) return -1;
-        return new Date(aTask.due_date).getTime() - new Date(bTask.due_date).getTime();
+        return toMillis(aTask.due_date) - toMillis(bTask.due_date);
       };
       (Object.keys(grouped) as TaskStatus[]).forEach((status) => {
         grouped[status].sort(smartSort);
@@ -187,7 +196,7 @@ export function KanbanBoard({
     }
 
     return grouped;
-  }, [regularTasks, recurringGroups, sortBy]);
+  }, [regularTasks, recurringGroups, sortBy, timezone]);
 
   const handleDrop = (taskId: string, newStatus: TaskStatus) => {
     onUpdateTask(taskId, newStatus);

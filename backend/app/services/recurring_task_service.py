@@ -10,15 +10,18 @@ import calendar
 from datetime import date, datetime, timedelta
 from typing import Optional
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.exc import IntegrityError
 
 from app.core.logger import setup_logger
 from app.interfaces.recurring_task_repository import IRecurringTaskRepository
 from app.interfaces.task_repository import ITaskRepository
+from app.interfaces.user_repository import IUserRepository
 from app.models.enums import CreatedBy, RecurringTaskFrequency
 from app.models.recurring_task import RecurringTask, RecurringTaskUpdate
 from app.models.task import TaskCreate
+from app.utils.datetime_utils import ensure_utc, normalize_timezone, now_utc, user_date_to_utc
 
 logger = setup_logger(__name__)
 
@@ -31,10 +34,12 @@ class RecurringTaskService:
         recurring_repo: IRecurringTaskRepository,
         task_repo: ITaskRepository,
         lookahead_days: int = 30,
+        user_repo: Optional[IUserRepository] = None,
     ):
         self.recurring_repo = recurring_repo
         self.task_repo = task_repo
         self.lookahead_days = lookahead_days
+        self.user_repo = user_repo
 
     async def ensure_upcoming_tasks(self, user_id: str) -> dict:
         """Ensure upcoming task instances exist within the lookahead window.
@@ -42,8 +47,10 @@ class RecurringTaskService:
         Generates ALL occurrences within the lookahead period.
         Skips creation if a task already exists for that occurrence (by due_date match).
         """
-        now = datetime.now()
-        today = now.date()
+        user_timezone = await self._resolve_user_timezone(user_id)
+        local_tz = ZoneInfo(user_timezone)
+        now = now_utc()
+        today = now.astimezone(local_tz).date()
         upcoming_limit = today + timedelta(days=self.lookahead_days)
         created: list[dict] = []
 
@@ -55,10 +62,12 @@ class RecurringTaskService:
                 user_id,
                 definition.id,
                 start_after=now - timedelta(days=1),
-                end_before=datetime.combine(upcoming_limit + timedelta(days=1), datetime.min.time()),
+                end_before=user_date_to_utc(upcoming_limit + timedelta(days=1), user_timezone),
             )
             existing_due_dates = {
-                task.due_date.date() for task in existing_tasks if task.due_date
+                ensure_utc(task.due_date).astimezone(local_tz).date()
+                for task in existing_tasks
+                if task.due_date
             }
             seen_due_dates = set(existing_due_dates)
 
@@ -80,15 +89,20 @@ class RecurringTaskService:
                     latest_date = next_date
                     continue
 
-                if await self._has_existing_occurrence(user_id, definition.id, next_date):
+                if await self._has_existing_occurrence(
+                    user_id,
+                    definition.id,
+                    next_date,
+                    user_timezone,
+                ):
                     seen_due_dates.add(next_date)
                     reference_date = next_date
                     latest_date = next_date
                     continue
 
-                due_datetime = self._compute_due_date(definition, next_date)
+                due_datetime = self._compute_due_date(definition, next_date, user_timezone)
                 start_not_before = self._compute_start_not_before(
-                    definition, next_date
+                    definition, next_date, user_timezone
                 )
                 task_data = TaskCreate(
                     title=definition.title,
@@ -134,16 +148,21 @@ class RecurringTaskService:
         user_id: str,
         recurring_task_id: UUID,
         occurrence_date: date,
+        user_timezone: str,
     ) -> bool:
-        day_start = datetime.combine(occurrence_date, datetime.min.time())
-        day_end = day_start + timedelta(days=1)
+        local_tz = ZoneInfo(user_timezone)
+        day_start = user_date_to_utc(occurrence_date, user_timezone)
+        day_end = user_date_to_utc(occurrence_date + timedelta(days=1), user_timezone)
         existing = await self.task_repo.list_by_recurring_task(
             user_id=user_id,
             recurring_task_id=recurring_task_id,
             start_after=day_start,
             end_before=day_end,
         )
-        return any(task.due_date and task.due_date.date() == occurrence_date for task in existing)
+        return any(
+            task.due_date and ensure_utc(task.due_date).astimezone(local_tz).date() == occurrence_date
+            for task in existing
+        )
 
     def _next_occurrence_after(
         self, definition: RecurringTask, after_date: date
@@ -215,7 +234,10 @@ class RecurringTaskService:
         return current + timedelta(days=delta)
 
     def _compute_due_date(
-        self, definition: RecurringTask, occurrence_date: date
+        self,
+        definition: RecurringTask,
+        occurrence_date: date,
+        user_timezone: Optional[str] = None,
     ) -> datetime:
         """Compute due_date for a generated task instance.
 
@@ -227,14 +249,20 @@ class RecurringTaskService:
             RecurringTaskFrequency.WEEKLY,
             RecurringTaskFrequency.BIWEEKLY,
         ):
-            # Sunday of the week containing the occurrence
             days_to_sunday = 6 - occurrence_date.weekday()
-            sunday = occurrence_date + timedelta(days=days_to_sunday)
-            return datetime.combine(sunday, datetime.min.time())
-        return datetime.combine(occurrence_date, datetime.min.time())
+            target_date = occurrence_date + timedelta(days=days_to_sunday)
+        else:
+            target_date = occurrence_date
+
+        if user_timezone is None:
+            return datetime.combine(target_date, datetime.min.time())
+        return user_date_to_utc(target_date, user_timezone)
 
     def _compute_start_not_before(
-        self, definition: RecurringTask, occurrence_date: date
+        self,
+        definition: RecurringTask,
+        occurrence_date: date,
+        user_timezone: Optional[str] = None,
     ) -> datetime:
         """Compute start_not_before for a generated task instance.
 
@@ -247,16 +275,27 @@ class RecurringTaskService:
             RecurringTaskFrequency.WEEKLY,
             RecurringTaskFrequency.BIWEEKLY,
         ):
-            monday = occurrence_date - timedelta(days=occurrence_date.weekday())
-            return datetime.combine(monday, datetime.min.time())
-        if freq in (
+            target_date = occurrence_date - timedelta(days=occurrence_date.weekday())
+        elif freq in (
             RecurringTaskFrequency.MONTHLY,
             RecurringTaskFrequency.BIMONTHLY,
         ):
-            first_of_month = occurrence_date.replace(day=1)
-            return datetime.combine(first_of_month, datetime.min.time())
-        # DAILY, CUSTOM: actionable only on the occurrence date
-        return datetime.combine(occurrence_date, datetime.min.time())
+            target_date = occurrence_date.replace(day=1)
+        else:
+            target_date = occurrence_date
+
+        if user_timezone is None:
+            return datetime.combine(target_date, datetime.min.time())
+        return user_date_to_utc(target_date, user_timezone)
+
+    async def _resolve_user_timezone(self, user_id: str) -> str:
+        if self.user_repo is None:
+            return normalize_timezone(None)
+        try:
+            user = await self.user_repo.get(UUID(user_id))
+        except (ValueError, TypeError):
+            user = None
+        return normalize_timezone(user.timezone if user else None)
 
     @staticmethod
     def _next_monthly(after_date: date, day_of_month: int, interval: int) -> date:

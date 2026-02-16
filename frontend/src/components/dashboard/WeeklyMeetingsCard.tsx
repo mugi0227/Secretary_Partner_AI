@@ -1391,7 +1391,7 @@ export function WeeklyMeetingsCard({
                 setCreateMeetingPrefill(null);
                 setShowCreateMeeting(true);
               }}
-              title="ミーティングを作成"
+              title="ミ�EチE��ングを作�E"
             >
               +
             </button>
@@ -1402,7 +1402,7 @@ export function WeeklyMeetingsCard({
       {showPlanNotice && (
         <div className={`weekly-plan-banner ${planState}`}>
           <div className="weekly-plan-icon">
-            {planState === 'forecast' ? '○' : '●'}
+            {planState === 'forecast' ? '◁E : '◁E}
           </div>
           <div className="weekly-plan-banner-text">
             <span className="weekly-plan-badge">
@@ -1575,9 +1575,9 @@ export function WeeklyMeetingsCard({
                             className={`weekly-block-check ${effectiveStatus === 'DONE' ? 'checked' : ''}`}
                             onClick={(e) => handleToggleComplete(meeting.taskId, effectiveStatus, e)}
                             disabled={isSubmitting === meeting.taskId}
-                            title={effectiveStatus === 'DONE' ? '未完了に戻す' : '完了にする'}
+                            title={effectiveStatus === 'DONE' ? '未完亁E��戻ぁE : '完亁E��する'}
                           >
-                            {effectiveStatus === 'DONE' ? '✓' : ''}
+                            {effectiveStatus === 'DONE' ? '✁E : ''}
                           </button>
                           {meeting.kind === 'auto' && effectiveStatus !== 'DONE' && !isToday && (
                             <button
@@ -1585,9 +1585,9 @@ export function WeeklyMeetingsCard({
                               className="weekly-block-do-today"
                               onClick={(e) => handleDoToday(meeting.taskId, e)}
                               disabled={isSubmitting === meeting.taskId}
-                              title="今日やる"
+                              title="今日めE��"
                             >
-                              ←
+                              ↁE
                             </button>
                           )}
                           {meeting.kind === 'auto' && effectiveStatus !== 'DONE' && (
@@ -1602,7 +1602,7 @@ export function WeeklyMeetingsCard({
                           {meeting.title}
                           {meeting.pinnedDate && (
                             <span className="weekly-pin-badge" title={`${meeting.pinnedDate} に固定中`}>
-                              📌{new Date(meeting.pinnedDate + 'T00:00:00').getMonth() + 1}/{new Date(meeting.pinnedDate + 'T00:00:00').getDate()}
+                              {(() => { const pinned = toDateTime(`${meeting.pinnedDate}T00:00:00`, timezone); return pinned.isValid ? `PIN ${pinned.month}/${pinned.day}` : `PIN ${meeting.pinnedDate}`; })()}
                             </span>
                           )}
                         </div>

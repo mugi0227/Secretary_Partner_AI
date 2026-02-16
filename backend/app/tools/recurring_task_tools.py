@@ -18,6 +18,7 @@ from app.interfaces.task_repository import ITaskRepository
 from app.models.enums import EnergyLevel, Priority, RecurringTaskFrequency
 from app.models.recurring_task import RecurringTaskCreate, RecurringTaskUpdate
 from app.services.recurring_task_service import RecurringTaskService
+from app.utils.datetime_utils import now_utc
 
 WEEKDAY_NAMES = ["月", "火", "水", "木", "金", "土", "日"]
 
@@ -96,7 +97,7 @@ def _frequency_label(freq: str, weekday: int | None, day_of_month: int | None, i
 
 def _compute_anchor(frequency: str, weekday: int | None, day_of_month: int | None) -> date:
     """Auto-compute anchor date from frequency."""
-    today = date.today()
+    today = now_utc().date()
     if frequency in ("weekly", "biweekly") and weekday is not None:
         delta = (weekday - today.weekday()) % 7
         return today + timedelta(days=delta)

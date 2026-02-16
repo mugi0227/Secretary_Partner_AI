@@ -2,7 +2,8 @@ import { useState, useMemo } from 'react';
 import { FaRepeat, FaChevronDown, FaChevronRight, FaCheck } from 'react-icons/fa6';
 import { FaTrash, FaSyncAlt } from 'react-icons/fa';
 import type { Task, TaskStatus } from '../../api/types';
-import { formatDate } from '../../utils/dateTime';
+import { formatDate, toDateTime } from '../../utils/dateTime';
+import { useTimezone } from '../../hooks/useTimezone';
 import './RecurringTaskGroupCard.css';
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
@@ -33,6 +34,7 @@ export function RecurringTaskGroupCard({
   onGenerate,
   compact = false,
 }: RecurringTaskGroupCardProps) {
+  const timezone = useTimezone();
   const [expanded, setExpanded] = useState(false);
 
   const statusCounts = useMemo(() => {
@@ -44,18 +46,24 @@ export function RecurringTaskGroupCard({
   const nextDueDate = useMemo(() => {
     const upcoming = tasks
       .filter(t => t.status !== 'DONE' && t.due_date)
-      .sort((a, b) => new Date(a.due_date!).getTime() - new Date(b.due_date!).getTime());
+      .sort((a, b) => {
+        const aMillis = toDateTime(a.due_date!, timezone).toMillis();
+        const bMillis = toDateTime(b.due_date!, timezone).toMillis();
+        return aMillis - bMillis;
+      });
     return upcoming[0]?.due_date ?? null;
-  }, [tasks]);
+  }, [tasks, timezone]);
 
   const sortedInstances = useMemo(() => {
     return [...tasks].sort((a, b) => {
       if (!a.due_date && !b.due_date) return 0;
       if (!a.due_date) return 1;
       if (!b.due_date) return -1;
-      return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+      const aMillis = toDateTime(a.due_date, timezone).toMillis();
+      const bMillis = toDateTime(b.due_date, timezone).toMillis();
+      return aMillis - bMillis;
     });
-  }, [tasks]);
+  }, [tasks, timezone]);
 
   const totalCount = tasks.length;
   const doneCount = statusCounts.DONE;
