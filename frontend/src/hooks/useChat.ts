@@ -681,7 +681,7 @@ export function useChat() {
         abortControllerRef.current = null;
       }
     },
-    [queryClient, sessionId, setSessionId, timezone]
+    [queryClient, sessionId, setSessionId, timezone, selectedModel]
   );
 
   const sendMessage = useCallback(
