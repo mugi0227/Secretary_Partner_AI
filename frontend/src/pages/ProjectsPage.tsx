@@ -19,6 +19,7 @@ import { usePageTour } from '../hooks/usePageTour';
 import { PageTour } from '../components/onboarding/PageTour';
 import { TourHelpButton } from '../components/onboarding/TourHelpButton';
 import type { ProjectWithTaskCount } from '../api/types';
+import '../components/projects/ProjectDetailModal.css';
 import './ProjectsPage.css';
 
 function DraggableProjectCard({
@@ -334,7 +335,7 @@ export function ProjectsPage() {
 
       {linkConfirmation && (
         <div className="modal-overlay" onMouseDown={(e) => e.target === e.currentTarget && setLinkConfirmation(null)}>
-          <div className="modal-content" style={{ maxWidth: '450px' }}>
+          <div className="modal-content project-create-modal" style={{ maxWidth: '450px' }}>
             <div className="modal-header">
               <h2>プロジェクトの紐付け</h2>
             </div>

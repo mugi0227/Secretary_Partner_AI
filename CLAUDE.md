@@ -147,6 +147,11 @@ AIが対話的に処理
 - `all_day` tasks are fixed to the user's local day boundary (`00:00` to `23:59`) and converted to UTC for persistence.
 
 
+## Frontend Routing Policy
+- プロジェクト詳細ページは `ProjectDetailV2Page` (`/projects/:projectId/v2`) を使用する。旧 `ProjectDetailPage` は削除済み。
+- `/projects/:projectId` へのアクセスは `/projects/:projectId/v2` にリダイレクトされる。
+- プロジェクト詳細へのナビゲーションは常に `/projects/${id}/v2` を指定すること。
+
 ## Prompt Layering Policy
 - Keep `secretary_core_prompt` minimal: principles, safety, tone, and output rules only.
 - Do not add use-case specific procedures (e.g. exact task/project/meeting operation flows) to core.

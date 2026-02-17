@@ -169,6 +169,10 @@
   color: var(--accent-pink);
 }
 
+.notification-icon.project-link {
+  color: var(--primary, #0ea5e9);
+}
+
 .notification-content {
   flex: 1;
   min-width: 0;

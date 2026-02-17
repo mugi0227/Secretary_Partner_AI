@@ -1299,7 +1299,10 @@ export type NotificationType =
   | 'issue_liked'
   | 'issue_commented'
   | 'issue_status_changed'
-  | 'heartbeat';
+  | 'heartbeat'
+  | 'project_link_request'
+  | 'project_link_approved'
+  | 'project_link_rejected';
 
 export interface Notification {
   id: string;

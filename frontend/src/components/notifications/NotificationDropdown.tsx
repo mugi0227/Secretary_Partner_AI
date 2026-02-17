@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { FaBell, FaCheckDouble, FaTrophy, FaUsers, FaListCheck, FaEnvelope, FaFlag, FaClipboardCheck, FaLightbulb, FaHeart, FaHeartPulse, FaComment, FaCircleInfo } from 'react-icons/fa6';
+import { FaBell, FaCheckDouble, FaTrophy, FaUsers, FaListCheck, FaEnvelope, FaFlag, FaClipboardCheck, FaLightbulb, FaHeart, FaHeartPulse, FaComment, FaCircleInfo, FaLink } from 'react-icons/fa6';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNotifications, useUnreadNotificationCount } from '../../hooks/useNotifications';
 import type { Notification, NotificationType } from '../../api/types';
@@ -35,6 +35,10 @@ function getNotificationIcon(type: NotificationType) {
       return <FaCircleInfo className="notification-icon issue-status" />;
     case 'heartbeat':
       return <FaHeartPulse className="notification-icon heartbeat" />;
+    case 'project_link_request':
+    case 'project_link_approved':
+    case 'project_link_rejected':
+      return <FaLink className="notification-icon project-link" />;
     default:
       return <FaBell className="notification-icon default" />;
   }
@@ -51,7 +55,7 @@ function getNavigationPath(notification: Notification): string | null {
     case 'task':
       return link_id ? `/tasks?task=${link_id}` : '/tasks';
     case 'project':
-      return link_id ? `/projects/${link_id}` : '/projects';
+      return link_id ? `/projects/${link_id}/v2` : '/projects';
     case 'checkin':
       return project_id ? `/projects/${project_id}/v2?tab=meetings` : null;
     case 'issue':

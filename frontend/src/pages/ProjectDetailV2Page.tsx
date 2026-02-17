@@ -1219,7 +1219,7 @@ export function ProjectDetailV2Page() {
                   <span style={{ color: 'var(--text-muted, #999)' }}>/</span>
                   <button
                     className="project-v2-secondary"
-                    onClick={() => navigate(`/projects/${project.parent_project_id}`)}
+                    onClick={() => navigate(`/projects/${project.parent_project_id}/v2`)}
                   >
                     親プロジェクト
                   </button>

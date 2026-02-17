@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from './context/ThemeContext';
 import { MeetingTimerProvider } from './contexts/MeetingTimerContext';
@@ -9,7 +9,6 @@ import { GlobalMeetingModal } from './components/meetings/GlobalMeetingModal';
 import { DashboardPage } from './pages/DashboardPage';
 import { TasksPage } from './pages/TasksPage';
 import { ProjectsPage } from './pages/ProjectsPage';
-import { ProjectDetailPage } from './pages/ProjectDetailPage';
 import { ProjectDetailV2Page } from './pages/ProjectDetailV2Page';
 import { AchievementPage } from './pages/AchievementPage';
 import { MemoriesPage } from './pages/MemoriesPage';
@@ -20,6 +19,11 @@ import { InvitationAcceptPage } from './pages/InvitationAcceptPage';
 import { OidcCallbackPage } from './pages/OidcCallbackPage';
 import { NativeLinkPage } from './pages/NativeLinkPage';
 import { SharedAchievementPage } from './pages/SharedAchievementPage';
+
+function ProjectDetailRedirect() {
+  const { projectId } = useParams();
+  return <Navigate to={`/projects/${projectId}/v2`} replace />;
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -48,7 +52,7 @@ function AppRoutes() {
         <Route index element={<DashboardPage />} />
         <Route path="tasks" element={<TasksPage />} />
         <Route path="projects" element={<ProjectsPage />} />
-        <Route path="projects/:projectId" element={<ProjectDetailPage />} />
+        <Route path="projects/:projectId" element={<ProjectDetailRedirect />} />
         <Route path="projects/:projectId/v2" element={<ProjectDetailV2Page />} />
         <Route path="achievement" element={<AchievementPage />} />
         <Route path="memories" element={<MemoriesPage />} />

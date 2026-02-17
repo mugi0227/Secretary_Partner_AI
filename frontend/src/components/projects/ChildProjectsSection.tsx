@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi } from '../../api/projects';
 import type { ProjectWithTaskCount, ProjectLinkRequest } from '../../api/types';
 import { useNavigate } from 'react-router-dom';
-import { FaPlus, FaWandMagicSparkles, FaSpinner, FaCheck, FaXmark, FaFolderOpen, FaLink } from 'react-icons/fa6';
+import { FaPlus, FaWandMagicSparkles, FaSpinner, FaCheck, FaXmark, FaFolderOpen, FaLink, FaArrowRight } from 'react-icons/fa6';
 import { ProjectCreateModal } from './ProjectCreateModal';
 import { ChildProjectLinkModal } from './ChildProjectLinkModal';
 import './ChildProjectsSection.css';
@@ -132,6 +132,79 @@ function PendingRequestCard({
   );
 }
 
+function IncomingRequestCard({
+  request,
+  childProjectId,
+}: {
+  request: ProjectLinkRequest;
+  childProjectId: string;
+}) {
+  const queryClient = useQueryClient();
+
+  const { data: parentProject } = useQuery({
+    queryKey: ['project', request.parent_project_id],
+    queryFn: () => projectsApi.getById(request.parent_project_id),
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: () => projectsApi.approveLinkRequest(request.parent_project_id, request.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['incoming-link-requests', childProjectId] });
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+    },
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: () => projectsApi.rejectLinkRequest(request.parent_project_id, request.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['incoming-link-requests', childProjectId] });
+    },
+  });
+
+  const isProcessing = approveMutation.isPending || rejectMutation.isPending;
+
+  const approvalLabel = request.parent_approved && !request.child_approved
+    ? 'あなたの承認待ち'
+    : !request.parent_approved && request.child_approved
+    ? '親オーナー承認待ち'
+    : '承認待ち';
+
+  return (
+    <div className="child-project-card pending-request incoming-request">
+      <div className="child-project-info">
+        <div className="incoming-request-label">
+          <FaArrowRight style={{ fontSize: '0.65rem' }} />
+          親プロジェクトへの紐付けリクエスト
+        </div>
+        <span className="child-project-name" style={{ color: 'var(--text-main)', cursor: 'default' }}>
+          {parentProject?.name || '読み込み中...'}
+        </span>
+        <div className="child-project-meta">
+          <span className="child-project-status-badge status-pending">{approvalLabel}</span>
+        </div>
+      </div>
+      <div className="child-project-actions">
+        <button
+          className="btn-approve"
+          onClick={() => approveMutation.mutate()}
+          disabled={isProcessing}
+          title="承認"
+        >
+          <FaCheck /> 承認
+        </button>
+        <button
+          className="btn-reject"
+          onClick={() => rejectMutation.mutate()}
+          disabled={isProcessing}
+          title="拒否"
+        >
+          <FaXmark /> 拒否
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function ChildProjectsSection({ projectId, projectName }: ChildProjectsSectionProps) {
   const queryClient = useQueryClient();
   const [showAddOptions, setShowAddOptions] = useState(false);
@@ -154,7 +227,15 @@ export function ChildProjectsSection({ projectId, projectName }: ChildProjectsSe
     queryFn: () => projectsApi.listLinkRequests(projectId, 'PENDING'),
   });
 
-  const isLoading = isLoadingChildren || isLoadingRequests;
+  const {
+    data: incomingRequests,
+    isLoading: isLoadingIncoming,
+  } = useQuery({
+    queryKey: ['incoming-link-requests', projectId],
+    queryFn: () => projectsApi.listIncomingLinkRequests(projectId, 'PENDING'),
+  });
+
+  const isLoading = isLoadingChildren || isLoadingRequests || isLoadingIncoming;
   const childCount = (children?.length || 0) + (pendingRequests?.length || 0);
 
   return (
@@ -166,6 +247,18 @@ export function ChildProjectsSection({ projectId, projectName }: ChildProjectsSe
           {childCount > 0 && <span className="count-badge">{childCount}</span>}
         </h3>
       </div>
+
+      {incomingRequests && incomingRequests.length > 0 && (
+        <div className="child-projects-grid" style={{ marginBottom: '12px' }}>
+          {incomingRequests.map((request) => (
+            <IncomingRequestCard
+              key={request.id}
+              request={request}
+              childProjectId={projectId}
+            />
+          ))}
+        </div>
+      )}
 
       {isLoading ? (
         <div className="child-projects-loading">

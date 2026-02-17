@@ -64,6 +64,11 @@ export const projectsApi = {
   rejectLinkRequest: (projectId: string, requestId: string) =>
     api.post<ProjectLinkRequest>(`/projects/${projectId}/link-requests/${requestId}/reject`, {}),
 
+  listIncomingLinkRequests: (projectId: string, status?: string) => {
+    const params = status ? `?status=${status}` : '';
+    return api.get<ProjectLinkRequest[]>(`/projects/${projectId}/incoming-link-requests${params}`);
+  },
+
   listMembers: (projectId: string) =>
     api.get<ProjectMember[]>(`/projects/${projectId}/members`),
 

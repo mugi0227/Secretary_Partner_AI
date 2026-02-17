@@ -1407,6 +1407,20 @@ async def list_link_requests(
     return await link_request_repo.list_by_parent(project_id, status=request_status)
 
 
+@router.get("/{project_id}/incoming-link-requests", response_model=list[ProjectLinkRequest])
+async def list_incoming_link_requests(
+    project_id: UUID,
+    user: CurrentUser,
+    repo: ProjectRepo,
+    member_repo: ProjectMemberRepo,
+    link_request_repo: ProjectLinkRequestRepo,
+    request_status: Optional[str] = Query(None, alias="status", description="Filter by status"),
+):
+    """List link requests where this project is the child."""
+    await require_project_member(user, project_id, repo, member_repo)
+    return await link_request_repo.list_by_child(project_id, status=request_status)
+
+
 @router.post("/{project_id}/link-requests/{request_id}/approve", response_model=ProjectLinkRequest)
 async def approve_link_request(
     project_id: UUID,
