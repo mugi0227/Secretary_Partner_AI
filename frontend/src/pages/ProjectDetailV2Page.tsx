@@ -47,6 +47,7 @@ import { MilestoneEditModal } from '../components/gantt/MilestoneEditModal';
 import { ProjectGanttChart } from '../components/gantt/ProjectGanttChart';
 import { MeetingsTab } from '../components/meetings/MeetingsTab';
 import { ProjectAchievementsSection } from '../components/projects/ProjectAchievementsSection';
+import { ChildProjectsSection } from '../components/projects/ChildProjectsSection';
 import { ProjectDetailModal } from '../components/projects/ProjectDetailModal';
 import { ProjectTasksView } from '../components/projects/ProjectTasksView';
 import { RecurringTaskList } from '../components/tasks/RecurringTaskList';
@@ -1209,9 +1210,22 @@ export function ProjectDetailV2Page() {
       <header className="project-v2-header">
         <div className="project-v2-header-top">
           <div>
-            <button className="project-v2-secondary" onClick={() => navigate('/projects')}>
-              プロジェクト一覧
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.85rem' }}>
+              <button className="project-v2-secondary" onClick={() => navigate('/projects')}>
+                プロジェクト一覧
+              </button>
+              {project?.parent_project_id && (
+                <>
+                  <span style={{ color: 'var(--text-muted, #999)' }}>/</span>
+                  <button
+                    className="project-v2-secondary"
+                    onClick={() => navigate(`/projects/${project.parent_project_id}`)}
+                  >
+                    親プロジェクト
+                  </button>
+                </>
+              )}
+            </div>
             <h1 className="project-v2-title">
               {project?.name || 'プロジェクト'}
               <span className={`project-v2-visibility-badge ${project?.visibility === 'TEAM' ? 'team' : 'private'}`}>
@@ -1331,6 +1345,13 @@ export function ProjectDetailV2Page() {
                 })
               )}
             </div>
+
+            {projectId && (
+              <ChildProjectsSection
+                projectId={projectId}
+                projectName={project?.name || ''}
+              />
+            )}
 
             <div className="project-v2-dashboard-grid">
               <div className="project-v2-dashboard-main">

@@ -32,6 +32,7 @@ from app.interfaces.phase_repository import IPhaseRepository
 from app.interfaces.postpone_repository import IPostponeRepository
 from app.interfaces.project_achievement_repository import IProjectAchievementRepository
 from app.interfaces.project_invitation_repository import IProjectInvitationRepository
+from app.interfaces.project_link_request_repository import IProjectLinkRequestRepository
 from app.interfaces.project_member_repository import IProjectMemberRepository
 from app.interfaces.project_repository import IProjectRepository
 from app.interfaces.proposal_repository import IProposalRepository
@@ -171,6 +172,19 @@ def get_project_member_repository() -> IProjectMemberRepository:
     else:
         from app.infrastructure.local.project_member_repository import SqliteProjectMemberRepository
         return SqliteProjectMemberRepository()
+
+
+@lru_cache()
+def get_project_link_request_repository() -> IProjectLinkRequestRepository:
+    """Get project link request repository instance."""
+    settings = get_settings()
+    if settings.is_gcp:
+        raise NotImplementedError("Project link request repository not implemented for GCP")
+    else:
+        from app.infrastructure.local.project_link_request_repository import (
+            SqliteProjectLinkRequestRepository,
+        )
+        return SqliteProjectLinkRequestRepository()
 
 
 @lru_cache()
@@ -561,6 +575,9 @@ MemoryRepo = Annotated[IMemoryRepository, Depends(get_memory_repository)]
 CaptureRepo = Annotated[ICaptureRepository, Depends(get_capture_repository)]
 ChatRepo = Annotated[IChatSessionRepository, Depends(get_chat_session_repository)]
 ProjectMemberRepo = Annotated[IProjectMemberRepository, Depends(get_project_member_repository)]
+ProjectLinkRequestRepo = Annotated[
+    IProjectLinkRequestRepository, Depends(get_project_link_request_repository)
+]
 TaskAssignmentRepo = Annotated[ITaskAssignmentRepository, Depends(get_task_assignment_repository)]
 CheckinRepo = Annotated[ICheckinRepository, Depends(get_checkin_repository)]
 BlockerRepo = Annotated[IBlockerRepository, Depends(get_blocker_repository)]

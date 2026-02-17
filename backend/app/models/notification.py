@@ -28,6 +28,9 @@ class NotificationType(str, Enum):
     ISSUE_COMMENTED = "issue_commented"  # 要望にコメントがついた
     ISSUE_STATUS_CHANGED = "issue_status_changed"  # 要望のステータスが変更された
     HEARTBEAT = "heartbeat"
+    PROJECT_LINK_REQUEST = "project_link_request"  # 親プロジェクトへの紐付けリクエスト
+    PROJECT_LINK_APPROVED = "project_link_approved"  # 紐付けリクエスト承認
+    PROJECT_LINK_REJECTED = "project_link_rejected"  # 紐付けリクエスト却下
 
 
 class Notification(BaseModel):

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { FaChartPie, FaListCheck, FaFolderOpen, FaTrophy, FaGear, FaMoon, FaSun, FaRightFromBracket, FaRightToBracket, FaBookOpen, FaComments, FaChevronLeft, FaChevronRight, FaChevronDown, FaLock, FaUsers } from 'react-icons/fa6';
 import { useTheme } from '../../context/ThemeContext';
@@ -12,6 +12,87 @@ import { resolveDisplayName } from '../../utils/displayName';
 import nagiIcon from '../../assets/nagi_icon.png';
 import nagiBanner from '../../assets/nagi_banner.png';
 import './Sidebar.css';
+
+interface ProjectTreeNode {
+  project: ProjectWithTaskCount;
+  children: ProjectTreeNode[];
+}
+
+function buildProjectTree(projects: ProjectWithTaskCount[]): ProjectTreeNode[] {
+  const nodeMap = new Map<string, ProjectTreeNode>();
+  for (const project of projects) {
+    nodeMap.set(project.id, { project, children: [] });
+  }
+  const roots: ProjectTreeNode[] = [];
+  for (const project of projects) {
+    const node = nodeMap.get(project.id)!;
+    if (project.parent_project_id && nodeMap.has(project.parent_project_id)) {
+      nodeMap.get(project.parent_project_id)!.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+  return roots;
+}
+
+interface ProjectTreeItemProps {
+  node: ProjectTreeNode;
+  depth: number;
+  expandedIds: Set<string>;
+  onToggle: (e: React.MouseEvent, id: string) => void;
+  location: { pathname: string };
+  onNavClick: () => void;
+}
+
+function ProjectTreeItem({ node, depth, expandedIds, onToggle, location, onNavClick }: ProjectTreeItemProps) {
+  const { project } = node;
+  const hasChildren = node.children.length > 0;
+  const isExpanded = expandedIds.has(project.id);
+  const projectPath = `/projects/${project.id}/v2`;
+  const isActive = location.pathname === projectPath || location.pathname === `/projects/${project.id}`;
+
+  return (
+    <>
+      <div className="project-subitem-row" style={{ paddingLeft: `${depth * 16}px` }}>
+        {hasChildren ? (
+          <button
+            className="project-tree-toggle"
+            onClick={(e) => onToggle(e, project.id)}
+            title={isExpanded ? '折りたたむ' : '展開する'}
+          >
+            {isExpanded ? <FaChevronDown style={{ fontSize: '0.5rem' }} /> : <FaChevronRight style={{ fontSize: '0.5rem' }} />}
+          </button>
+        ) : (
+          <span className="project-tree-toggle-spacer" />
+        )}
+        <Link
+          to={projectPath}
+          className={`project-subitem ${isActive ? 'active' : ''}`}
+          title={project.name}
+          onClick={onNavClick}
+          style={{ flex: 1, minWidth: 0 }}
+        >
+          {project.visibility === 'TEAM'
+            ? <FaUsers className="project-subitem-icon" />
+            : <FaLock className="project-subitem-icon" />
+          }
+          <span className="project-subitem-name">{project.name}</span>
+        </Link>
+      </div>
+      {hasChildren && isExpanded && node.children.map(child => (
+        <ProjectTreeItem
+          key={child.project.id}
+          node={child}
+          depth={depth + 1}
+          expandedIds={expandedIds}
+          onToggle={onToggle}
+          location={location}
+          onNavClick={onNavClick}
+        />
+      ))}
+    </>
+  );
+}
 
 interface SidebarProps {
   collapsed: boolean;
@@ -33,6 +114,7 @@ export function Sidebar({ collapsed, onToggle, isMobile, mobileOpen, onMobileClo
   const [projectsExpanded, setProjectsExpanded] = useState(() => {
     return localStorage.getItem('secretary_sidebar_projects_expanded') === 'true';
   });
+  const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(new Set());
   const isAuthLocked = source === 'env' || source === 'mock';
   const displayName = currentUser
     ? resolveDisplayName({
@@ -66,6 +148,22 @@ export function Sidebar({ collapsed, onToggle, isMobile, mobileOpen, onMobileClo
   };
 
   const activeProjects = projects.filter(p => p.status === 'ACTIVE');
+
+  const projectTree = useMemo(() => buildProjectTree(activeProjects), [activeProjects]);
+
+  const toggleProjectNode = useCallback((e: React.MouseEvent, projectId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setExpandedProjectIds(prev => {
+      const next = new Set(prev);
+      if (next.has(projectId)) {
+        next.delete(projectId);
+      } else {
+        next.add(projectId);
+      }
+      return next;
+    });
+  }, []);
 
   const enableIssues = import.meta.env.VITE_ENABLE_ISSUES === 'true';
 
@@ -177,25 +275,17 @@ export function Sidebar({ collapsed, onToggle, isMobile, mobileOpen, onMobileClo
                 </div>
                 {!showCollapsed && projectsExpanded && activeProjects.length > 0 && (
                   <div className="project-sublist">
-                    {activeProjects.map(project => {
-                      const projectPath = `/projects/${project.id}/v2`;
-                      const isActive = location.pathname === projectPath || location.pathname === `/projects/${project.id}`;
-                      return (
-                        <Link
-                          key={project.id}
-                          to={projectPath}
-                          className={`project-subitem ${isActive ? 'active' : ''}`}
-                          title={project.name}
-                          onClick={handleNavClick}
-                        >
-                          {project.visibility === 'TEAM'
-                            ? <FaUsers className="project-subitem-icon" />
-                            : <FaLock className="project-subitem-icon" />
-                          }
-                          <span className="project-subitem-name">{project.name}</span>
-                        </Link>
-                      );
-                    })}
+                    {projectTree.map(node => (
+                      <ProjectTreeItem
+                        key={node.project.id}
+                        node={node}
+                        depth={0}
+                        expandedIds={expandedProjectIds}
+                        onToggle={toggleProjectNode}
+                        location={location}
+                        onNavClick={handleNavClick}
+                      />
+                    ))}
                   </div>
                 )}
               </div>

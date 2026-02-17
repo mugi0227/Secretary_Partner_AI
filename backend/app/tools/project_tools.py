@@ -51,6 +51,9 @@ class CreateProjectInput(BaseModel):
     priority: int = Field(5, ge=1, le=10, description="優先度 (1-10)")
     goals: list[str] = Field(default_factory=list, description="ゴール一覧")
     key_points: list[str] = Field(default_factory=list, description="重要ポイント一覧")
+    parent_project_id: Optional[str] = Field(
+        None, description="親プロジェクトID（UUID）。指定すると子プロジェクトとして作成",
+    )
     kpi_strategy: Optional[str] = Field(
         "custom",
         description="KPI選定戦略（template/custom）。AI選定は内部で処理。",
@@ -74,6 +77,10 @@ class UpdateProjectInput(BaseModel):
     context: Optional[str] = Field(None, description="README/詳細コンテキスト")
     goals: Optional[list[str]] = Field(None, description="ゴール一覧")
     key_points: Optional[list[str]] = Field(None, description="重要ポイント一覧")
+    parent_project_id: Optional[str] = Field(
+        None,
+        description="親プロジェクトID（UUID）。指定するとこのプロジェクトを子として紐付け。空文字で切り離し",
+    )
     kpi_template_id: Optional[str] = Field(None, description="KPIテンプレートID")
     kpi_metrics: Optional[list[ProjectKpiMetricInput]] = Field(
         None,
@@ -367,6 +374,8 @@ async def create_project(
         metrics=metrics,
     )
 
+    from uuid import UUID as _UUID
+
     project_data = ProjectCreate(
         name=input_data.name,
         description=input_data.description,
@@ -374,6 +383,7 @@ async def create_project(
         priority=input_data.priority,
         goals=input_data.goals,
         key_points=input_data.key_points,
+        parent_project_id=_UUID(input_data.parent_project_id) if input_data.parent_project_id else None,
         kpi_config=kpi_config,
     )
 
@@ -454,6 +464,7 @@ def create_project_tool(
             priority (int, optional): 優先度 (1-10)
             goals (list[str], optional): ゴール一覧
             key_points (list[str], optional): 重要ポイント一覧
+            parent_project_id (str, optional): 親プロジェクトID（UUID）。指定すると子プロジェクトとして作成
             kpi_strategy (str, optional): KPI選定戦略（template/custom）※AI選定は内部で処理
             kpi_template_id (str, optional): KPIテンプレートID
             kpi_metrics (list, optional): KPIメトリクス（テンプレ未使用時）
@@ -535,6 +546,11 @@ async def update_project(
         update_fields["goals"] = input_data.goals
     if input_data.key_points is not None:
         update_fields["key_points"] = input_data.key_points
+    if input_data.parent_project_id is not None:
+        if input_data.parent_project_id == "":
+            update_fields["parent_project_id"] = None  # Detach
+        else:
+            update_fields["parent_project_id"] = UUID(input_data.parent_project_id)
 
     if input_data.kpi_metrics is not None or input_data.kpi_template_id is not None:
         if input_data.kpi_metrics is not None:
@@ -588,6 +604,7 @@ def update_project_tool(
             context (str, optional): README/詳細コンテキスト
             goals (list[str], optional): ゴール一覧
             key_points (list[str], optional): 重要ポイント一覧
+            parent_project_id (str, optional): 親プロジェクトID。指定すると子として紐付け。空文字で切り離し
             kpi_template_id (str, optional): KPIテンプレートID
             kpi_metrics (list, optional): KPIメトリクス（指定時はカスタムとして扱う）
 

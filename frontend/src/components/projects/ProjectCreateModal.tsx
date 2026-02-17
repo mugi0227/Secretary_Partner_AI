@@ -13,9 +13,10 @@ import './ProjectDetailModal.css';
 interface ProjectCreateModalProps {
   onClose: () => void;
   onCreate: () => void;
+  parentProjectId?: string;
 }
 
-export function ProjectCreateModal({ onClose, onCreate }: ProjectCreateModalProps) {
+export function ProjectCreateModal({ onClose, onCreate, parentProjectId }: ProjectCreateModalProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
 
@@ -76,6 +77,7 @@ export function ProjectCreateModal({ onClose, onCreate }: ProjectCreateModalProp
         goals,
         key_points: keyPoints,
         kpi_config: kpiConfig,
+        parent_project_id: parentProjectId || undefined,
       };
       await projectsApi.create(projectData);
       onCreate();

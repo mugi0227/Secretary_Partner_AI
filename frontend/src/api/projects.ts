@@ -10,6 +10,8 @@ import type {
   ProjectInvitation,
   ProjectInvitationCreate,
   ProjectInvitationUpdate,
+  ProjectLinkRequest,
+  ProjectLinkRequestCreate,
   TaskAssignment,
   Blocker,
   Checkin,
@@ -26,7 +28,8 @@ import type {
 } from './types';
 
 export const projectsApi = {
-  getAll: () => api.get<ProjectWithTaskCount[]>('/projects'),
+  getAll: (topLevelOnly = false) =>
+    api.get<ProjectWithTaskCount[]>(`/projects?top_level_only=${topLevelOnly}`),
 
   getById: (id: string) => api.get<ProjectWithTaskCount>(`/projects/${id}`),
 
@@ -38,6 +41,28 @@ export const projectsApi = {
   getKpiTemplates: () => api.get<ProjectKpiTemplate[]>('/projects/kpi-templates'),
 
   delete: (id: string) => api.delete<void>(`/projects/${id}`),
+
+  // Child / Descendant projects
+  getChildren: (projectId: string) =>
+    api.get<ProjectWithTaskCount[]>(`/projects/${projectId}/children`),
+
+  getDescendants: (projectId: string) =>
+    api.get<ProjectWithTaskCount[]>(`/projects/${projectId}/descendants`),
+
+  // Link requests
+  createLinkRequest: (projectId: string, data: ProjectLinkRequestCreate) =>
+    api.post<ProjectLinkRequest>(`/projects/${projectId}/link-requests`, data),
+
+  listLinkRequests: (projectId: string, status?: string) => {
+    const params = status ? `?status=${status}` : '';
+    return api.get<ProjectLinkRequest[]>(`/projects/${projectId}/link-requests${params}`);
+  },
+
+  approveLinkRequest: (projectId: string, requestId: string) =>
+    api.post<ProjectLinkRequest>(`/projects/${projectId}/link-requests/${requestId}/approve`, {}),
+
+  rejectLinkRequest: (projectId: string, requestId: string) =>
+    api.post<ProjectLinkRequest>(`/projects/${projectId}/link-requests/${requestId}/reject`, {}),
 
   listMembers: (projectId: string) =>
     api.get<ProjectMember[]>(`/projects/${projectId}/members`),

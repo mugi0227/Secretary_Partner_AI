@@ -139,6 +139,42 @@ async def run_migrations():
                 text("ALTER TABLE projects ADD COLUMN visibility VARCHAR(20) DEFAULT 'PRIVATE'")
             )
 
+        if "parent_project_id" not in project_columns:
+            await conn.execute(
+                text("ALTER TABLE projects ADD COLUMN parent_project_id VARCHAR(36)")
+            )
+            await conn.execute(
+                text("CREATE INDEX IF NOT EXISTS idx_projects_parent_project_id ON projects(parent_project_id)")
+            )
+
+        # Create project_link_requests table if missing
+        link_req_result = await conn.execute(
+            text("SELECT name FROM sqlite_master WHERE type='table' AND name='project_link_requests'")
+        )
+        if not link_req_result.scalar():
+            await conn.execute(
+                text(
+                    """
+                    CREATE TABLE project_link_requests (
+                        id VARCHAR(36) PRIMARY KEY,
+                        child_project_id VARCHAR(36) NOT NULL,
+                        parent_project_id VARCHAR(36) NOT NULL,
+                        requested_by VARCHAR(255) NOT NULL,
+                        status VARCHAR(20) DEFAULT 'PENDING',
+                        member_ids_to_add JSON,
+                        created_at DATETIME,
+                        updated_at DATETIME
+                    )
+                    """
+                )
+            )
+            await conn.execute(
+                text("CREATE INDEX idx_link_requests_child ON project_link_requests(child_project_id)")
+            )
+            await conn.execute(
+                text("CREATE INDEX idx_link_requests_parent ON project_link_requests(parent_project_id)")
+            )
+
         # Check phases table for fixed_buffer_minutes
         phase_result = await conn.execute(text("PRAGMA table_info(phases)"))
         phase_columns = {row[1] for row in phase_result}

@@ -113,6 +113,22 @@ class ProjectORM(Base):
     goals = Column(JSON, nullable=True, default=list)  # プロジェクトのゴールリスト
     key_points = Column(JSON, nullable=True, default=list)  # 重要なポイントリスト
     kpi_config = Column(JSON, nullable=True)  # KPI configuration
+    parent_project_id = Column(String(36), nullable=True, index=True)
+    created_at = Column(DateTime, default=now_utc)
+    updated_at = Column(DateTime, default=now_utc, onupdate=now_utc)
+
+
+class ProjectLinkRequestORM(Base):
+    """Project link request ORM model for parent-child linking approval."""
+
+    __tablename__ = "project_link_requests"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    child_project_id = Column(String(36), nullable=False, index=True)
+    parent_project_id = Column(String(36), nullable=False, index=True)
+    requested_by = Column(String(255), nullable=False)
+    status = Column(String(20), default="PENDING")
+    member_ids_to_add = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=now_utc)
     updated_at = Column(DateTime, default=now_utc, onupdate=now_utc)
 

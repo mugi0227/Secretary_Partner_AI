@@ -50,6 +50,10 @@ class ProjectBase(BaseModel):
         None,
         description="KPI configuration",
     )
+    parent_project_id: Optional[UUID] = Field(
+        None,
+        description="親プロジェクトID（親子関係設定用）",
+    )
 
 
 class ProjectCreate(ProjectBase):
@@ -71,6 +75,7 @@ class ProjectUpdate(BaseModel):
     goals: Optional[list[str]] = None
     key_points: Optional[list[str]] = None
     kpi_config: Optional[ProjectKpiConfig] = None
+    parent_project_id: Optional[UUID] = None
 
 
 class Project(ProjectBase):
@@ -93,3 +98,8 @@ class ProjectWithTaskCount(Project):
     completed_tasks: int = 0
     in_progress_tasks: int = 0
     unassigned_tasks: int = 0
+    child_project_count: int = 0
+    aggregated_total_tasks: int = 0
+    aggregated_completed_tasks: int = 0
+    aggregated_in_progress_tasks: int = 0
+    aggregated_unassigned_tasks: int = 0

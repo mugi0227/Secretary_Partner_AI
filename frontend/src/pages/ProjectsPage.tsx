@@ -1,17 +1,36 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaStar, FaPlus, FaLock, FaUsers } from 'react-icons/fa6';
+import { FaStar, FaPlus, FaLock, FaUsers, FaChevronRight } from 'react-icons/fa6';
 import { useProjects } from '../hooks/useProjects';
 import { ProjectCreateModal } from '../components/projects/ProjectCreateModal';
 import { usePageTour } from '../hooks/usePageTour';
 import { PageTour } from '../components/onboarding/PageTour';
 import { TourHelpButton } from '../components/onboarding/TourHelpButton';
+import type { ProjectWithTaskCount } from '../api/types';
 import './ProjectsPage.css';
 
 export function ProjectsPage() {
   const navigate = useNavigate();
-  const { projects, isLoading, error, refetch } = useProjects();
+  const { projects: allProjects, isLoading, error, refetch } = useProjects();
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // Build tree: top-level projects with their children
+  const { topLevelProjects, childrenMap } = useMemo(() => {
+    const cMap = new Map<string, ProjectWithTaskCount[]>();
+    const topLevel: ProjectWithTaskCount[] = [];
+    for (const p of allProjects) {
+      if (p.parent_project_id) {
+        const siblings = cMap.get(p.parent_project_id) || [];
+        siblings.push(p);
+        cMap.set(p.parent_project_id, siblings);
+      } else {
+        topLevel.push(p);
+      }
+    }
+    return { topLevelProjects: topLevel, childrenMap: cMap };
+  }, [allProjects]);
+
+  const projects = topLevelProjects;
   const tour = usePageTour('projects');
 
   if (error) {
@@ -139,6 +158,43 @@ export function ProjectsPage() {
                       }%`,
                     }}
                   ></div>
+                </div>
+              )}
+
+              {/* Compact child project display */}
+              {childrenMap.has(project.id) && (
+                <div style={{ marginTop: '8px', borderTop: '1px solid var(--border-color, #e5e7eb)', paddingTop: '8px' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted, #6b7280)', marginBottom: '4px' }}>
+                    子プロジェクト ({childrenMap.get(project.id)!.length}件)
+                  </div>
+                  {childrenMap.get(project.id)!.slice(0, 3).map((child) => {
+                    const childProgress = child.total_tasks > 0
+                      ? Math.round((child.completed_tasks / child.total_tasks) * 100)
+                      : 0;
+                    return (
+                      <div
+                        key={child.id}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '8px',
+                          padding: '2px 0', fontSize: '0.8rem', cursor: 'pointer',
+                        }}
+                        onClick={(e) => { e.stopPropagation(); navigate(`/projects/${child.id}/v2`); }}
+                      >
+                        <FaChevronRight style={{ fontSize: '0.6rem', color: 'var(--text-muted, #999)' }} />
+                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {child.name}
+                        </span>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted, #999)' }}>
+                          {childProgress}%
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {childrenMap.get(project.id)!.length > 3 && (
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted, #999)', paddingTop: '2px' }}>
+                      他 {childrenMap.get(project.id)!.length - 3} 件
+                    </div>
+                  )}
                 </div>
               )}
             </div>

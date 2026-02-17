@@ -64,6 +64,7 @@ class IProjectRepository(ABC):
         status: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
+        top_level_only: bool = False,
     ) -> list[Project]:
         """
         List projects with optional filters.
@@ -73,6 +74,7 @@ class IProjectRepository(ABC):
             status: Filter by status
             limit: Maximum number of results
             offset: Pagination offset
+            top_level_only: If True, return only projects without parent
 
         Returns:
             List of projects
@@ -84,6 +86,7 @@ class IProjectRepository(ABC):
         self,
         user_id: str,
         status: Optional[str] = None,
+        top_level_only: bool = False,
     ) -> list[ProjectWithTaskCount]:
         """
         List projects with task statistics.
@@ -91,9 +94,46 @@ class IProjectRepository(ABC):
         Args:
             user_id: Owner user ID
             status: Filter by status
+            top_level_only: If True, return only projects without parent
 
         Returns:
             List of projects with task counts
+        """
+        pass
+
+    @abstractmethod
+    async def list_children_with_task_count(
+        self,
+        user_id: str,
+        parent_project_id: UUID,
+    ) -> list[ProjectWithTaskCount]:
+        """
+        List direct child projects with task statistics.
+
+        Args:
+            user_id: User ID (for access check)
+            parent_project_id: Parent project ID
+
+        Returns:
+            List of child projects with task counts
+        """
+        pass
+
+    @abstractmethod
+    async def list_descendants_with_task_count(
+        self,
+        user_id: str,
+        ancestor_project_id: UUID,
+    ) -> list[ProjectWithTaskCount]:
+        """
+        List all descendant projects (recursive) with task statistics.
+
+        Args:
+            user_id: User ID (for access check)
+            ancestor_project_id: Ancestor project ID
+
+        Returns:
+            Flat list of all descendant projects with task counts
         """
         pass
 

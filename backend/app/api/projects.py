@@ -18,6 +18,7 @@ from app.api.deps import (
     MemoryRepo,
     NotificationRepo,
     ProjectInvitationRepo,
+    ProjectLinkRequestRepo,
     ProjectMemberRepo,
     ProjectRepo,
     TaskAssignmentRepo,
@@ -57,6 +58,7 @@ from app.models.enums import (
 from app.models.memory import Memory, MemoryCreate
 from app.models.project import Project, ProjectCreate, ProjectUpdate, ProjectWithTaskCount
 from app.models.project_kpi import ProjectKpiTemplate
+from app.models.project_link import ProjectLinkRequest, ProjectLinkRequestCreate
 from app.services import notification_service as notify
 from app.services.kpi_calculator import apply_project_kpis
 from app.services.kpi_templates import get_kpi_templates
@@ -265,6 +267,50 @@ def _build_checkin_summary_response(
     )
 
 
+async def _validate_parent_project(
+    repo: ProjectRepo,
+    user_id: str,
+    project_id: Optional[UUID],
+    parent_project_id: UUID,
+):
+    """Validate parent project assignment.
+
+    Checks: self-reference, existence, circular reference.
+    """
+    if project_id and parent_project_id == project_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="自分自身を親プロジェクトに設定できません",
+        )
+
+    parent = await repo.get_by_id(parent_project_id)
+    if not parent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"親プロジェクト {parent_project_id} が見つかりません",
+        )
+
+    # Circular reference check: walk up ancestors of parent
+    if project_id:
+        current_id = parent.parent_project_id
+        visited: set[UUID] = set()
+        while current_id:
+            if current_id == project_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="循環参照が検出されました。この紐付けはできません",
+                )
+            if current_id in visited:
+                break
+            visited.add(current_id)
+            ancestor = await repo.get_by_id(current_id)
+            if not ancestor:
+                break
+            current_id = ancestor.parent_project_id
+
+    return parent
+
+
 @router.get("/kpi-templates", response_model=list[ProjectKpiTemplate])
 async def list_kpi_templates(user: CurrentUser):
     """List KPI templates."""
@@ -279,6 +325,9 @@ async def create_project(
     member_repo: ProjectMemberRepo,
 ):
     """Create a new project."""
+    if project.parent_project_id:
+        await _validate_parent_project(repo, user.id, None, project.parent_project_id)
+
     created_project = await repo.create(user.id, project)
 
     # Add creator as OWNER member
@@ -298,7 +347,7 @@ async def get_project(
     repo: ProjectRepo,
     task_repo: TaskRepo,
 ):
-    """Get a project by ID with task counts."""
+    """Get a project by ID with task counts and descendant aggregation."""
     # Use list_with_task_count to get task statistics
     all_projects = await repo.list_with_task_count(user.id)
     project = next((p for p in all_projects if p.id == project_id), None)
@@ -308,6 +357,27 @@ async def get_project(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Project {project_id} not found",
         )
+
+    # Compute aggregated stats from descendants
+    try:
+        descendants = await repo.list_descendants_with_task_count(user.id, project_id)
+        project.child_project_count = sum(
+            1 for d in descendants if d.parent_project_id == project_id
+        )
+        project.aggregated_total_tasks = project.total_tasks + sum(
+            d.total_tasks for d in descendants
+        )
+        project.aggregated_completed_tasks = project.completed_tasks + sum(
+            d.completed_tasks for d in descendants
+        )
+        project.aggregated_in_progress_tasks = project.in_progress_tasks + sum(
+            d.in_progress_tasks for d in descendants
+        )
+        project.aggregated_unassigned_tasks = project.unassigned_tasks + sum(
+            d.unassigned_tasks for d in descendants
+        )
+    except Exception:
+        pass  # If descendants fail, return project without aggregation
 
     # Apply KPI calculations
     return await apply_project_kpis(user.id, project, task_repo)
@@ -319,9 +389,12 @@ async def list_projects(
     repo: ProjectRepo,
     task_repo: TaskRepo,
     status: Optional[str] = Query(None, description="Filter by status"),
+    top_level_only: bool = Query(False, description="トップレベルプロジェクトのみ取得"),
 ):
     """List projects with task counts."""
-    projects = await repo.list_with_task_count(user.id, status=status)
+    projects = await repo.list_with_task_count(
+        user.id, status=status, top_level_only=top_level_only,
+    )
     return [await apply_project_kpis(user.id, project, task_repo) for project in projects]
 
 
@@ -342,6 +415,25 @@ async def update_project(
         ProjectAction.PROJECT_UPDATE,
     )
     owner_id = access.owner_id
+
+    # Validate parent_project_id if being set
+    update_fields = update.model_dump(exclude_unset=True)
+    if "parent_project_id" in update_fields and update.parent_project_id is not None:
+        parent = await _validate_parent_project(
+            repo, user.id, project_id, update.parent_project_id,
+        )
+        # Only parent project owner can directly set parent_project_id
+        parent_members = await member_repo.list_by_project(parent.id)
+        is_parent_owner = parent.user_id == user.id or any(
+            m.member_user_id == user.id and m.role == ProjectRole.OWNER
+            for m in parent_members
+        )
+        if not is_parent_owner:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="親プロジェクトのオーナーのみが直接紐付けできます。紐付けリクエストを送信してください。",
+            )
+
     try:
         result = await repo.update(owner_id, project_id, update)
     except NotFoundError as e:
@@ -364,7 +456,10 @@ async def delete_project(
     repo: ProjectRepo,
     member_repo: ProjectMemberRepo,
 ):
-    """Delete a project. Only OWNER or ADMIN can delete."""
+    """Delete a project. Only OWNER or ADMIN can delete.
+
+    Child projects are automatically detached (parent_project_id set to null).
+    """
     access = await require_project_action(
         user,
         project_id,
@@ -373,6 +468,17 @@ async def delete_project(
         ProjectAction.PROJECT_DELETE,
     )
     owner_id = access.owner_id
+
+    # Detach direct children before deleting
+    children = await repo.list_children_with_task_count(owner_id, project_id)
+    for child in children:
+        try:
+            await repo.update(
+                child.user_id, child.id,
+                ProjectUpdate(parent_project_id=None),
+            )
+        except Exception:
+            pass  # Best-effort detach
 
     deleted = await repo.delete(owner_id, project_id)
     if not deleted:
@@ -1155,3 +1261,239 @@ async def get_project_checkin_agenda_items(
         start_date=start_date,
         end_date=end_date,
     )
+
+
+# =============================================================================
+# Child / Descendant Project Endpoints
+# =============================================================================
+
+
+@router.get("/{project_id}/children", response_model=list[ProjectWithTaskCount])
+async def list_child_projects(
+    project_id: UUID,
+    user: CurrentUser,
+    repo: ProjectRepo,
+    member_repo: ProjectMemberRepo,
+):
+    """List direct child projects with task counts."""
+    await require_project_member(user, project_id, repo, member_repo)
+    return await repo.list_children_with_task_count(user.id, project_id)
+
+
+@router.get("/{project_id}/descendants", response_model=list[ProjectWithTaskCount])
+async def list_descendant_projects(
+    project_id: UUID,
+    user: CurrentUser,
+    repo: ProjectRepo,
+    member_repo: ProjectMemberRepo,
+):
+    """List all descendant projects (recursive) with task counts."""
+    await require_project_member(user, project_id, repo, member_repo)
+    return await repo.list_descendants_with_task_count(user.id, project_id)
+
+
+# =============================================================================
+# Project Link Request Endpoints
+# =============================================================================
+
+
+@router.post(
+    "/{project_id}/link-requests",
+    response_model=ProjectLinkRequest,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_link_request(
+    project_id: UUID,
+    data: ProjectLinkRequestCreate,
+    user: CurrentUser,
+    repo: ProjectRepo,
+    member_repo: ProjectMemberRepo,
+    link_request_repo: ProjectLinkRequestRepo,
+    notification_repo: NotificationRepo,
+):
+    """Create a link request to attach a child project to this parent project.
+
+    The parent project's owner will be notified and can approve/reject.
+    """
+    if data.parent_project_id != project_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="parent_project_id must match the URL project ID",
+        )
+
+    # Validate parent project
+    parent = await _validate_parent_project(
+        repo, user.id, data.child_project_id, data.parent_project_id,
+    )
+
+    # Check that child project exists and user has access
+    child = await repo.get(user.id, data.child_project_id)
+    if not child:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"子プロジェクト {data.child_project_id} が見つかりません",
+        )
+
+    # Create link request
+    link_request = await link_request_repo.create(data, requested_by=user.id)
+
+    # Notify parent project owner
+    await notify.notify_project_link_request(
+        notification_repo,
+        parent_project_id=parent.id,
+        parent_project_name=parent.name,
+        child_project_name=child.name,
+        requester_display_name=user.display_name or "",
+        owner_user_id=parent.user_id,
+    )
+
+    return link_request
+
+
+@router.get("/{project_id}/link-requests", response_model=list[ProjectLinkRequest])
+async def list_link_requests(
+    project_id: UUID,
+    user: CurrentUser,
+    repo: ProjectRepo,
+    member_repo: ProjectMemberRepo,
+    link_request_repo: ProjectLinkRequestRepo,
+    request_status: Optional[str] = Query(None, alias="status", description="Filter by status"),
+):
+    """List link requests for a parent project."""
+    await require_project_member(user, project_id, repo, member_repo)
+    return await link_request_repo.list_by_parent(project_id, status=request_status)
+
+
+@router.post("/{project_id}/link-requests/{request_id}/approve", response_model=ProjectLinkRequest)
+async def approve_link_request(
+    project_id: UUID,
+    request_id: UUID,
+    user: CurrentUser,
+    repo: ProjectRepo,
+    member_repo: ProjectMemberRepo,
+    link_request_repo: ProjectLinkRequestRepo,
+    notification_repo: NotificationRepo,
+):
+    """Approve a link request. Only parent project OWNER can approve."""
+    access = await require_project_action(
+        user, project_id, repo, member_repo, ProjectAction.PROJECT_UPDATE,
+    )
+
+    # Verify owner
+    parent_members = await member_repo.list_by_project(project_id)
+    is_owner = access.project.user_id == user.id or any(
+        m.member_user_id == user.id and m.role == ProjectRole.OWNER
+        for m in parent_members
+    )
+    if not is_owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="親プロジェクトのオーナーのみが承認できます",
+        )
+
+    link_request = await link_request_repo.get(request_id)
+    if not link_request or link_request.parent_project_id != project_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="紐付けリクエストが見つかりません",
+        )
+    if link_request.status.value != "PENDING":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="このリクエストは既に処理されています",
+        )
+
+    # Set parent_project_id on child project
+    child = await repo.get_by_id(link_request.child_project_id)
+    if child:
+        await repo.update(
+            child.user_id,
+            child.id,
+            ProjectUpdate(parent_project_id=project_id),
+        )
+
+    # Add selected members to parent project
+    for member_id in link_request.member_ids_to_add:
+        try:
+            existing_members = await member_repo.list_by_project(project_id)
+            if not any(m.member_user_id == member_id for m in existing_members):
+                await member_repo.create(
+                    access.owner_id,
+                    project_id,
+                    ProjectMemberCreate(member_user_id=member_id, role=ProjectRole.MEMBER),
+                )
+        except Exception:
+            pass  # Best-effort member addition
+
+    # Approve the request
+    approved = await link_request_repo.approve(request_id)
+
+    # Notify requester
+    parent = access.project
+    if child:
+        await notify.notify_project_link_approved(
+            notification_repo,
+            child_project_id=child.id,
+            parent_project_name=parent.name,
+            child_project_name=child.name,
+            requester_user_id=link_request.requested_by,
+        )
+
+    return approved
+
+
+@router.post("/{project_id}/link-requests/{request_id}/reject", response_model=ProjectLinkRequest)
+async def reject_link_request(
+    project_id: UUID,
+    request_id: UUID,
+    user: CurrentUser,
+    repo: ProjectRepo,
+    member_repo: ProjectMemberRepo,
+    link_request_repo: ProjectLinkRequestRepo,
+    notification_repo: NotificationRepo,
+):
+    """Reject a link request. Only parent project OWNER can reject."""
+    access = await require_project_action(
+        user, project_id, repo, member_repo, ProjectAction.PROJECT_UPDATE,
+    )
+
+    # Verify owner
+    parent_members = await member_repo.list_by_project(project_id)
+    is_owner = access.project.user_id == user.id or any(
+        m.member_user_id == user.id and m.role == ProjectRole.OWNER
+        for m in parent_members
+    )
+    if not is_owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="親プロジェクトのオーナーのみが却下できます",
+        )
+
+    link_request = await link_request_repo.get(request_id)
+    if not link_request or link_request.parent_project_id != project_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="紐付けリクエストが見つかりません",
+        )
+    if link_request.status.value != "PENDING":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="このリクエストは既に処理されています",
+        )
+
+    # Reject the request
+    rejected = await link_request_repo.reject(request_id)
+
+    # Notify requester
+    parent = access.project
+    child = await repo.get_by_id(link_request.child_project_id)
+    if child:
+        await notify.notify_project_link_rejected(
+            notification_repo,
+            child_project_id=child.id,
+            parent_project_name=parent.name,
+            child_project_name=child.name,
+            requester_user_id=link_request.requested_by,
+        )
+
+    return rejected

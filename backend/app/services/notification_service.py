@@ -162,6 +162,67 @@ async def notify_issue_liked(
     await notification_repo.create_bulk(notifications)
 
 
+async def notify_project_link_request(
+    notification_repo: INotificationRepository,
+    parent_project_id: UUID,
+    parent_project_name: str,
+    child_project_name: str,
+    requester_display_name: str,
+    owner_user_id: str,
+):
+    """Notify parent project owner about a link request."""
+    await notification_repo.create(NotificationCreate(
+        user_id=owner_user_id,
+        type=NotificationType.PROJECT_LINK_REQUEST,
+        title="プロジェクト紐付けリクエスト",
+        message=f"{requester_display_name or '匿名'}さんが「{child_project_name}」を「{parent_project_name}」に紐付けたいとリクエストしました",
+        link_type="project",
+        link_id=str(parent_project_id),
+        project_id=parent_project_id,
+        project_name=parent_project_name,
+    ))
+
+
+async def notify_project_link_approved(
+    notification_repo: INotificationRepository,
+    child_project_id: UUID,
+    parent_project_name: str,
+    child_project_name: str,
+    requester_user_id: str,
+):
+    """Notify requester that their link request was approved."""
+    await notification_repo.create(NotificationCreate(
+        user_id=requester_user_id,
+        type=NotificationType.PROJECT_LINK_APPROVED,
+        title="紐付けリクエストが承認されました",
+        message=f"「{child_project_name}」の「{parent_project_name}」への紐付けが承認されました",
+        link_type="project",
+        link_id=str(child_project_id),
+        project_id=child_project_id,
+        project_name=child_project_name,
+    ))
+
+
+async def notify_project_link_rejected(
+    notification_repo: INotificationRepository,
+    child_project_id: UUID,
+    parent_project_name: str,
+    child_project_name: str,
+    requester_user_id: str,
+):
+    """Notify requester that their link request was rejected."""
+    await notification_repo.create(NotificationCreate(
+        user_id=requester_user_id,
+        type=NotificationType.PROJECT_LINK_REJECTED,
+        title="紐付けリクエストが却下されました",
+        message=f"「{child_project_name}」の「{parent_project_name}」への紐付けが却下されました",
+        link_type="project",
+        link_id=str(child_project_id),
+        project_id=child_project_id,
+        project_name=child_project_name,
+    ))
+
+
 async def notify_issue_commented(
     notification_repo: INotificationRepository,
     issue_id: UUID,

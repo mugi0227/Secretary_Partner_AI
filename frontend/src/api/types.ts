@@ -342,11 +342,12 @@ export interface Project {
   description?: string;
   visibility: ProjectVisibility;
   context_summary?: string;
-  context?: string;  // 隧ｳ邏ｰ繧ｳ繝ｳ繝・く繧ｹ繝茨ｼ・EADME・・
+  context?: string;
   priority: number;  // 1-10
   goals: string[];
   key_points: string[];
   kpi_config?: ProjectKpiConfig;
+  parent_project_id?: string;
   status: ProjectStatus;
   created_at: string;
   updated_at: string;
@@ -357,6 +358,30 @@ export interface ProjectWithTaskCount extends Project {
   completed_tasks: number;
   in_progress_tasks: number;
   unassigned_tasks: number;
+  child_project_count: number;
+  aggregated_total_tasks: number;
+  aggregated_completed_tasks: number;
+  aggregated_in_progress_tasks: number;
+  aggregated_unassigned_tasks: number;
+}
+
+export type ProjectLinkRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface ProjectLinkRequest {
+  id: string;
+  child_project_id: string;
+  parent_project_id: string;
+  requested_by: string;
+  status: ProjectLinkRequestStatus;
+  member_ids_to_add: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectLinkRequestCreate {
+  child_project_id: string;
+  parent_project_id: string;
+  member_ids_to_add?: string[];
 }
 
 // Phase models
@@ -463,6 +488,7 @@ export interface ProjectCreate {
   goals?: string[];
   key_points?: string[];
   kpi_config?: ProjectKpiConfig;
+  parent_project_id?: string;
 }
 
 export interface ProjectUpdate {
@@ -476,6 +502,7 @@ export interface ProjectUpdate {
   goals?: string[];
   key_points?: string[];
   kpi_config?: ProjectKpiConfig;
+  parent_project_id?: string | null;
 }
 
 export interface ProjectMember {

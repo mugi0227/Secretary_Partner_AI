@@ -2,12 +2,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi } from '../api/projects';
 import type { ProjectCreate, ProjectUpdate } from '../api/types';
 
-export function useProjects() {
+export function useProjects(topLevelOnly = false) {
   const queryClient = useQueryClient();
 
   const query = useQuery({
-    queryKey: ['projects'],
-    queryFn: projectsApi.getAll,
+    queryKey: ['projects', { topLevelOnly }],
+    queryFn: () => projectsApi.getAll(topLevelOnly),
   });
 
   const createMutation = useMutation({

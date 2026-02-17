@@ -75,6 +75,11 @@ PROFILE_SKILL_PROMPTS: dict[str, str] = {
   - `list_projects` で対象確認
   - `list_project_members` / `list_project_invitations` で重複確認
   - `invite_project_member` を実行
+- プロジェクト親子関係:
+  - 子プロジェクトとして作成: `create_project` で `parent_project_id` を指定
+  - 既存プロジェクトを親に紐付け: `update_project` で `parent_project_id` を設定
+  - 紐付け解除: `update_project` で `parent_project_id` を空文字に設定
+  - 親プロジェクトのオーナー以外が紐付ける場合、承認リクエストが送信される
 - プロジェクト文脈利用:
   - タスクを作る前に必要なら `load_project_context` を読む。
   - 週次要約が必要なら `create_project_summary`。
