@@ -565,7 +565,15 @@ export function useChat() {
               for (const key of [
                 ['tasks'], ['subtasks'], ['top3'], ['today-tasks'], ['schedule'],
                 ['task-detail'], ['task-assignments'],
-                ['projects'], ['project'], ['meeting-agendas'],
+                ['projects'], ['project'],
+                ['project-children'], ['project-link-requests'],
+                ['incoming-link-requests'], ['project-achievements'],
+                ['meetings'],
+                ['meeting-agendas'], ['agenda-items'], ['task-agendas'],
+                ['meeting-session'], ['meeting-sessions'],
+                ['phases'],
+                ['recurring-tasks'],
+                ['achievements'],
               ]) {
                 queryClient.invalidateQueries({ queryKey: key });
               }
