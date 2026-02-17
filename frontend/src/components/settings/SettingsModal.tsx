@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   FaTimes,
-  FaMoon,
-  FaSun,
   FaBell,
   FaUser,
   FaClock,
@@ -36,9 +34,20 @@ import { ApiError } from '../../api/client';
 import { authApi } from '../../api/authApi';
 import { useScheduleSettings } from '../../hooks/useScheduleSettings';
 import { useHeartbeatSettings } from '../../hooks/useHeartbeatSettings';
+import { GeneralTab } from './tabs/GeneralTab';
+import { WorkHoursTab } from './tabs/WorkHoursTab';
+import { NotificationTab } from './tabs/NotificationTab';
+import { IntegrationTab } from './tabs/IntegrationTab';
 import './SettingsModal.css';
 
-const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'];
+type SettingsTab = 'general' | 'workHours' | 'notifications' | 'integration';
+
+const SETTINGS_TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
+  { id: 'general', label: '一般', icon: <FaUser /> },
+  { id: 'workHours', label: '勤務時間', icon: <FaClock /> },
+  { id: 'notifications', label: '通知設定', icon: <FaBell /> },
+  { id: 'integration', label: '連携', icon: <FaLink /> },
+];
 
 const createWorkday = (value: Partial<WorkdayHours>) => ({
   enabled: value.enabled ?? true,
@@ -102,11 +111,6 @@ const clampNumber = (value: number, min: number, max: number) => (
   Math.min(max, Math.max(min, value))
 );
 
-const formatCapacityHours = (hours: number) => {
-  const rounded = Math.round(hours * 10) / 10;
-  return `${rounded}h`;
-};
-
 const getErrorMessage = (error: unknown, fallback: string) => {
   if (error instanceof ApiError) {
     const data = error.data as { detail?: string } | null;
@@ -145,6 +149,11 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const { data: heartbeatSettings } = useHeartbeatSettings();
   const authMode = (import.meta.env.VITE_AUTH_MODE as string | undefined)?.toLowerCase() || '';
   const isLocalAuth = authMode === 'local';
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+
+  // Account state
   const [userName, setUserName] = useState('');
   const [userLastName, setUserLastName] = useState('');
   const [userFirstName, setUserFirstName] = useState('');
@@ -156,6 +165,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const [accountSuccess, setAccountSuccess] = useState<string | null>(null);
   const [isUpdatingAccount, setIsUpdatingAccount] = useState(false);
   const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
+
+  // Work hours state
   const [dailyBufferHours, setDailyBufferHours] = useState(() =>
     parseStoredNumber(userStorage.get('dailyBufferHours'), DEFAULT_DAILY_BUFFER_HOURS)
   );
@@ -175,6 +186,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const [bulkBreakEnabled, setBulkBreakEnabled] = useState(true);
   const [bulkBreakStart, setBulkBreakStart] = useState(DEFAULT_BREAK_START);
   const [bulkBreakEnd, setBulkBreakEnd] = useState(DEFAULT_BREAK_END);
+
+  // Notification state
   const [quietHoursEnabled, setQuietHoursEnabled] = useState(
     () => userStorage.get('quietHoursEnabled') === 'true'
   );
@@ -185,7 +198,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     () => userStorage.get('quietHoursEnd') || '07:00'
   );
   const [enableWeeklyMeetingReminder, setEnableWeeklyMeetingReminder] = useState(false);
-  const [hasSyncedScheduleSettings, setHasSyncedScheduleSettings] = useState(false);
+
+  // Heartbeat state
   const [heartbeatEnabled, setHeartbeatEnabled] = useState(true);
   const [heartbeatLimit, setHeartbeatLimit] = useState(2);
   const [heartbeatWindowStart, setHeartbeatWindowStart] = useState('09:00');
@@ -193,13 +207,23 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const [heartbeatIntensity, setHeartbeatIntensity] = useState<HeartbeatIntensity>('standard');
   const [heartbeatDailyCapacity, setHeartbeatDailyCapacity] = useState(60);
   const [heartbeatCooldownHours, setHeartbeatCooldownHours] = useState(24);
+  const [dailyCapacityEnabled, setDailyCapacityEnabled] = useState(
+    () => userStorage.get('dailyCapacityEnabled') === 'true'
+  );
+
+  // Sync flags
+  const [hasSyncedScheduleSettings, setHasSyncedScheduleSettings] = useState(false);
   const [hasSyncedHeartbeatSettings, setHasSyncedHeartbeatSettings] = useState(false);
+
+  // Native link state
   const [nativeLinkCode, setNativeLinkCode] = useState('');
   const [nativeLinkExpiresAt, setNativeLinkExpiresAt] = useState<string | null>(null);
   const [nativeLinkError, setNativeLinkError] = useState<string | null>(null);
   const [isGeneratingNativeLink, setIsGeneratingNativeLink] = useState(false);
   const [nativeLinkCopied, setNativeLinkCopied] = useState(false);
   const [nativeLinkTick, setNativeLinkTick] = useState(() => Date.now());
+
+  // --- Sync effects ---
 
   useEffect(() => {
     if (!currentUser) return;
@@ -238,6 +262,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     setHeartbeatDailyCapacity(heartbeatSettings.daily_capacity_per_task_minutes);
     setHeartbeatCooldownHours(heartbeatSettings.cooldown_hours_per_task);
   }, [heartbeatSettings, hasSyncedHeartbeatSettings]);
+
+  // --- Auto-save effects ---
 
   useEffect(() => {
     if (!hasSyncedScheduleSettings) return;
@@ -293,11 +319,146 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     return () => window.clearInterval(timer);
   }, [nativeLinkExpiresAt]);
 
-  const handleUserNameChange = (value: string) => {
-    setUserName(value);
+  // --- Handlers: Account ---
+
+  const clearAccountMessages = () => {
     setAccountError(null);
     setAccountSuccess(null);
   };
+
+  const handleUserNameChange = (value: string) => {
+    setUserName(value);
+    clearAccountMessages();
+  };
+
+  const handleUserLastNameChange = (value: string) => {
+    setUserLastName(value);
+    clearAccountMessages();
+  };
+
+  const handleUserFirstNameChange = (value: string) => {
+    setUserFirstName(value);
+    clearAccountMessages();
+  };
+
+  const handleUserEmailChange = (value: string) => {
+    setUserEmail(value);
+    clearAccountMessages();
+  };
+
+  const handleUserTimezoneChange = (value: string) => {
+    setUserTimezone(value);
+    clearAccountMessages();
+  };
+
+  const handleNewPasswordChange = (value: string) => {
+    setNewPassword(value);
+    clearAccountMessages();
+  };
+
+  const handleCurrentPasswordChange = (value: string) => {
+    setCurrentPassword(value);
+    setAccountError(null);
+  };
+
+  const hasAccountChanges = () => {
+    const nextUserName = userName.trim();
+    const nextFirstName = userFirstName.trim();
+    const nextLastName = userLastName.trim();
+    const nextEmail = userEmail.trim();
+    const currentUserName = currentUser?.username || currentUser?.display_name || '';
+    const currentUserFirstName = currentUser?.first_name || '';
+    const currentUserLastName = currentUser?.last_name || '';
+    const currentUserEmail = currentUser?.email || '';
+    const currentUserTimezone = currentUser?.timezone || getStoredTimezone();
+    const currentEnableWeeklyMeetingReminder = currentUser?.enable_weekly_meeting_reminder ?? false;
+
+    return (
+      (nextUserName && nextUserName !== currentUserName) ||
+      (nextLastName !== currentUserLastName) ||
+      (nextFirstName !== currentUserFirstName) ||
+      (nextEmail && nextEmail !== currentUserEmail) ||
+      newPassword.trim() ||
+      (userTimezone && userTimezone !== currentUserTimezone) ||
+      (enableWeeklyMeetingReminder !== currentEnableWeeklyMeetingReminder)
+    );
+  };
+
+  const handleAccountSaveClick = () => {
+    clearAccountMessages();
+    if (!isLocalAuth) {
+      setAccountError('ローカル認証のみ更新できます。');
+      return;
+    }
+    if (!hasAccountChanges()) {
+      setAccountError('変更点がありません。');
+      return;
+    }
+    setShowPasswordConfirm(true);
+  };
+
+  const handlePasswordConfirmCancel = () => {
+    setShowPasswordConfirm(false);
+    setCurrentPassword('');
+    setAccountError(null);
+  };
+
+  const handleAccountSave = async () => {
+    clearAccountMessages();
+    if (!currentPassword.trim()) {
+      setAccountError('現在のパスワードを入力してください。');
+      return;
+    }
+
+    const payload: {
+      current_password: string;
+      username?: string;
+      email?: string;
+      first_name?: string;
+      last_name?: string;
+      new_password?: string;
+      timezone?: string;
+      enable_weekly_meeting_reminder?: boolean;
+    } = { current_password: currentPassword };
+
+    const nextUserName = userName.trim();
+    const nextFirstName = userFirstName.trim();
+    const nextLastName = userLastName.trim();
+    const nextEmail = userEmail.trim();
+    const currentUserName = currentUser?.username || currentUser?.display_name || '';
+    const currentUserFirstName = currentUser?.first_name || '';
+    const currentUserLastName = currentUser?.last_name || '';
+    const currentUserEmail = currentUser?.email || '';
+    const currentUserTimezone = currentUser?.timezone || getStoredTimezone();
+    const currentEnableWeeklyMeetingReminder = currentUser?.enable_weekly_meeting_reminder ?? false;
+
+    if (nextUserName && nextUserName !== currentUserName) payload.username = nextUserName;
+    if (nextLastName !== currentUserLastName) payload.last_name = nextLastName;
+    if (nextFirstName !== currentUserFirstName) payload.first_name = nextFirstName;
+    if (nextEmail && nextEmail !== currentUserEmail) payload.email = nextEmail;
+    if (newPassword.trim()) payload.new_password = newPassword.trim();
+    if (userTimezone && userTimezone !== currentUserTimezone) payload.timezone = userTimezone;
+    if (enableWeeklyMeetingReminder !== currentEnableWeeklyMeetingReminder) {
+      payload.enable_weekly_meeting_reminder = enableWeeklyMeetingReminder;
+    }
+
+    setIsUpdatingAccount(true);
+    try {
+      await usersApi.updateCredentials(payload);
+      if (payload.timezone) setStoredTimezone(payload.timezone);
+      setAccountSuccess('更新しました。');
+      setCurrentPassword('');
+      setNewPassword('');
+      setShowPasswordConfirm(false);
+      queryClient.invalidateQueries({ queryKey: ['current-user'] });
+    } catch (error) {
+      setAccountError(getErrorMessage(error, '更新に失敗しました。'));
+    } finally {
+      setIsUpdatingAccount(false);
+    }
+  };
+
+  // --- Handlers: Work Hours ---
 
   const persistWeeklyWorkHours = (next: WorkdayHours[]) => {
     setWeeklyWorkHours(next);
@@ -315,8 +476,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const updateWorkday = (index: number, updater: (value: WorkdayHours) => WorkdayHours) => {
     const next = weeklyWorkHours.map((day, dayIndex) => {
       if (dayIndex !== index) return day;
-      const updated = updater(day);
-      return cloneWorkday(updated);
+      return cloneWorkday(updater(day));
     });
     persistWeeklyWorkHours(next);
     markWorkHoursCustom();
@@ -372,9 +532,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     setWorkHoursTemplateId(templateId);
     userStorage.set('workHoursTemplateId', templateId);
     const template = WORK_HOURS_TEMPLATES.find(item => item.id === templateId);
-    if (!template) {
-      return;
-    }
+    if (!template) return;
     persistWeeklyWorkHours(template.hours);
   };
 
@@ -400,6 +558,13 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     persistWeeklyWorkHours(next);
     markWorkHoursCustom();
   };
+
+  const handleDailyCapacityEnabledChange = (value: boolean) => {
+    setDailyCapacityEnabled(value);
+    userStorage.set('dailyCapacityEnabled', String(value));
+  };
+
+  // --- Handlers: Notifications ---
 
   const handleQuietHoursToggle = () => {
     const newValue = !quietHoursEnabled;
@@ -438,126 +603,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const handleWeeklyMeetingReminderToggle = () => {
     const newValue = !enableWeeklyMeetingReminder;
     setEnableWeeklyMeetingReminder(newValue);
-    setAccountError(null);
-    setAccountSuccess(null);
+    clearAccountMessages();
   };
 
-  const hasAccountChanges = () => {
-    const nextUserName = userName.trim();
-    const nextFirstName = userFirstName.trim();
-    const nextLastName = userLastName.trim();
-    const nextEmail = userEmail.trim();
-    const currentUserName = currentUser?.username || currentUser?.display_name || '';
-    const currentUserFirstName = currentUser?.first_name || '';
-    const currentUserLastName = currentUser?.last_name || '';
-    const currentUserEmail = currentUser?.email || '';
-    const currentUserTimezone = currentUser?.timezone || getStoredTimezone();
-    const currentEnableWeeklyMeetingReminder = currentUser?.enable_weekly_meeting_reminder ?? false;
-
-    return (
-      (nextUserName && nextUserName !== currentUserName) ||
-      (nextLastName !== currentUserLastName) ||
-      (nextFirstName !== currentUserFirstName) ||
-      (nextEmail && nextEmail !== currentUserEmail) ||
-      newPassword.trim() ||
-      (userTimezone && userTimezone !== currentUserTimezone) ||
-      (enableWeeklyMeetingReminder !== currentEnableWeeklyMeetingReminder)
-    );
-  };
-
-  const handleAccountSaveClick = () => {
-    setAccountError(null);
-    setAccountSuccess(null);
-
-    if (!isLocalAuth) {
-      setAccountError('ローカル認証のみ更新できます。');
-      return;
-    }
-
-    if (!hasAccountChanges()) {
-      setAccountError('変更点がありません。');
-      return;
-    }
-
-    setShowPasswordConfirm(true);
-  };
-
-  const handlePasswordConfirmCancel = () => {
-    setShowPasswordConfirm(false);
-    setCurrentPassword('');
-    setAccountError(null);
-  };
-
-  const handleAccountSave = async () => {
-    setAccountError(null);
-    setAccountSuccess(null);
-
-    if (!currentPassword.trim()) {
-      setAccountError('現在のパスワードを入力してください。');
-      return;
-    }
-
-    const payload: {
-      current_password: string;
-      username?: string;
-      email?: string;
-      first_name?: string;
-      last_name?: string;
-      new_password?: string;
-      timezone?: string;
-      enable_weekly_meeting_reminder?: boolean;
-    } = { current_password: currentPassword };
-
-    const nextUserName = userName.trim();
-    const nextFirstName = userFirstName.trim();
-    const nextLastName = userLastName.trim();
-    const nextEmail = userEmail.trim();
-    const currentUserName = currentUser?.username || currentUser?.display_name || '';
-    const currentUserFirstName = currentUser?.first_name || '';
-    const currentUserLastName = currentUser?.last_name || '';
-    const currentUserEmail = currentUser?.email || '';
-    const currentUserTimezone = currentUser?.timezone || getStoredTimezone();
-    const currentEnableWeeklyMeetingReminder = currentUser?.enable_weekly_meeting_reminder ?? false;
-
-    if (nextUserName && nextUserName !== currentUserName) {
-      payload.username = nextUserName;
-    }
-    if (nextLastName !== currentUserLastName) {
-      payload.last_name = nextLastName;
-    }
-    if (nextFirstName !== currentUserFirstName) {
-      payload.first_name = nextFirstName;
-    }
-    if (nextEmail && nextEmail !== currentUserEmail) {
-      payload.email = nextEmail;
-    }
-    if (newPassword.trim()) {
-      payload.new_password = newPassword.trim();
-    }
-    if (userTimezone && userTimezone !== currentUserTimezone) {
-      payload.timezone = userTimezone;
-    }
-    if (enableWeeklyMeetingReminder !== currentEnableWeeklyMeetingReminder) {
-      payload.enable_weekly_meeting_reminder = enableWeeklyMeetingReminder;
-    }
-
-    setIsUpdatingAccount(true);
-    try {
-      await usersApi.updateCredentials(payload);
-      if (payload.timezone) {
-        setStoredTimezone(payload.timezone);
-      }
-      setAccountSuccess('更新しました。');
-      setCurrentPassword('');
-      setNewPassword('');
-      setShowPasswordConfirm(false);
-      queryClient.invalidateQueries({ queryKey: ['current-user'] });
-    } catch (error) {
-      setAccountError(getErrorMessage(error, '更新に失敗しました。'));
-    } finally {
-      setIsUpdatingAccount(false);
-    }
-  };
+  // --- Handlers: Native link ---
 
   const handleGenerateNativeLink = async () => {
     setNativeLinkError(null);
@@ -600,7 +649,119 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     [nativeLinkExpiresAt, nativeLinkTick],
   );
 
-  const heartbeatControlsDisabled = !heartbeatEnabled;
+  // --- Render ---
+
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 'general':
+        return (
+          <GeneralTab
+            userName={userName}
+            userLastName={userLastName}
+            userFirstName={userFirstName}
+            userEmail={userEmail}
+            userTimezone={userTimezone}
+            newPassword={newPassword}
+            currentPassword={currentPassword}
+            accountError={accountError}
+            accountSuccess={accountSuccess}
+            isUpdatingAccount={isUpdatingAccount}
+            showPasswordConfirm={showPasswordConfirm}
+            isLocalAuth={isLocalAuth}
+            onUserNameChange={handleUserNameChange}
+            onUserLastNameChange={handleUserLastNameChange}
+            onUserFirstNameChange={handleUserFirstNameChange}
+            onUserEmailChange={handleUserEmailChange}
+            onUserTimezoneChange={handleUserTimezoneChange}
+            onNewPasswordChange={handleNewPasswordChange}
+            onCurrentPasswordChange={handleCurrentPasswordChange}
+            onAccountSaveClick={handleAccountSaveClick}
+            onPasswordConfirmCancel={handlePasswordConfirmCancel}
+            onAccountSave={handleAccountSave}
+            theme={theme}
+            onToggleTheme={toggleTheme}
+          />
+        );
+      case 'workHours':
+        return (
+          <WorkHoursTab
+            workHoursTemplateId={workHoursTemplateId}
+            workHoursTemplates={WORK_HOURS_TEMPLATES}
+            onWorkHoursTemplateChange={handleWorkHoursTemplateChange}
+            bulkTarget={bulkTarget}
+            bulkEnabled={bulkEnabled}
+            bulkStart={bulkStart}
+            bulkEnd={bulkEnd}
+            bulkBreakEnabled={bulkBreakEnabled}
+            bulkBreakStart={bulkBreakStart}
+            bulkBreakEnd={bulkBreakEnd}
+            onBulkTargetChange={setBulkTarget}
+            onBulkEnabledChange={setBulkEnabled}
+            onBulkStartChange={setBulkStart}
+            onBulkEndChange={setBulkEnd}
+            onBulkBreakEnabledChange={setBulkBreakEnabled}
+            onBulkBreakStartChange={setBulkBreakStart}
+            onBulkBreakEndChange={setBulkBreakEnd}
+            onBulkApply={handleBulkApply}
+            weeklyWorkHours={weeklyWorkHours}
+            onWorkdayToggle={handleWorkdayToggle}
+            onWorkdayTimeChange={handleWorkdayTimeChange}
+            onBreakTimeChange={handleBreakTimeChange}
+            onAddBreak={handleAddBreak}
+            onRemoveBreak={handleRemoveBreak}
+            dailyBufferHours={dailyBufferHours}
+            breakAfterTaskMinutes={breakAfterTaskMinutes}
+            onDailyBufferChange={handleDailyBufferChange}
+            onBreakAfterTaskMinutesChange={handleBreakAfterTaskMinutesChange}
+            dailyCapacityEnabled={dailyCapacityEnabled}
+            heartbeatDailyCapacity={heartbeatDailyCapacity}
+            onDailyCapacityEnabledChange={handleDailyCapacityEnabledChange}
+            onHeartbeatDailyCapacityChange={handleHeartbeatDailyCapacityChange}
+          />
+        );
+      case 'notifications':
+        return (
+          <NotificationTab
+            quietHoursEnabled={quietHoursEnabled}
+            quietHoursStart={quietHoursStart}
+            quietHoursEnd={quietHoursEnd}
+            onQuietHoursToggle={handleQuietHoursToggle}
+            onQuietHoursStartChange={handleQuietHoursStartChange}
+            onQuietHoursEndChange={handleQuietHoursEndChange}
+            heartbeatEnabled={heartbeatEnabled}
+            heartbeatLimit={heartbeatLimit}
+            heartbeatWindowStart={heartbeatWindowStart}
+            heartbeatWindowEnd={heartbeatWindowEnd}
+            heartbeatIntensity={heartbeatIntensity}
+            heartbeatCooldownHours={heartbeatCooldownHours}
+            onHeartbeatEnabledToggle={() => setHeartbeatEnabled(prev => !prev)}
+            onHeartbeatLimitChange={handleHeartbeatLimitChange}
+            onHeartbeatWindowStartChange={setHeartbeatWindowStart}
+            onHeartbeatWindowEndChange={setHeartbeatWindowEnd}
+            onHeartbeatIntensityChange={setHeartbeatIntensity}
+            onHeartbeatCooldownChange={handleHeartbeatCooldownChange}
+            enableWeeklyMeetingReminder={enableWeeklyMeetingReminder}
+            onWeeklyMeetingReminderToggle={handleWeeklyMeetingReminderToggle}
+            isLocalAuth={isLocalAuth}
+            isUpdatingAccount={isUpdatingAccount}
+          />
+        );
+      case 'integration':
+        return (
+          <IntegrationTab
+            nativeLinkCode={nativeLinkCode}
+            nativeLinkExpiresAt={nativeLinkExpiresAt}
+            nativeLinkExpired={nativeLinkExpired}
+            nativeLinkRemaining={nativeLinkRemaining}
+            nativeLinkError={nativeLinkError}
+            nativeLinkCopied={nativeLinkCopied}
+            isGeneratingNativeLink={isGeneratingNativeLink}
+            onGenerateNativeLink={handleGenerateNativeLink}
+            onCopyNativeLink={handleCopyNativeLink}
+          />
+        );
+    }
+  };
 
   return (
     <div className="modal-overlay settings-modal-overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -621,704 +782,22 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           </button>
         </div>
 
-        <div className="settings-modal-content">
-          <div className="settings-section">
-            <h3 className="section-title">
-              <FaUser />
-              ユーザー設定
-            </h3>
-            <div className="setting-item">
-              <label htmlFor="userName" className="setting-label">
-                ユーザー名（ログインID）
-              </label>
-              <input
-                type="text"
-                id="userName"
-                value={userName}
-                onChange={(event) => handleUserNameChange(event.target.value)}
-                className="setting-input"
-                placeholder="ユーザー名"
-                disabled={!isLocalAuth || isUpdatingAccount}
-              />
-              <p className="setting-description">
-                登録時のユーザー名を変更します（ローカル認証のみ）。
-              </p>
-            </div>
-            <div className="setting-item">
-              <label htmlFor="userLastName" className="setting-label">
-                姓（任意）
-              </label>
-              <input
-                type="text"
-                id="userLastName"
-                value={userLastName}
-                onChange={(event) => {
-                  setUserLastName(event.target.value);
-                  setAccountError(null);
-                  setAccountSuccess(null);
-                }}
-                className="setting-input"
-                placeholder="Yamada"
-                disabled={!isLocalAuth || isUpdatingAccount}
-              />
-              <label htmlFor="userFirstName" className="setting-label">
-                名（任意）
-              </label>
-              <input
-                type="text"
-                id="userFirstName"
-                value={userFirstName}
-                onChange={(event) => {
-                  setUserFirstName(event.target.value);
-                  setAccountError(null);
-                  setAccountSuccess(null);
-                }}
-                className="setting-input"
-                placeholder="Taro"
-                disabled={!isLocalAuth || isUpdatingAccount}
-              />
-            </div>
-            <div className="setting-item">
-              <label htmlFor="userEmail" className="setting-label">
-                メールアドレス
-              </label>
-              <input
-                type="email"
-                id="userEmail"
-                value={userEmail}
-                onChange={(event) => {
-                  setUserEmail(event.target.value);
-                  setAccountError(null);
-                  setAccountSuccess(null);
-                }}
-                className="setting-input"
-                placeholder="user@example.com"
-                disabled={!isLocalAuth || isUpdatingAccount}
-              />
-            </div>
-            <div className="setting-item">
-              <label htmlFor="newPassword" className="setting-label">
-                新しいパスワード（任意）
-              </label>
-              <input
-                type="password"
-                id="newPassword"
-                value={newPassword}
-                onChange={(event) => {
-                  setNewPassword(event.target.value);
-                  setAccountError(null);
-                  setAccountSuccess(null);
-                }}
-                className="setting-input"
-                placeholder="********"
-                disabled={!isLocalAuth || isUpdatingAccount}
-              />
-            </div>
-            <div className="setting-item">
-              <label htmlFor="userTimezone" className="setting-label">
-                タイムゾーン
-              </label>
-              <select
-                id="userTimezone"
-                value={userTimezone}
-                onChange={(event) => {
-                  setUserTimezone(event.target.value);
-                  setAccountError(null);
-                  setAccountSuccess(null);
-                }}
-                className="setting-select"
-                disabled={!isLocalAuth || isUpdatingAccount}
+        <div className="settings-modal-body">
+          <nav className="settings-sidebar">
+            {SETTINGS_TABS.map(tab => (
+              <button
+                key={tab.id}
+                className={`settings-sidebar-item ${activeTab === tab.id ? 'active' : ''}`}
+                onClick={() => setActiveTab(tab.id)}
               >
-                <option value="Asia/Tokyo">日本 (Asia/Tokyo)</option>
-                <option value="America/New_York">ニューヨーク (America/New_York)</option>
-                <option value="America/Los_Angeles">ロサンゼルス (America/Los_Angeles)</option>
-                <option value="Europe/London">ロンドン (Europe/London)</option>
-                <option value="Europe/Paris">パリ (Europe/Paris)</option>
-                <option value="Asia/Shanghai">上海 (Asia/Shanghai)</option>
-                <option value="Asia/Seoul">ソウル (Asia/Seoul)</option>
-                <option value="Australia/Sydney">シドニー (Australia/Sydney)</option>
-              </select>
-              <p className="setting-description">
-                日付と時刻の表示に使用するタイムゾーンです。
-              </p>
-            </div>
-            <div className="setting-item">
-              {showPasswordConfirm ? (
-                <div className="password-confirm-section">
-                  <label htmlFor="currentPassword" className="setting-label">
-                    現在のパスワードを入力して確認
-                  </label>
-                  <input
-                    type="password"
-                    id="currentPassword"
-                    value={currentPassword}
-                    onChange={(event) => {
-                      setCurrentPassword(event.target.value);
-                      setAccountError(null);
-                    }}
-                    className="setting-input"
-                    placeholder="現在のパスワード"
-                    disabled={isUpdatingAccount}
-                    autoFocus
-                  />
-                  <div className="password-confirm-actions">
-                    <button
-                      type="button"
-                      className="setting-action-btn secondary"
-                      onClick={handlePasswordConfirmCancel}
-                      disabled={isUpdatingAccount}
-                    >
-                      キャンセル
-                    </button>
-                    <button
-                      type="button"
-                      className="setting-action-btn"
-                      onClick={handleAccountSave}
-                      disabled={isUpdatingAccount}
-                    >
-                      {isUpdatingAccount ? '保存中...' : '確認して保存'}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  className="setting-action-btn"
-                  onClick={handleAccountSaveClick}
-                  disabled={!isLocalAuth || isUpdatingAccount}
-                >
-                  変更を保存
-                </button>
-              )}
-              {!isLocalAuth ? (
-                <p className="setting-description">
-                  OIDC/外部認証ではアカウント情報を変更できません。
-                </p>
-              ) : null}
-              {accountError ? (
-                <p className="setting-description setting-error">{accountError}</p>
-              ) : null}
-              {accountSuccess ? (
-                <p className="setting-description setting-success">{accountSuccess}</p>
-              ) : null}
-            </div>
-          </div>
+                <span className="settings-sidebar-icon">{tab.icon}</span>
+                <span className="settings-sidebar-label">{tab.label}</span>
+              </button>
+            ))}
+          </nav>
 
-          <div className="settings-section">
-            <h3 className="section-title">
-              <FaLink />
-              ネイティブ連携
-            </h3>
-            <div className="setting-item">
-              <span className="setting-label">ワンタイム連携コード</span>
-              <p className="setting-description">
-                Windowsネイティブアプリ側に貼り付けて連携します。コードは120秒で失効します。
-              </p>
-              <div className="native-link-actions-row">
-                <button
-                  type="button"
-                  className="setting-action-btn"
-                  onClick={handleGenerateNativeLink}
-                  disabled={isGeneratingNativeLink}
-                >
-                  {isGeneratingNativeLink ? '発行中...' : 'コードを発行'}
-                </button>
-                <button
-                  type="button"
-                  className="setting-action-btn secondary"
-                  onClick={handleCopyNativeLink}
-                  disabled={!nativeLinkCode || nativeLinkExpired}
-                >
-                  {nativeLinkCopied ? 'コピー済み' : 'コピー'}
-                </button>
-              </div>
-              <div className={`native-link-code-box ${nativeLinkExpired ? 'expired' : ''}`}>
-                {nativeLinkCode || '未発行'}
-              </div>
-              {nativeLinkExpiresAt && !nativeLinkExpired ? (
-                <p className="setting-description">
-                  期限まで {nativeLinkRemaining}
-                </p>
-              ) : null}
-              {nativeLinkExpiresAt && nativeLinkExpired ? (
-                <p className="setting-description">
-                  コードの期限が切れました。再発行してください。
-                </p>
-              ) : null}
-              {nativeLinkError ? (
-                <p className="setting-description setting-error">{nativeLinkError}</p>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="settings-section">
-            <h3 className="section-title">
-              <FaClock />
-              勤務時間
-            </h3>
-            <div className="setting-item">
-              <label htmlFor="workHoursTemplate" className="setting-label">
-                勤務時間テンプレート
-              </label>
-              <select
-                id="workHoursTemplate"
-                value={workHoursTemplateId}
-                onChange={(event) => handleWorkHoursTemplateChange(event.target.value)}
-                className="setting-select"
-              >
-                <option value="custom">カスタム</option>
-                {WORK_HOURS_TEMPLATES.map(template => (
-                  <option key={template.id} value={template.id}>
-                    {template.label}
-                  </option>
-                ))}
-              </select>
-              <p className="setting-description">
-                開始/終了と休憩をまとめて反映します。
-              </p>
-            </div>
-            <div className="setting-item">
-              <span className="setting-label">まとめて設定</span>
-              <div className="workhours-bulk">
-                <div className="workhours-bulk-row">
-                  <select
-                    value={bulkTarget}
-                    onChange={(event) => setBulkTarget(event.target.value as 'all' | 'weekdays' | 'weekends')}
-                    className="setting-select workhours-select"
-                  >
-                    <option value="all">全曜日</option>
-                    <option value="weekdays">平日</option>
-                    <option value="weekends">週末</option>
-                  </select>
-                  <label className="workhours-toggle">
-                    <input
-                      type="checkbox"
-                      checked={bulkEnabled}
-                      onChange={(event) => setBulkEnabled(event.target.checked)}
-                    />
-                    稼働する
-                  </label>
-                </div>
-                <div className="workhours-bulk-row">
-                  <div className="workhours-time-range">
-                    <input
-                      type="time"
-                      value={bulkStart}
-                      onChange={(event) => setBulkStart(event.target.value)}
-                      className="setting-input workhours-time-input"
-                      disabled={!bulkEnabled}
-                    />
-                    <span className="workhours-separator">-</span>
-                    <input
-                      type="time"
-                      value={bulkEnd}
-                      onChange={(event) => setBulkEnd(event.target.value)}
-                      className="setting-input workhours-time-input"
-                      disabled={!bulkEnabled}
-                    />
-                  </div>
-                  <label className="workhours-toggle">
-                    <input
-                      type="checkbox"
-                      checked={bulkBreakEnabled}
-                      onChange={(event) => setBulkBreakEnabled(event.target.checked)}
-                      disabled={!bulkEnabled}
-                    />
-                    休憩
-                  </label>
-                  <div className="workhours-time-range">
-                    <input
-                      type="time"
-                      value={bulkBreakStart}
-                      onChange={(event) => setBulkBreakStart(event.target.value)}
-                      className="setting-input workhours-time-input"
-                      disabled={!bulkEnabled || !bulkBreakEnabled}
-                    />
-                    <span className="workhours-separator">-</span>
-                    <input
-                      type="time"
-                      value={bulkBreakEnd}
-                      onChange={(event) => setBulkBreakEnd(event.target.value)}
-                      className="setting-input workhours-time-input"
-                      disabled={!bulkEnabled || !bulkBreakEnabled}
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    className="setting-action-btn secondary workhours-apply-btn"
-                    onClick={handleBulkApply}
-                  >
-                    適用
-                  </button>
-                </div>
-              </div>
-              <p className="setting-description">
-                曜日まとめて開始/終了と休憩を設定できます。
-              </p>
-            </div>
-            <div className="setting-item">
-              <span className="setting-label">曜日別の勤務時間</span>
-              <div className="workhours-grid">
-                {WEEKDAY_LABELS.map((label, index) => {
-                  const day = weeklyWorkHours[index] ?? DEFAULT_WEEKLY_WORK_HOURS[index];
-                  const capacityHours = computeWorkdayCapacityHours(day);
-                  return (
-                    <div
-                      key={label}
-                      className={`weekday-item workhours-item ${index === 0 ? 'sun' : ''} ${
-                        index === 6 ? 'sat' : ''
-                      }`}
-                    >
-                      <div className="workhours-day-row">
-                        <label className="workhours-toggle">
-                          <input
-                            type="checkbox"
-                            checked={day.enabled}
-                            onChange={() => handleWorkdayToggle(index)}
-                          />
-                          <span className="weekday-label">{label}</span>
-                        </label>
-                        <span className="workhours-capacity">
-                          {day.enabled ? formatCapacityHours(capacityHours) : '休み'}
-                        </span>
-                      </div>
-                      <div className="workhours-time-row">
-                        <input
-                          type="time"
-                          value={day.start}
-                          onChange={(event) => handleWorkdayTimeChange(index, 'start', event.target.value)}
-                          className="setting-input workhours-time-input"
-                          disabled={!day.enabled}
-                        />
-                        <span className="workhours-separator">-</span>
-                        <input
-                          type="time"
-                          value={day.end}
-                          onChange={(event) => handleWorkdayTimeChange(index, 'end', event.target.value)}
-                          className="setting-input workhours-time-input"
-                          disabled={!day.enabled}
-                        />
-                      </div>
-                      <div className="workhours-break-row">
-                        {day.breaks.length > 0 ? (
-                          <>
-                            <div className="workhours-time-range">
-                              <input
-                                type="time"
-                                value={day.breaks[0].start}
-                                onChange={(event) => handleBreakTimeChange(index, 'start', event.target.value)}
-                                className="setting-input workhours-time-input"
-                                disabled={!day.enabled}
-                              />
-                              <span className="workhours-separator">-</span>
-                              <input
-                                type="time"
-                                value={day.breaks[0].end}
-                                onChange={(event) => handleBreakTimeChange(index, 'end', event.target.value)}
-                                className="setting-input workhours-time-input"
-                                disabled={!day.enabled}
-                              />
-                            </div>
-                            <button
-                              type="button"
-                              className="workhours-link-btn"
-                              onClick={() => handleRemoveBreak(index)}
-                              disabled={!day.enabled}
-                            >
-                              休憩なし
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            type="button"
-                            className="workhours-link-btn"
-                            onClick={() => handleAddBreak(index)}
-                            disabled={!day.enabled}
-                          >
-                            休憩を追加
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <p className="setting-description">
-                1日の稼働時間は開始/終了と休憩から自動計算されます。
-              </p>
-            </div>
-            <div className="setting-item">
-              <label htmlFor="dailyBufferHours" className="setting-label">
-                バッファ時間（時間）
-              </label>
-              <input
-                type="number"
-                id="dailyBufferHours"
-                value={dailyBufferHours}
-                onChange={(event) => handleDailyBufferChange(event.target.value)}
-                className="setting-input capacity-input"
-                placeholder="1"
-                min="0"
-                max="24"
-                step="0.5"
-              />
-              <p className="setting-description">
-                稼働時間から差し引いて計算します。
-              </p>
-            </div>
-            <div className="setting-item">
-              <label htmlFor="breakAfterTaskMinutes" className="setting-label">
-                {'\u30bf\u30b9\u30af\u9593\u4f11\u61a9\uff08\u5206\uff09'}
-              </label>
-              <input
-                type="number"
-                id="breakAfterTaskMinutes"
-                value={breakAfterTaskMinutes}
-                onChange={(event) => handleBreakAfterTaskMinutesChange(event.target.value)}
-                className="setting-input capacity-input"
-                placeholder="5"
-                min="0"
-                max="60"
-                step="1"
-              />
-              <p className="setting-description">
-                {'\u30bf\u30b9\u30af\u7d42\u4e86\u3054\u3068\u306b\u6307\u5b9a\u5206\u306e\u7a7a\u767d\u3092\u5165\u308c\u307e\u3059'}
-              </p>
-            </div>
-          </div>
-
-
-          <div className="settings-section">
-            <h3 className="section-title">
-              {theme === 'dark' ? <FaMoon /> : <FaSun />}
-              テーマ
-            </h3>
-            <div className="setting-item">
-              <div className="setting-row">
-                <div className="setting-label-group">
-                  <span className="setting-label">ダークモード</span>
-                  <p className="setting-description">
-                    画面の配色をダークテーマに切り替えます。
-                  </p>
-                </div>
-                <button
-                  className={`toggle-btn ${theme === 'dark' ? 'active' : ''}`}
-                  onClick={toggleTheme}
-                >
-                  <span className="toggle-slider"></span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-
-          <div className="settings-section">
-            <h3 className="section-title">
-              <FaBell />
-              通知設定
-            </h3>
-            <div className="setting-item">
-              <div className="setting-row">
-                <div className="setting-label-group">
-                  <span className="setting-label">Quiet Hours（静かな時間）</span>
-                  <p className="setting-description">
-                    指定した時間帯は通知やリマインダーを無効化します。
-                  </p>
-                </div>
-                <button
-                  className={`toggle-btn ${quietHoursEnabled ? 'active' : ''}`}
-                  onClick={handleQuietHoursToggle}
-                >
-                  <span className="toggle-slider"></span>
-                </button>
-              </div>
-
-              {quietHoursEnabled && (
-                <div className="quiet-hours-config">
-                  <div className="time-input-group">
-                    <label htmlFor="quietHoursStart">開始時刻</label>
-                    <input
-                      type="time"
-                      id="quietHoursStart"
-                      value={quietHoursStart}
-                      onChange={(event) => handleQuietHoursStartChange(event.target.value)}
-                      className="setting-input"
-                    />
-                  </div>
-                  <span className="time-separator">〜</span>
-                  <div className="time-input-group">
-                    <label htmlFor="quietHoursEnd">終了時刻</label>
-                    <input
-                      type="time"
-                      id="quietHoursEnd"
-                      value={quietHoursEnd}
-                      onChange={(event) => handleQuietHoursEndChange(event.target.value)}
-                      className="setting-input"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="setting-item">
-              <div className="setting-row">
-                <div className="setting-label-group">
-                  <span className="setting-label">Heartbeat（やさしい確認）</span>
-                  <p className="setting-description">
-                    タスクの見落としを防ぐため、やさしく声かけします。
-                  </p>
-                </div>
-                <button
-                  className={`toggle-btn ${heartbeatEnabled ? 'active' : ''}`}
-                  onClick={() => setHeartbeatEnabled((prev) => !prev)}
-                >
-                  <span className="toggle-slider"></span>
-                </button>
-              </div>
-            </div>
-
-            <div className="setting-item">
-              <label htmlFor="heartbeatLimit" className="setting-label">
-                1日あたりの通知上限
-              </label>
-              <select
-                id="heartbeatLimit"
-                value={heartbeatLimit}
-                onChange={(event) => handleHeartbeatLimitChange(event.target.value)}
-                className="setting-select"
-                disabled={heartbeatControlsDisabled}
-              >
-                <option value={1}>1件</option>
-                <option value={2}>2件</option>
-                <option value={3}>3件</option>
-              </select>
-              <p className="setting-description">
-                1〜3件の範囲で調整できます。
-              </p>
-            </div>
-
-            <div className="setting-item">
-              <span className="setting-label">通知時間帯</span>
-              <div className="quiet-hours-config">
-                <div className="time-input-group">
-                  <label htmlFor="heartbeatWindowStart">開始時刻</label>
-                  <input
-                    type="time"
-                    id="heartbeatWindowStart"
-                    value={heartbeatWindowStart}
-                    onChange={(event) => setHeartbeatWindowStart(event.target.value)}
-                    className="setting-input"
-                    disabled={heartbeatControlsDisabled}
-                  />
-                </div>
-                <span className="time-separator">〜</span>
-                <div className="time-input-group">
-                  <label htmlFor="heartbeatWindowEnd">終了時刻</label>
-                  <input
-                    type="time"
-                    id="heartbeatWindowEnd"
-                    value={heartbeatWindowEnd}
-                    onChange={(event) => setHeartbeatWindowEnd(event.target.value)}
-                    className="setting-input"
-                    disabled={heartbeatControlsDisabled}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="setting-item">
-              <label htmlFor="heartbeatIntensity" className="setting-label">
-                声かけの強さ
-              </label>
-              <select
-                id="heartbeatIntensity"
-                value={heartbeatIntensity}
-                onChange={(event) => {
-                  setHeartbeatIntensity(event.target.value as HeartbeatIntensity);
-                }}
-                className="setting-select"
-                disabled={heartbeatControlsDisabled}
-              >
-                <option value="gentle">やさしめ</option>
-                <option value="standard">ふつう</option>
-                <option value="firm">しっかり</option>
-              </select>
-              <p className="setting-description">
-                伝え方のトーンを調整できます。
-              </p>
-            </div>
-
-            <div className="setting-item">
-              <label htmlFor="heartbeatDailyCapacity" className="setting-label">
-                1タスクあたりの1日作業目安（分）
-              </label>
-              <input
-                type="number"
-                id="heartbeatDailyCapacity"
-                value={heartbeatDailyCapacity}
-                onChange={(event) => handleHeartbeatDailyCapacityChange(event.target.value)}
-                className="setting-input capacity-input"
-                min="15"
-                max="480"
-                step="5"
-                disabled={heartbeatControlsDisabled}
-              />
-              <p className="setting-description">
-                期限までに必要な日数の目安計算に使います。
-              </p>
-            </div>
-
-            <div className="setting-item">
-              <label htmlFor="heartbeatCooldown" className="setting-label">
-                同じタスクへの通知間隔（時間）
-              </label>
-              <input
-                type="number"
-                id="heartbeatCooldown"
-                value={heartbeatCooldownHours}
-                onChange={(event) => handleHeartbeatCooldownChange(event.target.value)}
-                className="setting-input capacity-input"
-                min="1"
-                max="168"
-                step="1"
-                disabled={heartbeatControlsDisabled}
-              />
-              <p className="setting-description">
-                同じタスクへの声かけ頻度を抑えます。
-              </p>
-            </div>
-
-            <div className="setting-item">
-              <div className="setting-row">
-                <div className="setting-label-group">
-                  <span className="setting-label">週次会議登録リマインダー</span>
-                  <p className="setting-description">
-                    毎週月曜日に、会議情報の登録を促すタスクを自動作成します。
-                  </p>
-                </div>
-                <button
-                  className={`toggle-btn ${enableWeeklyMeetingReminder ? 'active' : ''}`}
-                  onClick={handleWeeklyMeetingReminderToggle}
-                  disabled={!isLocalAuth || isUpdatingAccount}
-                >
-                  <span className="toggle-slider"></span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="settings-section disabled">
-            <h3 className="section-title">言語設定（対応予定）</h3>
-            <div className="setting-item">
-              <label className="setting-label">表示言語</label>
-              <select className="setting-input" disabled>
-                <option>日本語</option>
-                <option>English</option>
-              </select>
-              <p className="setting-description">
-                アプリの表示言語を変更します（現在は日本語のみ）。
-              </p>
-            </div>
+          <div className="settings-modal-content">
+            {renderTabContent()}
           </div>
         </div>
       </motion.div>
