@@ -16,11 +16,15 @@
 
 /* Deadline status styles */
 .kanban-card.deadline-overdue {
-  border-left: 4px solid #ef4444;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(239, 68, 68, 0.03) 100%);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.05), 0 4px 24px -4px rgba(239, 68, 68, 0.12);
 }
 
 .kanban-card.deadline-approaching {
-  border-left: 4px solid #f59e0b;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(245, 158, 11, 0.03) 100%);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.05), 0 4px 24px -4px rgba(245, 158, 11, 0.12);
 }
 
 /* Date range badge deadline colors (normal card) */
@@ -66,6 +70,14 @@
 .kanban-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 12px 32px -8px rgba(148, 163, 184, 0.3);
+}
+
+.kanban-card.deadline-overdue:hover {
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.1), 0 12px 32px -8px rgba(239, 68, 68, 0.18);
+}
+
+.kanban-card.deadline-approaching:hover {
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.1), 0 12px 32px -8px rgba(245, 158, 11, 0.18);
 }
 
 /* When assignee dropdown is open, bring card to front */
@@ -445,6 +457,19 @@
 /* Dark mode adjustments for done cards */
 [data-theme="dark"] .kanban-card.done-compact {
   background: rgba(148, 163, 184, 0.05);
+}
+
+/* Dark mode adjustments for deadline cards */
+[data-theme="dark"] .kanban-card.deadline-overdue {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.12) 0%, rgba(239, 68, 68, 0.04) 100%);
+  border-color: rgba(239, 68, 68, 0.25);
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.08), 0 4px 24px -4px rgba(239, 68, 68, 0.2);
+}
+
+[data-theme="dark"] .kanban-card.deadline-approaching {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(245, 158, 11, 0.04) 100%);
+  border-color: rgba(245, 158, 11, 0.25);
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.08), 0 4px 24px -4px rgba(245, 158, 11, 0.2);
 }
 
 /* ========================================
