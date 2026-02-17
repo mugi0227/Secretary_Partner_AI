@@ -40,6 +40,8 @@ class SqliteProjectLinkRequestRepository(IProjectLinkRequestRepository):
             requested_by=orm.requested_by,
             status=ProjectLinkRequestStatus(orm.status),
             member_ids_to_add=orm.member_ids_to_add or [],
+            parent_approved=orm.parent_approved or False,
+            child_approved=orm.child_approved or False,
             created_at=orm.created_at,
             updated_at=orm.updated_at,
         )
@@ -113,6 +115,52 @@ class SqliteProjectLinkRequestRepository(IProjectLinkRequestRepository):
             await session.commit()
             await session.refresh(orm)
             return self._orm_to_model(orm)
+
+    async def approve_side(
+        self, request_id: UUID, side: str
+    ) -> ProjectLinkRequest:
+        """Approve one side (parent or child) of a link request."""
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(ProjectLinkRequestORM).where(
+                    ProjectLinkRequestORM.id == str(request_id)
+                )
+            )
+            orm = result.scalar_one_or_none()
+            if not orm:
+                raise NotFoundError(
+                    f"Project link request {request_id} not found"
+                )
+
+            if side == "parent":
+                orm.parent_approved = True
+            elif side == "child":
+                orm.child_approved = True
+
+            if orm.parent_approved and orm.child_approved:
+                orm.status = ProjectLinkRequestStatus.APPROVED.value
+
+            orm.updated_at = now_utc()
+            await session.commit()
+            await session.refresh(orm)
+            return self._orm_to_model(orm)
+
+    async def list_by_child(
+        self, child_project_id: UUID, status: Optional[str] = None
+    ) -> list[ProjectLinkRequest]:
+        """List project link requests by child project ID."""
+        async with self._session_factory() as session:
+            query = select(ProjectLinkRequestORM).where(
+                ProjectLinkRequestORM.child_project_id
+                == str(child_project_id)
+            )
+            if status:
+                query = query.where(ProjectLinkRequestORM.status == status)
+            query = query.order_by(ProjectLinkRequestORM.created_at.desc())
+            result = await session.execute(query)
+            return [
+                self._orm_to_model(orm) for orm in result.scalars().all()
+            ]
 
     async def reject(self, request_id: UUID) -> ProjectLinkRequest:
         """Reject a project link request."""

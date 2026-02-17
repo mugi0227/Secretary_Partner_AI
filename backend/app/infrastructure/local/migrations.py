@@ -174,6 +174,20 @@ async def run_migrations():
             await conn.execute(
                 text("CREATE INDEX idx_link_requests_parent ON project_link_requests(parent_project_id)")
             )
+        else:
+            # Add approval tracking columns if missing
+            link_req_cols_result = await conn.execute(
+                text("PRAGMA table_info(project_link_requests)")
+            )
+            link_req_columns = {row[1] for row in link_req_cols_result}
+            if "parent_approved" not in link_req_columns:
+                await conn.execute(
+                    text("ALTER TABLE project_link_requests ADD COLUMN parent_approved BOOLEAN DEFAULT 0")
+                )
+            if "child_approved" not in link_req_columns:
+                await conn.execute(
+                    text("ALTER TABLE project_link_requests ADD COLUMN child_approved BOOLEAN DEFAULT 0")
+                )
 
         # Check phases table for fixed_buffer_minutes
         phase_result = await conn.execute(text("PRAGMA table_info(phases)"))

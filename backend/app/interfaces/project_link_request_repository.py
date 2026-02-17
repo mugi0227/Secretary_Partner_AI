@@ -39,3 +39,16 @@ class IProjectLinkRequestRepository(ABC):
     @abstractmethod
     async def reject(self, request_id: UUID) -> ProjectLinkRequest:
         pass
+
+    @abstractmethod
+    async def approve_side(
+        self, request_id: UUID, side: str
+    ) -> ProjectLinkRequest:
+        """Approve one side (parent or child) of a link request."""
+        pass
+
+    @abstractmethod
+    async def list_by_child(
+        self, child_project_id: UUID, status: Optional[str] = None
+    ) -> list[ProjectLinkRequest]:
+        pass

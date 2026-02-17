@@ -374,6 +374,8 @@ export interface ProjectLinkRequest {
   requested_by: string;
   status: ProjectLinkRequestStatus;
   member_ids_to_add: string[];
+  parent_approved: boolean;
+  child_approved: boolean;
   created_at: string;
   updated_at: string;
 }

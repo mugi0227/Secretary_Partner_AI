@@ -129,6 +129,8 @@ class ProjectLinkRequestORM(Base):
     requested_by = Column(String(255), nullable=False)
     status = Column(String(20), default="PENDING")
     member_ids_to_add = Column(JSON, nullable=True)
+    parent_approved = Column(Boolean, default=False)
+    child_approved = Column(Boolean, default=False)
     created_at = Column(DateTime, default=now_utc)
     updated_at = Column(DateTime, default=now_utc, onupdate=now_utc)
 

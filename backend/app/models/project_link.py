@@ -32,6 +32,8 @@ class ProjectLinkRequest(BaseModel):
         default_factory=list,
         description="親プロジェクトに追加するメンバーID一覧",
     )
+    parent_approved: bool = Field(False, description="親プロジェクトオーナーが承認済み")
+    child_approved: bool = Field(False, description="子プロジェクトオーナーが承認済み")
     created_at: datetime
     updated_at: datetime
 

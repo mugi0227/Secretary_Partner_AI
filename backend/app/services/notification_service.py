@@ -203,6 +203,27 @@ async def notify_project_link_approved(
     ))
 
 
+async def notify_child_project_link_request(
+    notification_repo: INotificationRepository,
+    child_project_id: UUID,
+    child_project_name: str,
+    parent_project_name: str,
+    requester_display_name: str,
+    child_owner_user_id: str,
+):
+    """Notify child project owner about a link request."""
+    await notification_repo.create(NotificationCreate(
+        user_id=child_owner_user_id,
+        type=NotificationType.PROJECT_LINK_REQUEST,
+        title="プロジェクト紐付けリクエスト",
+        message=f"{requester_display_name or '匿名'}さんが「{child_project_name}」を「{parent_project_name}」の子プロジェクトにしたいとリクエストしました",
+        link_type="project",
+        link_id=str(child_project_id),
+        project_id=child_project_id,
+        project_name=child_project_name,
+    ))
+
+
 async def notify_project_link_rejected(
     notification_repo: INotificationRepository,
     child_project_id: UUID,

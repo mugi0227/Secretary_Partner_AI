@@ -3,7 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi } from '../../api/projects';
 import type { ProjectWithTaskCount, ProjectLinkRequest } from '../../api/types';
 import { useNavigate } from 'react-router-dom';
-import { FaPlus, FaWandMagicSparkles, FaSpinner, FaCheck, FaXmark, FaFolderOpen } from 'react-icons/fa6';
+import { FaPlus, FaWandMagicSparkles, FaSpinner, FaCheck, FaXmark, FaFolderOpen, FaLink } from 'react-icons/fa6';
+import { ProjectCreateModal } from './ProjectCreateModal';
+import { ChildProjectLinkModal } from './ChildProjectLinkModal';
 import './ChildProjectsSection.css';
 
 interface ChildProjectsSectionProps {
@@ -29,10 +31,10 @@ function ChildProjectCard({ project }: { project: ProjectWithTaskCount }) {
       <div className="child-project-info">
         <span
           className="child-project-name"
-          onClick={() => navigate(`/projects/${project.id}`)}
+          onClick={() => navigate(`/projects/${project.id}/v2`)}
           role="link"
           tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && navigate(`/projects/${project.id}`)}
+          onKeyDown={(e) => e.key === 'Enter' && navigate(`/projects/${project.id}/v2`)}
         >
           {project.name}
         </span>
@@ -90,6 +92,12 @@ function PendingRequestCard({
 
   const isProcessing = approveMutation.isPending || rejectMutation.isPending;
 
+  const approvalLabel = request.parent_approved && !request.child_approved
+    ? '子オーナー承認待ち'
+    : !request.parent_approved && request.child_approved
+    ? '親オーナー承認待ち'
+    : '承認待ち';
+
   return (
     <div className="child-project-card pending-request">
       <div className="child-project-info">
@@ -97,7 +105,7 @@ function PendingRequestCard({
           {childProject?.name || '読み込み中...'}
         </span>
         <div className="child-project-meta">
-          <span className="child-project-status-badge status-pending">承認待ち</span>
+          <span className="child-project-status-badge status-pending">{approvalLabel}</span>
         </div>
       </div>
       {isOwner && (
@@ -125,7 +133,10 @@ function PendingRequestCard({
 }
 
 export function ChildProjectsSection({ projectId, projectName }: ChildProjectsSectionProps) {
+  const queryClient = useQueryClient();
   const [showAddOptions, setShowAddOptions] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showLinkModal, setShowLinkModal] = useState(false);
 
   const {
     data: children,
@@ -200,7 +211,7 @@ export function ChildProjectsSection({ projectId, projectName }: ChildProjectsSe
           <button
             className="child-project-add-btn"
             onClick={() => {
-              // Placeholder: open ProjectCreateModal with parent_project_id
+              setShowCreateModal(true);
               setShowAddOptions(false);
             }}
           >
@@ -210,15 +221,53 @@ export function ChildProjectsSection({ projectId, projectName }: ChildProjectsSe
           <button
             className="child-project-add-btn"
             onClick={() => {
-              // Placeholder: trigger AI-based child project creation
+              const draftCard = {
+                type: 'task' as const,
+                title: '子プロジェクト作成',
+                info: [
+                  { label: '親プロジェクト', value: projectName },
+                ],
+                placeholder: '例: 3つのサブプロジェクトに分解して',
+                promptTemplate: `プロジェクト「${projectName}」(ID: ${projectId}) の子プロジェクトを作成して。\n\n追加の指示があれば以下に記入:\n{instruction}`,
+              };
+              const event = new CustomEvent('secretary:chat-open', { detail: { draftCard } });
+              window.dispatchEvent(event);
               setShowAddOptions(false);
             }}
           >
             <FaWandMagicSparkles className="btn-icon" />
             AIで作成
           </button>
+          <button
+            className="child-project-add-btn"
+            onClick={() => {
+              setShowLinkModal(true);
+              setShowAddOptions(false);
+            }}
+          >
+            <FaLink className="btn-icon" />
+            既存プロジェクトを紐付け
+          </button>
         </div>
       )}
+
+      {showCreateModal && (
+        <ProjectCreateModal
+          onClose={() => setShowCreateModal(false)}
+          onCreate={() => {
+            queryClient.invalidateQueries({ queryKey: ['project-children', projectId] });
+            setShowCreateModal(false);
+          }}
+          parentProjectId={projectId}
+        />
+      )}
+
+      <ChildProjectLinkModal
+        isOpen={showLinkModal}
+        onClose={() => setShowLinkModal(false)}
+        parentProjectId={projectId}
+        parentProjectName={projectName}
+      />
     </div>
   );
 }

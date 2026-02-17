@@ -1313,7 +1313,8 @@ async def create_link_request(
 ):
     """Create a link request to attach a child project to this parent project.
 
-    The parent project's owner will be notified and can approve/reject.
+    Both parent and child project owners must approve.
+    If the requester is an owner of one or both sides, that side is auto-approved.
     """
     if data.parent_project_id != project_id:
         raise HTTPException(
@@ -1334,18 +1335,60 @@ async def create_link_request(
             detail=f"子プロジェクト {data.child_project_id} が見つかりません",
         )
 
+    # Determine if requester is parent/child owner
+    parent_members = await member_repo.list_by_project(project_id)
+    is_parent_owner = parent.user_id == user.id or any(
+        m.member_user_id == user.id and m.role == ProjectRole.OWNER
+        for m in parent_members
+    )
+    child_members = await member_repo.list_by_project(data.child_project_id)
+    is_child_owner = child.user_id == user.id or any(
+        m.member_user_id == user.id and m.role == ProjectRole.OWNER
+        for m in child_members
+    )
+
     # Create link request
     link_request = await link_request_repo.create(data, requested_by=user.id)
 
-    # Notify parent project owner
-    await notify.notify_project_link_request(
-        notification_repo,
-        parent_project_id=parent.id,
-        parent_project_name=parent.name,
-        child_project_name=child.name,
-        requester_display_name=user.display_name or "",
-        owner_user_id=parent.user_id,
-    )
+    # Auto-approve requester's side(s)
+    if is_parent_owner:
+        link_request = await link_request_repo.approve_side(link_request.id, "parent")
+    if is_child_owner:
+        link_request = await link_request_repo.approve_side(link_request.id, "child")
+
+    # If both approved, perform the actual linking
+    if link_request.parent_approved and link_request.child_approved:
+        await repo.update(child.user_id, child.id, ProjectUpdate(parent_project_id=project_id))
+        for mid in data.member_ids_to_add:
+            try:
+                if not any(m.member_user_id == mid for m in parent_members):
+                    await member_repo.create(
+                        parent.user_id, project_id,
+                        ProjectMemberCreate(member_user_id=mid, role=ProjectRole.MEMBER),
+                    )
+            except Exception:
+                pass
+    else:
+        # Notify the owner(s) who still need to approve
+        display_name = user.display_name or ""
+        if not is_parent_owner:
+            await notify.notify_project_link_request(
+                notification_repo,
+                parent_project_id=parent.id,
+                parent_project_name=parent.name,
+                child_project_name=child.name,
+                requester_display_name=display_name,
+                owner_user_id=parent.user_id,
+            )
+        if not is_child_owner:
+            await notify.notify_child_project_link_request(
+                notification_repo,
+                child_project_id=child.id,
+                child_project_name=child.name,
+                parent_project_name=parent.name,
+                requester_display_name=display_name,
+                child_owner_user_id=child.user_id,
+            )
 
     return link_request
 
@@ -1374,23 +1417,7 @@ async def approve_link_request(
     link_request_repo: ProjectLinkRequestRepo,
     notification_repo: NotificationRepo,
 ):
-    """Approve a link request. Only parent project OWNER can approve."""
-    access = await require_project_action(
-        user, project_id, repo, member_repo, ProjectAction.PROJECT_UPDATE,
-    )
-
-    # Verify owner
-    parent_members = await member_repo.list_by_project(project_id)
-    is_owner = access.project.user_id == user.id or any(
-        m.member_user_id == user.id and m.role == ProjectRole.OWNER
-        for m in parent_members
-    )
-    if not is_owner:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="親プロジェクトのオーナーのみが承認できます",
-        )
-
+    """Approve a link request. Parent or child project OWNER can approve their side."""
     link_request = await link_request_repo.get(request_id)
     if not link_request or link_request.parent_project_id != project_id:
         raise HTTPException(
@@ -1403,43 +1430,63 @@ async def approve_link_request(
             detail="このリクエストは既に処理されています",
         )
 
-    # Set parent_project_id on child project
+    # Check which side(s) the user owns
+    parent_members = await member_repo.list_by_project(project_id)
+    parent_project = await repo.get_by_id(project_id)
+    is_parent_owner = (parent_project and parent_project.user_id == user.id) or any(
+        m.member_user_id == user.id and m.role == ProjectRole.OWNER
+        for m in parent_members
+    )
+
     child = await repo.get_by_id(link_request.child_project_id)
-    if child:
-        await repo.update(
-            child.user_id,
-            child.id,
-            ProjectUpdate(parent_project_id=project_id),
+    child_members = await member_repo.list_by_project(link_request.child_project_id)
+    is_child_owner = (child and child.user_id == user.id) or any(
+        m.member_user_id == user.id and m.role == ProjectRole.OWNER
+        for m in child_members
+    )
+
+    if not is_parent_owner and not is_child_owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="親または子プロジェクトのオーナーのみが承認できます",
         )
 
-    # Add selected members to parent project
-    for member_id in link_request.member_ids_to_add:
-        try:
-            existing_members = await member_repo.list_by_project(project_id)
-            if not any(m.member_user_id == member_id for m in existing_members):
-                await member_repo.create(
-                    access.owner_id,
-                    project_id,
-                    ProjectMemberCreate(member_user_id=member_id, role=ProjectRole.MEMBER),
-                )
-        except Exception:
-            pass  # Best-effort member addition
+    # Approve the side(s) the user owns
+    if is_parent_owner and not link_request.parent_approved:
+        link_request = await link_request_repo.approve_side(request_id, "parent")
+    if is_child_owner and not link_request.child_approved:
+        link_request = await link_request_repo.approve_side(request_id, "child")
 
-    # Approve the request
-    approved = await link_request_repo.approve(request_id)
+    # If both sides are now approved, perform the actual linking
+    if link_request.parent_approved and link_request.child_approved:
+        if child:
+            await repo.update(
+                child.user_id, child.id,
+                ProjectUpdate(parent_project_id=project_id),
+            )
+        # Add selected members to parent project
+        for member_id in link_request.member_ids_to_add:
+            try:
+                if not any(m.member_user_id == member_id for m in parent_members):
+                    await member_repo.create(
+                        parent_project.user_id if parent_project else user.id,
+                        project_id,
+                        ProjectMemberCreate(member_user_id=member_id, role=ProjectRole.MEMBER),
+                    )
+            except Exception:
+                pass
 
-    # Notify requester
-    parent = access.project
-    if child:
-        await notify.notify_project_link_approved(
-            notification_repo,
-            child_project_id=child.id,
-            parent_project_name=parent.name,
-            child_project_name=child.name,
-            requester_user_id=link_request.requested_by,
-        )
+        # Notify requester
+        if child and parent_project:
+            await notify.notify_project_link_approved(
+                notification_repo,
+                child_project_id=child.id,
+                parent_project_name=parent_project.name,
+                child_project_name=child.name,
+                requester_user_id=link_request.requested_by,
+            )
 
-    return approved
+    return link_request
 
 
 @router.post("/{project_id}/link-requests/{request_id}/reject", response_model=ProjectLinkRequest)
@@ -1452,23 +1499,7 @@ async def reject_link_request(
     link_request_repo: ProjectLinkRequestRepo,
     notification_repo: NotificationRepo,
 ):
-    """Reject a link request. Only parent project OWNER can reject."""
-    access = await require_project_action(
-        user, project_id, repo, member_repo, ProjectAction.PROJECT_UPDATE,
-    )
-
-    # Verify owner
-    parent_members = await member_repo.list_by_project(project_id)
-    is_owner = access.project.user_id == user.id or any(
-        m.member_user_id == user.id and m.role == ProjectRole.OWNER
-        for m in parent_members
-    )
-    if not is_owner:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="親プロジェクトのオーナーのみが却下できます",
-        )
-
+    """Reject a link request. Parent or child project OWNER can reject."""
     link_request = await link_request_repo.get(request_id)
     if not link_request or link_request.parent_project_id != project_id:
         raise HTTPException(
@@ -1481,17 +1512,35 @@ async def reject_link_request(
             detail="このリクエストは既に処理されています",
         )
 
-    # Reject the request
+    # Check that user is parent or child owner
+    parent_members = await member_repo.list_by_project(project_id)
+    parent_project = await repo.get_by_id(project_id)
+    is_parent_owner = (parent_project and parent_project.user_id == user.id) or any(
+        m.member_user_id == user.id and m.role == ProjectRole.OWNER
+        for m in parent_members
+    )
+
+    child = await repo.get_by_id(link_request.child_project_id)
+    child_members = await member_repo.list_by_project(link_request.child_project_id)
+    is_child_owner = (child and child.user_id == user.id) or any(
+        m.member_user_id == user.id and m.role == ProjectRole.OWNER
+        for m in child_members
+    )
+
+    if not is_parent_owner and not is_child_owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="親または子プロジェクトのオーナーのみが却下できます",
+        )
+
     rejected = await link_request_repo.reject(request_id)
 
     # Notify requester
-    parent = access.project
-    child = await repo.get_by_id(link_request.child_project_id)
-    if child:
+    if child and parent_project:
         await notify.notify_project_link_rejected(
             notification_repo,
             child_project_id=child.id,
-            parent_project_name=parent.name,
+            parent_project_name=parent_project.name,
             child_project_name=child.name,
             requester_user_id=link_request.requested_by,
         )
