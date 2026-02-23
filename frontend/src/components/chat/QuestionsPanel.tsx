@@ -68,13 +68,14 @@ export function QuestionsPanel({ questions, context, onSubmit, onCancel }: Quest
         }
 
         const selected = answer.selectedOptions.filter((o) => o !== OTHER_OPTION);
-        const hasOther = answer.selectedOptions.includes(OTHER_OPTION) && answer.otherText.trim();
+        const hasOtherSelected = answer.selectedOptions.includes(OTHER_OPTION);
+        const otherText = answer.otherText.trim();
 
         let answerText: string;
-        if (selected.length === 0 && hasOther) {
-          answerText = answer.otherText.trim();
-        } else if (selected.length > 0 && hasOther) {
-          answerText = [...selected, answer.otherText.trim()].join('、');
+        if (selected.length === 0 && hasOtherSelected) {
+          answerText = otherText || 'その他';
+        } else if (selected.length > 0 && hasOtherSelected) {
+          answerText = [...selected, otherText || 'その他'].join('、');
         } else if (selected.length > 0) {
           answerText = selected.join('、');
         } else {
@@ -133,7 +134,7 @@ export function QuestionsPanel({ questions, context, onSubmit, onCancel }: Quest
               <input
                 type="text"
                 className="questions-panel-simple-other-input"
-                placeholder="自由に入力してください"
+                placeholder="自由に入力（任意）"
                 value={simpleOtherText}
                 onChange={(e) => setSimpleOtherText(e.target.value)}
                 autoFocus
@@ -371,15 +372,11 @@ export function QuestionsPanel({ questions, context, onSubmit, onCancel }: Quest
           // Go to next question
           setCurrentIndex((prevIdx) => Math.min(questions.length - 1, prevIdx + 1));
         } else {
-          // Last question: check if all answered, then auto-submit
+          // Last question: auto-submit only when ALL questions answered
           const allValid = questions.every((q) => {
             const a = newAnswers[q.id];
             if (isFreeTextQuestion(q)) return a.freeText.trim().length > 0;
-            const hasSel = a.selectedOptions.length > 0;
-            const validOther = a.selectedOptions.includes(OTHER_OPTION)
-              ? a.otherText.trim().length > 0
-              : true;
-            return hasSel && validOther;
+            return a.selectedOptions.length > 0;
           });
           if (allValid) {
             onSubmit(formatAnswersAsText(newAnswers));
@@ -411,23 +408,24 @@ export function QuestionsPanel({ questions, context, onSubmit, onCancel }: Quest
     if (isFreeTextQuestion(currentQuestion)) {
       return answers[currentQuestion.id].freeText.trim().length > 0;
     }
-    const answer = answers[currentQuestion.id];
-    const hasSelection = answer.selectedOptions.length > 0;
-    const hasValidOther = answer.selectedOptions.includes(OTHER_OPTION)
-      ? answer.otherText.trim().length > 0
-      : true;
-    return hasSelection && hasValidOther;
+    return answers[currentQuestion.id].selectedOptions.length > 0;
   };
 
-  const isAllValid = questions.every((q) => {
+  const hasAnyAnswer = questions.some((q) => {
     const answer = answers[q.id];
     if (isFreeTextQuestion(q)) return answer.freeText.trim().length > 0;
-    const hasSelection = answer.selectedOptions.length > 0;
-    const hasValidOther = answer.selectedOptions.includes(OTHER_OPTION)
-      ? answer.otherText.trim().length > 0
-      : true;
-    return hasSelection && hasValidOther;
+    return answer.selectedOptions.length > 0;
   });
+
+  const answeredCount = questions.filter((q) => {
+    const answer = answers[q.id];
+    if (isFreeTextQuestion(q)) return answer.freeText.trim().length > 0;
+    return answer.selectedOptions.length > 0;
+  }).length;
+
+  const unansweredCount = questions.length - answeredCount;
+
+  const isAllAnswered = unansweredCount === 0;
 
   const currentAnswer = answers[currentQuestion.id];
   const currentIsFreeText = isFreeTextQuestion(currentQuestion);
@@ -448,9 +446,21 @@ export function QuestionsPanel({ questions, context, onSubmit, onCancel }: Quest
             >
               <FaChevronLeft />
             </button>
-            <span className="questions-panel-page">
-              {currentIndex + 1} / {questions.length}
-            </span>
+            <div className="questions-panel-dots">
+              {questions.map((q, i) => {
+                const answered = isFreeTextQuestion(q)
+                  ? answers[q.id].freeText.trim().length > 0
+                  : answers[q.id].selectedOptions.length > 0;
+                return (
+                  <button
+                    key={q.id}
+                    className={`questions-panel-dot${i === currentIndex ? ' questions-panel-dot--active' : ''}${answered ? ' questions-panel-dot--answered' : ''}`}
+                    onClick={() => setCurrentIndex(i)}
+                    title={`質問${i + 1}${answered ? '（回答済み）' : ''}`}
+                  />
+                );
+              })}
+            </div>
             <button
               className="questions-panel-nav-btn"
               onClick={handleNext}
@@ -486,7 +496,7 @@ export function QuestionsPanel({ questions, context, onSubmit, onCancel }: Quest
                 if (e.key === 'Enter' && currentAnswer.freeText.trim()) {
                   if (!isLastQuestion) {
                     handleNext();
-                  } else if (isAllValid) {
+                  } else if (hasAnyAnswer) {
                     handleSubmit();
                   }
                 }
@@ -524,7 +534,7 @@ export function QuestionsPanel({ questions, context, onSubmit, onCancel }: Quest
               <input
                 type="text"
                 className="questions-panel-other-input"
-                placeholder="自由に入力してください"
+                placeholder="自由に入力（任意）"
                 value={currentAnswer.otherText}
                 onChange={(e) => handleOtherTextChange(currentQuestion.id, e.target.value)}
                 autoFocus
@@ -537,16 +547,20 @@ export function QuestionsPanel({ questions, context, onSubmit, onCancel }: Quest
       <div className="questions-panel-actions">
         {onCancel && (
           <button className="questions-panel-btn cancel" onClick={onCancel}>
-            スキップ
+            {hasAnyAnswer ? '回答を破棄してスキップ' : 'スキップ'}
           </button>
         )}
         <button
           className="questions-panel-btn submit"
           onClick={handleSubmit}
-          disabled={!isAllValid}
-          title={!isAllValid ? '全ての質問に回答してください' : undefined}
+          disabled={!hasAnyAnswer}
+          title={!hasAnyAnswer ? '少なくとも1つの質問に回答してください' : undefined}
         >
-          {hasMultiple && !isCurrentAnswered() && !isLastQuestion ? '次へ' : '回答する'}
+          {hasMultiple && !isCurrentAnswered() && !isLastQuestion
+            ? '次へ'
+            : unansweredCount > 0 && hasAnyAnswer
+              ? `回答する（${unansweredCount}件未回答）`
+              : '回答する'}
         </button>
       </div>
     </div>

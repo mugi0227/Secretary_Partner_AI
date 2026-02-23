@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FaCircleQuestion } from 'react-icons/fa6';
+import { FaCircleQuestion, FaCheck } from 'react-icons/fa6';
 import type { PendingQuestion } from '../../api/types';
 import './QuestionsCard.css';
 
@@ -64,13 +64,14 @@ export function QuestionsCard({ questions, context, onSubmit, onCancel }: Questi
     questions.forEach((q) => {
       const answer = answers[q.id];
       const selected = answer.selectedOptions.filter((o) => o !== OTHER_OPTION);
-      const hasOther = answer.selectedOptions.includes(OTHER_OPTION) && answer.otherText.trim();
+      const hasOtherSelected = answer.selectedOptions.includes(OTHER_OPTION);
+      const otherText = answer.otherText.trim();
 
       let answerText: string;
-      if (selected.length === 0 && hasOther) {
-        answerText = answer.otherText.trim();
-      } else if (selected.length > 0 && hasOther) {
-        answerText = [...selected, answer.otherText.trim()].join('、');
+      if (selected.length === 0 && hasOtherSelected) {
+        answerText = otherText || 'その他';
+      } else if (selected.length > 0 && hasOtherSelected) {
+        answerText = [...selected, otherText || 'その他'].join('、');
       } else if (selected.length > 0) {
         answerText = selected.join('、');
       } else {
@@ -88,14 +89,9 @@ export function QuestionsCard({ questions, context, onSubmit, onCancel }: Questi
     onSubmit(formattedText);
   };
 
-  const isValid = questions.every((q) => {
-    const answer = answers[q.id];
-    const hasSelection = answer.selectedOptions.length > 0;
-    const hasValidOther = answer.selectedOptions.includes(OTHER_OPTION)
-      ? answer.otherText.trim().length > 0
-      : true;
-    return hasSelection && hasValidOther;
-  });
+  const hasAnyAnswer = questions.some((q) => answers[q.id].selectedOptions.length > 0);
+
+  const unansweredCount = questions.filter((q) => answers[q.id].selectedOptions.length === 0).length;
 
   return (
     <div className="questions-card">
@@ -109,11 +105,14 @@ export function QuestionsCard({ questions, context, onSubmit, onCancel }: Questi
         )}
 
         <div className="questions-card-list">
-          {questions.map((q, index) => (
-            <div key={q.id} className="questions-card-item">
+          {questions.map((q, index) => {
+            const isAnswered = answers[q.id].selectedOptions.length > 0;
+            return (
+            <div key={q.id} className={`questions-card-item${isAnswered ? ' questions-card-item--answered' : ''}`}>
               <div className="questions-card-question">
                 <span className="questions-card-number">{index + 1}.</span>
                 {q.question}
+                {isAnswered && <FaCheck className="questions-card-check" />}
               </div>
               <div className="questions-card-options">
                 {q.options.map((option) => (
@@ -141,7 +140,7 @@ export function QuestionsCard({ questions, context, onSubmit, onCancel }: Questi
                   <input
                     type="text"
                     className="questions-card-other-input"
-                    placeholder="自由に入力してください"
+                    placeholder="自由に入力（任意）"
                     value={answers[q.id].otherText}
                     onChange={(e) => handleOtherTextChange(q.id, e.target.value)}
                     autoFocus
@@ -149,21 +148,24 @@ export function QuestionsCard({ questions, context, onSubmit, onCancel }: Questi
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
 
         <div className="questions-card-actions">
           {onCancel && (
             <button className="questions-card-btn-cancel" onClick={onCancel}>
-              スキップ
+              {hasAnyAnswer ? '回答を破棄してスキップ' : 'スキップ'}
             </button>
           )}
           <button
             className="questions-card-btn-send"
             onClick={handleSubmit}
-            disabled={!isValid}
+            disabled={!hasAnyAnswer}
           >
-            回答する
+            {unansweredCount > 0 && hasAnyAnswer
+              ? `回答する（${unansweredCount}件未回答）`
+              : '回答する'}
           </button>
         </div>
       </div>
