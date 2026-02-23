@@ -7,9 +7,10 @@ Tools for scheduling autonomous agent actions.
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Optional
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from google.adk.tools import FunctionTool
 from pydantic import BaseModel, Field
@@ -27,6 +28,7 @@ from app.models.task import Task, TaskUpdate
 from app.services.task_utils import is_parent_task
 from app.tools.approval_tools import create_tool_action_proposal
 from app.utils.datetime_utils import (
+    ensure_utc,
     get_user_today,
     normalize_timezone,
     now_utc,
@@ -189,6 +191,15 @@ def _sort_due_date(value: Optional[datetime]) -> float:
     return value.timestamp()
 
 
+def _to_user_local_date(value: Optional[datetime], timezone: str) -> Optional[date]:
+    if value is None:
+        return None
+    utc_value = ensure_utc(value)
+    if utc_value is None:
+        return None
+    return utc_value.astimezone(ZoneInfo(timezone)).date()
+
+
 async def _resolve_user_timezone(
     user_id: str,
     user_repo: Optional[IUserRepository],
@@ -328,9 +339,11 @@ async def apply_schedule_request(
     unchanged_task_ids: list[str] = []
     for task, _score in selected:
         update_fields: dict[str, Any] = {}
-        if input_data.pin and (task.pinned_date is None or task.pinned_date.date() != today):
+        pinned_local_date = _to_user_local_date(task.pinned_date, timezone)
+        if input_data.pin and pinned_local_date != today:
             update_fields["pinned_date"] = today_datetime
-        if task.start_not_before and task.start_not_before.date() > today:
+        start_not_before_local_date = _to_user_local_date(task.start_not_before, timezone)
+        if start_not_before_local_date and start_not_before_local_date > today:
             update_fields["start_not_before"] = today_datetime
 
         if not update_fields:
@@ -350,7 +363,7 @@ async def apply_schedule_request(
         for task in scoped_tasks:
             if task.id in selected_ids:
                 continue
-            if not task.pinned_date or task.pinned_date.date() != today:
+            if _to_user_local_date(task.pinned_date, timezone) != today:
                 continue
             if _match_score(_task_search_text(task), avoid_keywords) <= 0:
                 continue

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -18,8 +19,9 @@ from app.models.enums import (
 )
 from app.models.project import Project
 from app.models.task import Task, TaskUpdate
+from app.models.user import UserAccount
 from app.tools.scheduler_tools import ApplyScheduleRequestInput, apply_schedule_request
-from app.utils.datetime_utils import get_user_today
+from app.utils.datetime_utils import ensure_utc, get_user_today, user_date_to_utc
 
 
 def _make_task(
@@ -145,14 +147,48 @@ class MockProjectRepository:
         return projects[offset:offset + limit]
 
 
+class MockUserRepository:
+    def __init__(self, timezone: str):
+        self.timezone = timezone
+
+    async def get(self, user_id: UUID) -> UserAccount:
+        now = datetime(2026, 2, 8, 9, 0, 0)
+        return UserAccount(
+            id=user_id,
+            provider_issuer="issuer",
+            provider_sub="sub",
+            email=None,
+            display_name=None,
+            first_name=None,
+            last_name=None,
+            username=None,
+            password_hash=None,
+            timezone=self.timezone,
+            enable_weekly_meeting_reminder=False,
+            created_at=now,
+            updated_at=now,
+        )
+
+
+def _to_local_date(value: datetime | None, timezone: str):
+    if value is None:
+        return None
+    utc_value = ensure_utc(value)
+    if utc_value is None:
+        return None
+    return utc_value.astimezone(ZoneInfo(timezone)).date()
+
+
 @pytest.mark.asyncio
 async def test_apply_schedule_request_pins_focus_task_for_today() -> None:
-    user_id = "user-1"
+    user_id = str(uuid4())
+    timezone = "Asia/Tokyo"
     focus_task = _make_task(title="Prepare design proposal", user_id=user_id)
     other_task = _make_task(title="Clean inbox", user_id=user_id)
     task_repo = MockTaskRepository([focus_task, other_task])
     assignment_repo = MockTaskAssignmentRepository([])
     project_repo = MockProjectRepository([])
+    user_repo = MockUserRepository(timezone)
 
     result = await apply_schedule_request(
         user_id=user_id,
@@ -164,19 +200,20 @@ async def test_apply_schedule_request_pins_focus_task_for_today() -> None:
             focus_keywords=["design"],
             max_focus_tasks=1,
         ),
+        user_repo=user_repo,
     )
 
-    today = get_user_today("Asia/Tokyo")
+    today = get_user_today(timezone)
     assert result["selected_count"] == 1
     assert result["updated_task_ids"] == [str(focus_task.id)]
     assert focus_task.pinned_date is not None
-    assert focus_task.pinned_date.date() == today
+    assert _to_local_date(focus_task.pinned_date, timezone) == today
     assert other_task.pinned_date is None
 
 
 @pytest.mark.asyncio
 async def test_apply_schedule_request_excludes_unassigned_team_tasks() -> None:
-    user_id = "user-1"
+    user_id = str(uuid4())
     team_project_id = uuid4()
     assigned_task = _make_task(title="API refactor", user_id=user_id, project_id=team_project_id)
     unassigned_task = _make_task(title="API docs", user_id=user_id, project_id=team_project_id)
@@ -207,14 +244,16 @@ async def test_apply_schedule_request_excludes_unassigned_team_tasks() -> None:
 
 @pytest.mark.asyncio
 async def test_apply_schedule_request_unpins_avoided_tasks_for_today() -> None:
-    user_id = "user-1"
-    today = get_user_today("Asia/Tokyo")
-    today_datetime = datetime.combine(today, datetime.min.time())
+    user_id = str(uuid4())
+    timezone = "Asia/Tokyo"
+    today = get_user_today(timezone)
+    today_datetime = user_date_to_utc(today, timezone)
     focus_task = _make_task(title="Design review", user_id=user_id)
     avoided_task = _make_task(title="Legacy bugfix", user_id=user_id, pinned_date=today_datetime)
     task_repo = MockTaskRepository([focus_task, avoided_task])
     assignment_repo = MockTaskAssignmentRepository([])
     project_repo = MockProjectRepository([])
+    user_repo = MockUserRepository(timezone)
 
     result = await apply_schedule_request(
         user_id=user_id,
@@ -227,6 +266,7 @@ async def test_apply_schedule_request_unpins_avoided_tasks_for_today() -> None:
             avoid_keywords=["bugfix"],
             unpin_avoided_today=True,
         ),
+        user_repo=user_repo,
     )
 
     assert str(avoided_task.id) in result["unpinned_task_ids"]
