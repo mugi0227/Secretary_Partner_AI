@@ -202,6 +202,10 @@ class Task(TaskBase):
     updated_at: datetime
     completed_at: Optional[datetime] = Field(None, description="Completed datetime")
     completed_by: Optional[str] = Field(None, description="User ID who completed the task")
+    auto_completed_by_parent_id: Optional[UUID] = Field(
+        None,
+        description="Parent task ID that auto-completed this task",
+    )
 
     class Config:
         from_attributes = True

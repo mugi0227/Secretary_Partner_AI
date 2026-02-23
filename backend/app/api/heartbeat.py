@@ -24,11 +24,11 @@ from app.api.deps import (
     TaskRepo,
     UserRepo,
 )
+from app.models.heartbeat import HeartbeatSettingsUpdate
 from app.services.heartbeat_service import HeartbeatService
 from app.services.recurring_meeting_service import RecurringMeetingService
 from app.services.recurring_task_service import RecurringTaskService
 from app.services.task_heartbeat_service import TaskHeartbeatService
-from app.models.heartbeat import HeartbeatSettingsUpdate
 
 router = APIRouter()
 
@@ -53,7 +53,7 @@ class HeartbeatRiskTaskResponse(BaseModel):
     risk_score: float
     days_remaining: int | None
     required_days: int | None
-    slack_days: int | None
+    slack_ratio: float | None
     due_date: datetime | None
 
 
@@ -156,7 +156,7 @@ async def heartbeat_status(
             risk_score=item.risk_score,
             days_remaining=item.days_remaining,
             required_days=item.required_days,
-            slack_days=item.slack_days,
+            slack_ratio=item.slack_ratio,
             due_date=item.task.due_date,
         )
         for item in status_data["top_risks"]

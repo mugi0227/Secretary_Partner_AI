@@ -24,6 +24,7 @@ from app.models.schedule import (
     UnscheduledTask,
 )
 from app.models.task import Task
+from app.services.slack_engine import compute_all_slack
 from app.services.task_utils import (
     get_effective_estimated_minutes,
     get_remaining_minutes,
@@ -586,6 +587,19 @@ class SchedulerService:
         for task in candidate_tasks:
             base_scores[task.id] = self._calculate_base_score(task, project_priorities)
 
+        # Compute slack for two-tier priority sort
+        # 将来日起点の場合、slack計算もその日を基準にする（利用可能日数を過大評価しない）
+        tz = ZoneInfo(user_timezone)
+        actual_now = datetime.now(tz)
+        slack_reference = max(actual_now, datetime.combine(start, actual_now.time(), tzinfo=tz))
+        effective_daily_cap_minutes = int(default_cap * capacity_ratio * 60)
+        slack_summary = compute_all_slack(
+            tasks=tasks,
+            daily_capacity_minutes=effective_daily_cap_minutes,
+            user_timezone=user_timezone,
+            now=slack_reference,
+        )
+
         for task in scheduled_tasks:
             total_minutes = get_effective_estimated_minutes(task, tasks)
             if total_minutes <= 0:
@@ -816,7 +830,10 @@ class SchedulerService:
                     ]
                     if low_candidates:
                         candidate_pool = low_candidates
-                next_id = self._pick_next_task(candidate_pool, day_scores, task_map, energy_minutes)
+                next_id = self._pick_next_task(
+                    candidate_pool, day_scores, task_map, energy_minutes,
+                    slack_results_by_id=slack_summary.results_by_id,
+                )
 
                 minutes_left = remaining_minutes.get(next_id, 0)
                 if minutes_left <= 0:
@@ -1366,10 +1383,12 @@ class SchedulerService:
         scores: dict[UUID, float],
         task_map: dict[UUID, Task],
         energy_minutes: dict[EnergyLevel, int],
+        slack_results_by_id: Optional[dict] = None,
     ) -> UUID:
         if not task_ids:
             raise ValueError("No task IDs available for scheduling")
 
+        # Energy balancing: prefer under-represented energy level
         total_minutes = energy_minutes[EnergyLevel.HIGH] + energy_minutes[EnergyLevel.LOW]
         preferred_energy: Optional[EnergyLevel] = None
 
@@ -1390,7 +1409,57 @@ class SchedulerService:
             if preferred_ids:
                 task_ids = preferred_ids
 
+        # Two-tier slack-based sort when slack results are available
+        if slack_results_by_id:
+            return self._sort_by_slack(task_ids, task_map, slack_results_by_id, scores)
+
         return self._sort_task_ids(task_ids, scores, task_map)[0]
+
+    @staticmethod
+    def _sort_by_slack(
+        task_ids: list[UUID],
+        task_map: dict[UUID, Task],
+        slack_results_by_id: dict,
+        scores: dict[UUID, float],
+    ) -> UUID:
+        """Two-tier sort: danger zone by ratio asc, safe zone by importance desc."""
+        from app.services.slack_engine import RATIO_DANGER_ZONE
+
+        importance_weight = {Priority.HIGH: 3, Priority.MEDIUM: 2, Priority.LOW: 1}
+        inf = float("inf")
+
+        danger: list[UUID] = []
+        safe: list[UUID] = []
+
+        for tid in task_ids:
+            slack = slack_results_by_id.get(tid)
+            if slack and slack.slack_ratio is not None and slack.slack_ratio < RATIO_DANGER_ZONE:
+                danger.append(tid)
+            else:
+                safe.append(tid)
+
+        # Danger zone: ratio ascending (most urgent first)
+        danger.sort(
+            key=lambda tid: (
+                slack_results_by_id[tid].slack_ratio
+                if tid in slack_results_by_id and slack_results_by_id[tid].slack_ratio is not None
+                else inf,
+            )
+        )
+
+        # Safe zone: importance descending, then ratio ascending
+        safe.sort(
+            key=lambda tid: (
+                -importance_weight.get(task_map[tid].importance, 1),
+                slack_results_by_id[tid].slack_ratio
+                if tid in slack_results_by_id and slack_results_by_id[tid].slack_ratio is not None
+                else inf,
+                -scores.get(tid, 0.0),
+            )
+        )
+
+        combined = danger + safe
+        return combined[0]
 
     @staticmethod
     def _release_dependents(

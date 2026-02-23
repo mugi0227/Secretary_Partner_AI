@@ -88,6 +88,7 @@ class TaskORM(Base):
     completion_note = Column(Text, nullable=True)
     completed_at = Column(DateTime, nullable=True, index=True)
     completed_by = Column(String(255), nullable=True)
+    auto_completed_by_parent_id = Column(String(36), nullable=True, index=True)
 
     # Subtask guide field
     guide = Column(Text, nullable=True)
