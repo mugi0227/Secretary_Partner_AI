@@ -168,13 +168,84 @@ async def test_run_creates_chat_message_for_critical_task():
 
 
 @pytest.mark.asyncio
+async def test_run_notifies_high_risk_task_without_deadline():
+    now = datetime(2024, 1, 10, 12, 0, tzinfo=UTC)
+    user_id = str(uuid4())
+    task = make_task(
+        title="Stale Important Task",
+        importance=Priority.HIGH,
+        estimated_minutes=60,
+        due_date=None,
+        updated_at=now - timedelta(days=20),
+        now=now,
+    )
+    settings = make_settings(now)
+
+    task_repo = AsyncMock()
+    task_repo.list.return_value = [task]
+
+    chat_repo = AsyncMock()
+    chat_repo.add_message.return_value = make_chat_message(user_id, now)
+
+    settings_repo = AsyncMock()
+    settings_repo.get.return_value = settings
+
+    event_repo = AsyncMock()
+    event_repo.list_by_user_since.return_value = []
+    event_repo.count_by_user_since.return_value = 0
+    event_repo.create.return_value = HeartbeatEvent(
+        id=uuid4(),
+        user_id=user_id,
+        task_id=task.id,
+        severity="high",
+        risk_score=60,
+        notification_id=None,
+        metadata={},
+        created_at=now,
+    )
+
+    user_repo = AsyncMock()
+    user_repo.get.return_value = UserAccount(
+        id=UUID(user_id),
+        provider_issuer="issuer",
+        provider_sub="sub",
+        email=None,
+        display_name=None,
+        first_name=None,
+        last_name=None,
+        username=None,
+        password_hash=None,
+        timezone="UTC",
+        enable_weekly_meeting_reminder=False,
+        created_at=now,
+        updated_at=now,
+    )
+
+    service = TaskHeartbeatService(
+        task_repo=task_repo,
+        chat_repo=chat_repo,
+        settings_repo=settings_repo,
+        event_repo=event_repo,
+        user_repo=user_repo,
+        task_assignment_repo=None,
+    )
+
+    result = await service.run(user_id, now=now)
+
+    assert result["status"] == "success"
+    assert result["notified"] == 1
+    chat_repo.add_message.assert_called_once()
+    event_repo.create.assert_called_once()
+
+
+@pytest.mark.asyncio
 async def test_run_respects_daily_limit():
     now = datetime(2024, 1, 10, 12, 0, tzinfo=UTC)
     user_id = str(uuid4())
     task = make_task(
         title="Limited Task",
         estimated_minutes=60,
-        due_date=now + timedelta(days=1),
+        due_date=now,
         now=now,
     )
     settings = make_settings(now)

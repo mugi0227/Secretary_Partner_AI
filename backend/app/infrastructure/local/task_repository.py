@@ -32,6 +32,119 @@ class SqliteTaskRepository(ITaskRepository):
         """
         self._session_factory = session_factory or get_session_factory()
 
+    @staticmethod
+    def _normalized_progress(status: str, progress: int | None) -> int:
+        if status == TaskStatus.DONE.value:
+            return 100
+        value = progress if progress is not None else 0
+        return max(0, min(value, 100))
+
+    @staticmethod
+    def _effective_weight(task: TaskORM) -> int:
+        return task.estimated_minutes if task.estimated_minutes and task.estimated_minutes > 0 else 60
+
+    @staticmethod
+    def _set_done_state(task: TaskORM, user_id: str, timestamp: datetime) -> None:
+        task.status = TaskStatus.DONE.value
+        task.progress = 100
+        if task.completed_at is None:
+            task.completed_at = timestamp
+        task.completed_by = user_id
+        task.updated_at = timestamp
+
+    @staticmethod
+    def _set_reopened_state(task: TaskORM, timestamp: datetime, status: str = TaskStatus.TODO.value) -> None:
+        task.status = status
+        task.progress = 0
+        task.completed_at = None
+        task.completed_by = None
+        task.updated_at = timestamp
+
+    async def _load_descendants(
+        self,
+        session,
+        user_id: str,
+        project_id: str | None,
+        root_ids: list[str],
+    ) -> list[TaskORM]:
+        """Load all descendants for the given root task IDs."""
+        descendants: list[TaskORM] = []
+        seen: set[str] = set()
+        frontier = set(root_ids)
+
+        while frontier:
+            conditions = [TaskORM.parent_id.in_(list(frontier))]
+            if project_id:
+                conditions.append(TaskORM.project_id == project_id)
+            else:
+                conditions.append(TaskORM.user_id == user_id)
+            result = await session.execute(select(TaskORM).where(and_(*conditions)))
+            batch = [task for task in result.scalars().all() if task.id not in seen]
+            if not batch:
+                break
+
+            descendants.extend(batch)
+            seen.update(task.id for task in batch)
+            frontier = {task.id for task in batch}
+
+        return descendants
+
+    async def _recalculate_parent_progress(
+        self,
+        session,
+        parent: TaskORM,
+        user_id: str,
+    ) -> None:
+        conditions = [TaskORM.parent_id == parent.id]
+        if parent.project_id:
+            conditions.append(TaskORM.project_id == parent.project_id)
+        else:
+            conditions.append(TaskORM.user_id == user_id)
+        result = await session.execute(select(TaskORM).where(and_(*conditions)))
+        children = result.scalars().all()
+        if not children:
+            return
+
+        total_weight = 0
+        weighted_progress = 0
+        for child in children:
+            weight = self._effective_weight(child)
+            progress = self._normalized_progress(child.status, child.progress)
+            total_weight += weight
+            weighted_progress += progress * weight
+        if total_weight <= 0:
+            return
+
+        if parent.status == TaskStatus.DONE.value:
+            parent.progress = 100
+        else:
+            parent.progress = round(weighted_progress / total_weight)
+        parent.updated_at = now_utc()
+
+    async def _recalculate_ancestor_progresses(
+        self,
+        session,
+        user_id: str,
+        parent_id: str | None,
+        project_id: str | None,
+    ) -> None:
+        """Recalculate progress from the immediate parent up to the root."""
+        current_parent_id = parent_id
+        seen: set[str] = set()
+        while current_parent_id and current_parent_id not in seen:
+            seen.add(current_parent_id)
+            conditions = [TaskORM.id == current_parent_id]
+            if project_id:
+                conditions.append(TaskORM.project_id == project_id)
+            else:
+                conditions.append(TaskORM.user_id == user_id)
+            result = await session.execute(select(TaskORM).where(and_(*conditions)))
+            parent = result.scalar_one_or_none()
+            if not parent:
+                break
+            await self._recalculate_parent_progress(session, parent, user_id)
+            current_parent_id = parent.parent_id
+
     def _orm_to_model(self, orm: TaskORM) -> Task:
         """Convert ORM object to Pydantic model."""
         return Task(
@@ -80,6 +193,11 @@ class SqliteTaskRepository(ITaskRepository):
             completion_note=orm.completion_note if hasattr(orm, 'completion_note') else None,
             completed_at=orm.completed_at if hasattr(orm, 'completed_at') else None,
             completed_by=orm.completed_by if hasattr(orm, 'completed_by') else None,
+            auto_completed_by_parent_id=(
+                UUID(orm.auto_completed_by_parent_id)
+                if hasattr(orm, "auto_completed_by_parent_id") and orm.auto_completed_by_parent_id
+                else None
+            ),
             guide=orm.guide if hasattr(orm, 'guide') else None,
             requires_all_completion=bool(orm.requires_all_completion) if hasattr(orm, 'requires_all_completion') and orm.requires_all_completion is not None else False,
         )
@@ -87,6 +205,7 @@ class SqliteTaskRepository(ITaskRepository):
     async def create(self, user_id: str, task: TaskCreate) -> Task:
         """Create a new task."""
         async with self._session_factory() as session:
+            parent: TaskORM | None = None
             orm = TaskORM(
                 id=str(uuid4()),
                 user_id=user_id,
@@ -126,7 +245,28 @@ class SqliteTaskRepository(ITaskRepository):
                 guide=task.guide if hasattr(task, 'guide') else None,
                 requires_all_completion=task.requires_all_completion,
             )
+            if orm.parent_id:
+                parent_conditions = [TaskORM.id == orm.parent_id]
+                if orm.project_id:
+                    parent_conditions.append(TaskORM.project_id == orm.project_id)
+                else:
+                    parent_conditions.append(TaskORM.user_id == user_id)
+                parent_result = await session.execute(select(TaskORM).where(and_(*parent_conditions)))
+                parent = parent_result.scalar_one_or_none()
+                if parent and parent.status == TaskStatus.DONE.value:
+                    timestamp = now_utc()
+                    self._set_done_state(orm, user_id, timestamp)
+                    orm.auto_completed_by_parent_id = parent.id
+
             session.add(orm)
+            await session.flush()
+            if orm.parent_id:
+                await self._recalculate_ancestor_progresses(
+                    session=session,
+                    user_id=user_id,
+                    parent_id=orm.parent_id,
+                    project_id=orm.project_id,
+                )
             await session.commit()
             await session.refresh(orm)
             return self._orm_to_model(orm)
@@ -224,6 +364,10 @@ class SqliteTaskRepository(ITaskRepository):
             if not orm:
                 raise NotFoundError(f"Task {task_id} not found")
 
+            original_status = orm.status
+            old_parent_id = orm.parent_id
+            old_project_id = orm.project_id
+
             # Check if parent task is DONE - if so, force this subtask to stay DONE
             if orm.parent_id:
                 parent_result = await session.execute(
@@ -253,41 +397,97 @@ class SqliteTaskRepository(ITaskRepository):
                         status_value = value
                     setattr(orm, field, value)
 
-            orm.updated_at = now_utc()
+            timestamp = now_utc()
+            orm.updated_at = timestamp
+            new_status = status_value if status_value is not None else orm.status
+            status_changed_to_done = (
+                original_status != TaskStatus.DONE.value and new_status == TaskStatus.DONE.value
+            )
+            status_changed_from_done = (
+                original_status == TaskStatus.DONE.value
+                and status_value is not None
+                and status_value != TaskStatus.DONE.value
+            )
 
-            # Auto-set completed_at/completed_by when status changes to DONE
-            if status_value == TaskStatus.DONE.value and orm.completed_at is None:
-                orm.completed_at = now_utc()
-                orm.completed_by = user_id
-            elif status_value is not None and status_value != TaskStatus.DONE.value:
-                # Clear completed_at/completed_by if status changes from DONE to something else
+            if status_changed_to_done:
+                self._set_done_state(orm, user_id, timestamp)
+                orm.auto_completed_by_parent_id = None
+            elif status_changed_from_done:
+                self._set_reopened_state(orm, timestamp, status=new_status)
+                orm.auto_completed_by_parent_id = None
+            elif status_value is not None and new_status != TaskStatus.DONE.value:
                 orm.completed_at = None
                 orm.completed_by = None
+                orm.progress = 0
+            elif new_status == TaskStatus.DONE.value:
+                orm.progress = 100
 
-            # Cascade status to subtasks
-            if status_value is not None:
+            # Cascade status changes to descendants.
+            if status_changed_to_done:
+                descendants = await self._load_descendants(
+                    session=session,
+                    user_id=user_id,
+                    project_id=orm.project_id,
+                    root_ids=[orm.id],
+                )
+                for subtask in descendants:
+                    if subtask.status != TaskStatus.DONE.value:
+                        self._set_done_state(subtask, user_id, timestamp)
+                        subtask.auto_completed_by_parent_id = orm.id
+            elif status_changed_from_done:
+                descendants = await self._load_descendants(
+                    session=session,
+                    user_id=user_id,
+                    project_id=orm.project_id,
+                    root_ids=[orm.id],
+                )
+                for subtask in descendants:
+                    if subtask.auto_completed_by_parent_id == orm.id:
+                        self._set_reopened_state(subtask, timestamp, status=TaskStatus.TODO.value)
+                        subtask.auto_completed_by_parent_id = None
+            elif status_value is not None:
+                conditions = [TaskORM.parent_id == str(task_id)]
                 if orm.project_id:
-                    subtask_result = await session.execute(
-                        select(TaskORM).where(
-                            and_(TaskORM.parent_id == str(task_id), TaskORM.project_id == orm.project_id)
-                        )
-                    )
+                    conditions.append(TaskORM.project_id == orm.project_id)
                 else:
-                    subtask_result = await session.execute(
-                        select(TaskORM).where(
-                            and_(TaskORM.parent_id == str(task_id), TaskORM.user_id == user_id)
-                        )
-                    )
+                    conditions.append(TaskORM.user_id == user_id)
+                subtask_result = await session.execute(select(TaskORM).where(and_(*conditions)))
                 for subtask in subtask_result.scalars().all():
-                    subtask.status = status_value
-                    subtask.updated_at = now_utc()
-                    # Auto-set completed_at/completed_by for subtasks as well
-                    if status_value == TaskStatus.DONE.value and subtask.completed_at is None:
-                        subtask.completed_at = now_utc()
-                        subtask.completed_by = user_id
-                    elif status_value != TaskStatus.DONE.value:
+                    if status_value == TaskStatus.DONE.value:
+                        if subtask.status != TaskStatus.DONE.value:
+                            self._set_done_state(subtask, user_id, timestamp)
+                            subtask.auto_completed_by_parent_id = orm.id
+                    else:
+                        subtask.status = status_value
                         subtask.completed_at = None
                         subtask.completed_by = None
+                        subtask.progress = 0
+                        subtask.updated_at = timestamp
+
+            affected_fields = {"status", "progress", "estimated_minutes", "parent_id"}
+            should_recalculate = bool(affected_fields & set(update_data.keys()))
+            if should_recalculate or status_changed_to_done or status_changed_from_done:
+                if old_parent_id:
+                    await self._recalculate_ancestor_progresses(
+                        session=session,
+                        user_id=user_id,
+                        parent_id=old_parent_id,
+                        project_id=old_project_id,
+                    )
+                if orm.parent_id and orm.parent_id != old_parent_id:
+                    await self._recalculate_ancestor_progresses(
+                        session=session,
+                        user_id=user_id,
+                        parent_id=orm.parent_id,
+                        project_id=orm.project_id,
+                    )
+                elif orm.parent_id and not old_parent_id:
+                    await self._recalculate_ancestor_progresses(
+                        session=session,
+                        user_id=user_id,
+                        parent_id=orm.parent_id,
+                        project_id=orm.project_id,
+                    )
 
             await session.commit()
             await session.refresh(orm)

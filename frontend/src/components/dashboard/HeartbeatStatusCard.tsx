@@ -39,13 +39,13 @@ function formatDeadline(item: HeartbeatRiskTask) {
 }
 
 function formatSlack(item: HeartbeatRiskTask) {
-  if (item.slack_days === undefined || item.slack_days === null) {
+  if (item.slack_ratio === undefined || item.slack_ratio === null) {
     return '';
   }
-  if (item.slack_days < 0) {
-    return `不足${Math.abs(item.slack_days)}日`;
+  if (item.slack_ratio < 1) {
+    return '工数不足見込み';
   }
-  return `余裕${item.slack_days}日`;
+  return `余裕${item.slack_ratio.toFixed(1)}倍`;
 }
 
 const COLLAPSED_COUNT = 3;

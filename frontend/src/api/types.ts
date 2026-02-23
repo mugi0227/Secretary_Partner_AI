@@ -1342,7 +1342,7 @@ export interface HeartbeatRiskTask {
   risk_score: number;
   days_remaining?: number;
   required_days?: number;
-  slack_days?: number;
+  slack_ratio?: number;
   due_date?: string;
 }
 

@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { FaXmark } from 'react-icons/fa6';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi } from '../../api/projects';
-import type { ProjectWithTaskCount, ProjectMember, ProjectLinkRequestCreate } from '../../api/types';
+import type { ProjectMember, ProjectLinkRequestCreate } from '../../api/types';
 import './ProjectDetailModal.css';
 
 interface ProjectLinkModalProps {

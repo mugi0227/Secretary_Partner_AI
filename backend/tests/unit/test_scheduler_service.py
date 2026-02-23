@@ -816,3 +816,173 @@ def test_warmup_prefers_low_energy_first():
     )
 
     assert first_allocation.task_id == low_task.id
+
+
+# ---------------------------------------------------------------------------
+# Slack-based two-tier priority sort tests
+# ---------------------------------------------------------------------------
+def test_slack_danger_zone_task_scheduled_before_safe_zone():
+    """
+    危険ゾーン（ratio < 1.5）のタスクは安全ゾーンのタスクより先にスケジュールされる。
+    重要度が低くても、余裕がないタスクが優先。
+
+    danger_task: 120分の作業、今日期限 → days_until=1, cap=120, ratio=120/120=1.0 → CRITICAL
+    safe_task: 30分の作業、10日後期限 → days_until=11, cap=1320, ratio=1320/30=44.0 → LOW
+    """
+    service = SchedulerService()
+    start_date = date.today()
+
+    # 危険タスク: 重要度LOW、今日期限で120分 → ratio = 1.0（CRITICAL）
+    danger_task = make_task(
+        "Danger low-importance",
+        importance=Priority.LOW,
+        estimated_minutes=120,
+        due_date=datetime.combine(start_date, datetime.min.time()),
+    )
+
+    # 安全タスク: 重要度HIGH、期限に余裕（10日後）
+    safe_task = make_task(
+        "Safe high-importance",
+        importance=Priority.HIGH,
+        estimated_minutes=30,
+        due_date=datetime.combine(start_date + timedelta(days=10), datetime.min.time()),
+    )
+
+    schedule = service.build_schedule(
+        [danger_task, safe_task],
+        capacity_hours=2,
+        start_date=start_date,
+        max_days=3,
+    )
+
+    # 初日の最初の割り当てが危険タスクであること
+    first_alloc = schedule.days[0].task_allocations[0]
+    assert first_alloc.task_id == danger_task.id
+
+
+def test_slack_safe_zone_sorted_by_importance():
+    """
+    安全ゾーンでは重要度順でスケジュールされる。
+    同程度の余裕（期限なし）なら重要度HIGHが先。
+    """
+    service = SchedulerService()
+    start_date = date.today()
+    base_time = datetime.combine(start_date, datetime.min.time())
+
+    low_importance = make_task(
+        "Low importance",
+        importance=Priority.LOW,
+        estimated_minutes=30,
+        created_at=base_time,
+    )
+    high_importance = make_task(
+        "High importance",
+        importance=Priority.HIGH,
+        estimated_minutes=30,
+        created_at=base_time + timedelta(seconds=1),
+    )
+
+    schedule = service.build_schedule(
+        [low_importance, high_importance],
+        capacity_hours=2,
+        start_date=start_date,
+        max_days=1,
+    )
+
+    first_alloc = schedule.days[0].task_allocations[0]
+    assert first_alloc.task_id == high_importance.id
+
+
+def test_slack_chain_head_is_prioritized():
+    """
+    A→B→C（Cに期限）の依存チェーンで、先頭タスクAが最も高い優先度を持つ。
+    A の chain_remaining = A+B+C（下流全体）で ratio が最も小さくなるため。
+
+    chain: A(60) → B(60) → C(60), Cに明日期限
+    A: chain_remaining=180, days_until=2, cap=120 → available=240, ratio=240/180=1.33 → HIGH
+    independent: 期限なし → ratio=None → 安全ゾーン
+    → A（危険ゾーン）が先
+    """
+    service = SchedulerService()
+    start_date = date.today()
+    base_time = datetime.combine(start_date, datetime.min.time())
+
+    task_a = make_task(
+        "Chain head A",
+        estimated_minutes=60,
+        created_at=base_time,
+    )
+    task_b = make_task(
+        "Chain middle B",
+        estimated_minutes=60,
+        dependency_ids=[task_a.id],
+        created_at=base_time + timedelta(seconds=1),
+    )
+    task_c = make_task(
+        "Chain end C",
+        estimated_minutes=60,
+        dependency_ids=[task_b.id],
+        due_date=datetime.combine(start_date + timedelta(days=1), datetime.min.time()),
+        created_at=base_time + timedelta(seconds=2),
+    )
+
+    # 独立タスク: 期限なし、同程度の工数
+    independent = make_task(
+        "Independent task",
+        estimated_minutes=60,
+        importance=Priority.HIGH,
+        created_at=base_time + timedelta(seconds=3),
+    )
+
+    schedule = service.build_schedule(
+        [task_a, task_b, task_c, independent],
+        capacity_hours=2,
+        start_date=start_date,
+        max_days=5,
+    )
+
+    # task_a は chain_remaining=180, ratio=1.33 → 危険ゾーン
+    # independent は期限なし → 安全ゾーン
+    # → task_a が先にスケジュールされる
+    first_alloc = schedule.days[0].task_allocations[0]
+    assert first_alloc.task_id == task_a.id
+
+
+def test_slack_future_start_date_adjusts_reference():
+    """
+    将来日起点のスケジュールでも slack 計算が正しく動作する。
+    start_date が将来日の場合、now を start_date に合わせるため
+    ratio が過度に甘くならない。
+
+    urgent_task: 120分の作業、start_date当日期限 → ratio = 120/120 = 1.0 → CRITICAL
+    relaxed_task: 30分の作業、30日後期限 → ratio >> 2.0 → LOW
+    """
+    service = SchedulerService()
+    future_start = date.today() + timedelta(days=30)
+
+    # 期限 = start_date当日、工数 120分 → ratio = 1.0（CRITICAL）
+    urgent_task = make_task(
+        "Urgent future task",
+        importance=Priority.LOW,
+        estimated_minutes=120,
+        due_date=datetime.combine(future_start, datetime.min.time()),
+    )
+
+    # 期限 = start_date + 30日、工数 30分 → ratio 余裕あり
+    relaxed_task = make_task(
+        "Relaxed future task",
+        importance=Priority.HIGH,
+        estimated_minutes=30,
+        due_date=datetime.combine(future_start + timedelta(days=30), datetime.min.time()),
+    )
+
+    schedule = service.build_schedule(
+        [urgent_task, relaxed_task],
+        capacity_hours=2,
+        start_date=future_start,
+        max_days=5,
+    )
+
+    # 将来日起点でも、urgent_task が危険ゾーンで先にスケジュールされる
+    first_alloc = schedule.days[0].task_allocations[0]
+    assert first_alloc.task_id == urgent_task.id

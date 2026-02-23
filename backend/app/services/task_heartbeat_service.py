@@ -11,9 +11,9 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel, Field, ValidationError
 
 from app.core.logger import logger
+from app.interfaces.chat_session_repository import IChatSessionRepository
 from app.interfaces.heartbeat_event_repository import IHeartbeatEventRepository
 from app.interfaces.heartbeat_settings_repository import IHeartbeatSettingsRepository
-from app.interfaces.chat_session_repository import IChatSessionRepository
 from app.interfaces.llm_provider import ILLMProvider
 from app.interfaces.project_repository import IProjectRepository
 from app.interfaces.task_assignment_repository import ITaskAssignmentRepository
@@ -23,13 +23,14 @@ from app.models.enums import Priority, TaskStatus
 from app.models.heartbeat import (
     HeartbeatEventCreate,
     HeartbeatIntensity,
-    HeartbeatSeverity,
     HeartbeatSettings,
     HeartbeatSettingsUpdate,
+    HeartbeatSeverity,
 )
 from app.models.project import Project
 from app.models.task import Task
 from app.services.llm_utils import generate_text
+from app.services.slack_engine import compute_all_slack, severity_from_ratio
 from app.services.task_utils import get_effective_estimated_minutes, is_parent_task
 from app.utils.datetime_utils import UTC, ensure_utc, normalize_timezone, now_utc
 
@@ -50,7 +51,7 @@ class HeartbeatRiskItem:
     severity: HeartbeatSeverity
     days_remaining: Optional[int]
     required_days: Optional[int]
-    slack_days: Optional[int]
+    slack_ratio: Optional[float]
     estimated_minutes: int
     estimate_missing: bool
 
@@ -91,12 +92,12 @@ class TaskHeartbeatService:
         ):
             return {"status": "outside_window", "evaluated": 0, "notified": 0}
 
-        tasks = await self._get_tasks_for_user(user_id)
-        candidate_tasks = self._filter_candidates(tasks)
+        all_tasks = await self._get_tasks_for_user(user_id)
+        candidate_tasks = self._filter_candidates(all_tasks)
         if not candidate_tasks:
             return {"status": "no_tasks", "evaluated": 0, "notified": 0}
 
-        risk_items = self._score_tasks(candidate_tasks, settings, timezone, now_utc_value)
+        risk_items = self._score_tasks(candidate_tasks, all_tasks, settings, timezone, now_utc_value)
         if not risk_items:
             return {"status": "no_risks", "evaluated": 0, "notified": 0}
 
@@ -173,9 +174,9 @@ class TaskHeartbeatService:
         timezone = await self._get_timezone(user_id)
         local_now = now_utc_value.astimezone(ZoneInfo(timezone))
 
-        tasks = await self._get_tasks_for_user(user_id)
-        candidate_tasks = self._filter_candidates(tasks)
-        risk_items = self._score_tasks(candidate_tasks, settings, timezone, now_utc_value)
+        all_tasks = await self._get_tasks_for_user(user_id)
+        candidate_tasks = self._filter_candidates(all_tasks)
+        risk_items = self._score_tasks(candidate_tasks, all_tasks, settings, timezone, now_utc_value)
         risk_items = self._sort_risks(risk_items)
 
         start_of_day = self._start_of_day_utc(local_now)
@@ -291,25 +292,38 @@ class TaskHeartbeatService:
 
     def _score_tasks(
         self,
-        tasks: list[Task],
+        candidates: list[Task],
+        all_tasks: list[Task],
         settings: HeartbeatSettings,
         user_timezone: str,
         now: datetime,
     ) -> list[HeartbeatRiskItem]:
-        if not tasks:
+        if not candidates:
             return []
+
         importance_scores = {
             Priority.HIGH: 16,
             Priority.MEDIUM: 8,
             Priority.LOW: 4,
         }
 
-        risk_items: list[HeartbeatRiskItem] = []
+        # Compute slack for ALL tasks (chain-aware)
+        slack_summary = compute_all_slack(
+            tasks=all_tasks,
+            daily_capacity_minutes=settings.daily_capacity_per_task_minutes,
+            user_timezone=user_timezone,
+            now=now,
+            default_task_minutes=settings.daily_capacity_per_task_minutes,
+        )
+
         local_now = now.astimezone(ZoneInfo(user_timezone))
         today = local_now.date()
 
-        for task in tasks:
-            raw_estimated_minutes = get_effective_estimated_minutes(task, tasks)
+        risk_items: list[HeartbeatRiskItem] = []
+        for task in candidates:
+            slack_result = slack_summary.results_by_id.get(task.id)
+
+            raw_estimated_minutes = get_effective_estimated_minutes(task, all_tasks)
             estimate_missing = raw_estimated_minutes <= 0
             estimated_minutes = (
                 raw_estimated_minutes
@@ -317,22 +331,31 @@ class TaskHeartbeatService:
                 else settings.daily_capacity_per_task_minutes
             )
 
-            required_days = max(
-                1,
-                int(math.ceil(estimated_minutes / settings.daily_capacity_per_task_minutes)),
-            )
+            # Use chain-aware values from slack engine
+            slack_ratio: Optional[float] = None
+            days_remaining: Optional[int] = None
+            required_days: Optional[int] = None
 
-            days_remaining = self._calculate_days_remaining(task, today, user_timezone)
-            slack_days = None
-            if days_remaining is not None:
-                # +1 because the due date itself is an available working day
-                slack_days = (days_remaining + 1) - required_days
+            if slack_result:
+                slack_ratio = slack_result.slack_ratio
+                if slack_result.effective_deadline is not None:
+                    days_remaining = (slack_result.effective_deadline - today).days
+                    cap = settings.daily_capacity_per_task_minutes
+                    required_days = max(
+                        1,
+                        int(math.ceil(slack_result.chain_remaining_minutes / cap)),
+                    ) if cap > 0 else None
+            else:
+                # Fallback for tasks not in slack results (shouldn't happen)
+                days_remaining = self._calculate_days_remaining(task, today, user_timezone)
 
-            time_pressure = self._time_pressure_score(slack_days)
+            time_pressure = self._time_pressure_score(slack_ratio)
             staleness_score = self._staleness_score(task, now)
             importance_score = importance_scores.get(task.importance, 4)
             uncertainty_score = 12 if estimate_missing else 0
-            overdue_penalty = 10 if days_remaining is not None and days_remaining < 0 else 0
+            overdue_penalty = (
+                10 if days_remaining is not None and days_remaining < 0 else 0
+            )
 
             risk_score = (
                 importance_score
@@ -342,7 +365,7 @@ class TaskHeartbeatService:
                 + overdue_penalty
             )
 
-            severity = self._severity_from_slack(slack_days, risk_score)
+            severity = self._severity_from_ratio_or_risk(slack_ratio, risk_score)
 
             risk_items.append(
                 HeartbeatRiskItem(
@@ -350,8 +373,8 @@ class TaskHeartbeatService:
                     risk_score=risk_score,
                     severity=severity,
                     days_remaining=days_remaining,
-                    required_days=required_days if days_remaining is not None else None,
-                    slack_days=slack_days,
+                    required_days=required_days,
+                    slack_ratio=slack_ratio,
                     estimated_minutes=estimated_minutes,
                     estimate_missing=estimate_missing,
                 )
@@ -375,20 +398,18 @@ class TaskHeartbeatService:
                     effective_start = start_date
         return (due_local - effective_start).days
 
-    def _time_pressure_score(self, slack_days: Optional[int]) -> int:
-        if slack_days is None:
+    def _time_pressure_score(self, slack_ratio: Optional[float]) -> int:
+        if slack_ratio is None:
             return 0
-        if slack_days <= -1:
-            return 40
-        if slack_days == 0:
-            return 35
-        if slack_days == 1:
-            return 28
-        if slack_days == 2:
-            return 20
-        if slack_days == 3:
-            return 12
-        return 6
+        if slack_ratio < 1.0:
+            return 40  # 間に合わない
+        if slack_ratio < 1.2:
+            return 35  # ほぼ限界
+        if slack_ratio < 1.5:
+            return 28  # やばい
+        if slack_ratio < 2.0:
+            return 12  # 注意
+        return 6  # 余裕
 
     def _staleness_score(self, task: Task, now: datetime) -> int:
         updated_at = ensure_utc(task.updated_at)
@@ -403,19 +424,13 @@ class TaskHeartbeatService:
             return 6
         return 0
 
-    def _severity_from_slack(
+    def _severity_from_ratio_or_risk(
         self,
-        slack_days: Optional[int],
+        slack_ratio: Optional[float],
         risk_score: float,
     ) -> HeartbeatSeverity:
-        if slack_days is not None:
-            if slack_days < 0:
-                return HeartbeatSeverity.CRITICAL
-            if slack_days <= 1:
-                return HeartbeatSeverity.HIGH
-            if slack_days <= 3:
-                return HeartbeatSeverity.MEDIUM
-            return HeartbeatSeverity.LOW
+        if slack_ratio is not None:
+            return severity_from_ratio(slack_ratio)
         if risk_score >= 50:
             return HeartbeatSeverity.HIGH
         if risk_score >= 30:
@@ -545,11 +560,11 @@ class TaskHeartbeatService:
                 status_lines.append(f"期限まであと {item.days_remaining}日")
         if item.required_days is not None:
             status_lines.append(f"必要日数の目安 {item.required_days}日")
-        if item.slack_days is not None:
-            if item.slack_days < 0:
-                status_lines.append(f"必要日数が {abs(item.slack_days)}日足りない見込み")
+        if item.slack_ratio is not None:
+            if item.slack_ratio < 1.0:
+                status_lines.append("期限までの時間に対して工数が足りない見込みです")
             else:
-                status_lines.append(f"余裕 {item.slack_days}日")
+                status_lines.append(f"余裕 {item.slack_ratio:.1f}倍")
         if item.estimated_minutes > 0:
             status_lines.append(f"見積り {item.estimated_minutes}分")
         if item.task.progress is not None and 0 < item.task.progress < 100:
@@ -565,10 +580,10 @@ class TaskHeartbeatService:
         daily_capacity_minutes: int,
     ) -> list[str]:
         reasons: list[str] = []
-        if item.slack_days is not None:
-            if item.slack_days < 0:
-                reasons.append("期限までの時間に対して必要日数が足りなさそうです")
-            elif item.slack_days <= 1:
+        if item.slack_ratio is not None:
+            if item.slack_ratio < 1.0:
+                reasons.append("期限までの時間に対して必要な工数が足りなさそうです")
+            elif item.slack_ratio < 1.5:
                 reasons.append("期限に対して余裕が少なめです")
         else:
             reasons.append("期限が未設定なので、重要度や更新間隔から確認しています")
@@ -895,7 +910,7 @@ class TaskHeartbeatService:
         return {
             "days_remaining": item.days_remaining,
             "required_days": item.required_days,
-            "slack_days": item.slack_days,
+            "slack_ratio": item.slack_ratio,
             "due_date_local": due_local,
             "chat_session_id": session_id,
             "chat_message_id": str(message_id),
