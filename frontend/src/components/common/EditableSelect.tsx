@@ -82,9 +82,20 @@ export function EditableSelect({
     setPendingValue(value ?? null);
   }, [value]);
 
-  const handleSelect = useCallback((optionValue: string | null) => {
+  const handleSelect = useCallback(async (optionValue: string | null) => {
+    if (isSaving) return;
     setPendingValue(optionValue);
-  }, []);
+    setIsSaving(true);
+    try {
+      await onSave(optionValue);
+      setIsEditing(false);
+      setIsOpen(false);
+    } catch (error) {
+      console.error('Failed to save:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  }, [onSave, isSaving]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -176,15 +187,6 @@ export function EditableSelect({
             </div>
 
             <div className="editable-select-actions">
-              <button
-                type="button"
-                className="editable-select-btn save"
-                onClick={handleSave}
-                disabled={isSaving}
-                title="保存"
-              >
-                <FaCheck />
-              </button>
               <button
                 type="button"
                 className="editable-select-btn cancel"

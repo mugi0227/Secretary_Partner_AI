@@ -216,15 +216,6 @@
   font-size: 0.75rem;
 }
 
-.editable-select-btn.save {
-  background: var(--primary);
-  color: white;
-}
-
-.editable-select-btn.save:hover {
-  background: var(--primary-hover, #0369a1);
-}
-
 .editable-select-btn.cancel {
   background: #f1f5f9;
   color: var(--text-muted);

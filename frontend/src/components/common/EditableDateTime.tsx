@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { DateTime } from 'luxon';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FaCheck, FaClock, FaEdit, FaTimes, FaTrash } from 'react-icons/fa';
+import { FaClock, FaEdit, FaTimes, FaTrash } from 'react-icons/fa';
 import { getStoredTimezone } from '../../utils/dateTime';
 import './EditableDateTime.css';
 
@@ -32,6 +32,8 @@ export function EditableDateTime({
   const [pendingValue, setPendingValue] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const blurTimeoutRef = useRef<number>();
 
   // Convert ISO string to local datetime-local format
   const toLocalInput = useCallback((isoString: string | null | undefined): string => {
@@ -65,6 +67,15 @@ export function EditableDateTime({
     }
   }, [isEditing]);
 
+  // Cleanup blur timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (blurTimeoutRef.current) {
+        clearTimeout(blurTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleStartEdit = useCallback(() => {
     if (disabled) return;
     setPendingValue(toLocalInput(value));
@@ -72,6 +83,7 @@ export function EditableDateTime({
   }, [value, disabled, toLocalInput]);
 
   const handleSave = useCallback(async () => {
+    if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
     if (isSaving) return;
     setIsSaving(true);
     try {
@@ -86,6 +98,7 @@ export function EditableDateTime({
   }, [pendingValue, onSave, isSaving, toISOString]);
 
   const handleClear = useCallback(async () => {
+    if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
     if (isSaving) return;
     setIsSaving(true);
     try {
@@ -107,6 +120,7 @@ export function EditableDateTime({
   }, [timezone, showTime]);
 
   const handleCancel = useCallback(() => {
+    if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
     setIsEditing(false);
     setPendingValue('');
   }, []);
@@ -120,6 +134,24 @@ export function EditableDateTime({
     }
   }, [handleCancel, handleSave]);
 
+  // Auto-save when focus leaves the entire component
+  const handleContainerBlur = useCallback((e: React.FocusEvent) => {
+    const relatedTarget = e.relatedTarget as Node | null;
+    if (relatedTarget && containerRef.current?.contains(relatedTarget)) return;
+
+    blurTimeoutRef.current = window.setTimeout(() => {
+      if (containerRef.current && !containerRef.current.contains(document.activeElement)) {
+        handleSave();
+      }
+    }, 150);
+  }, [handleSave]);
+
+  const handleContainerFocus = useCallback(() => {
+    if (blurTimeoutRef.current) {
+      clearTimeout(blurTimeoutRef.current);
+    }
+  }, []);
+
   const displayValue = value
     ? (formatDisplay
       ? formatDisplay(value, timezone)
@@ -127,7 +159,12 @@ export function EditableDateTime({
     : null;
 
   return (
-    <div className={`editable-datetime ${className} ${isEditing ? 'editing' : ''} ${disabled ? 'disabled' : ''}`}>
+    <div
+      ref={containerRef}
+      className={`editable-datetime ${className} ${isEditing ? 'editing' : ''} ${disabled ? 'disabled' : ''}`}
+      onBlur={isEditing ? handleContainerBlur : undefined}
+      onFocus={isEditing ? handleContainerFocus : undefined}
+    >
       <AnimatePresence mode="wait">
         {isEditing ? (
           <motion.div
@@ -156,15 +193,6 @@ export function EditableDateTime({
                 title="今"
               >
                 <FaClock />
-              </button>
-              <button
-                type="button"
-                className="datetime-btn save"
-                onClick={handleSave}
-                disabled={isSaving}
-                title="保存"
-              >
-                <FaCheck />
               </button>
               {value && (
                 <button

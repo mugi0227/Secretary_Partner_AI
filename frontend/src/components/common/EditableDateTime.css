@@ -119,15 +119,6 @@
   font-size: 0.75rem;
 }
 
-.datetime-btn.save {
-  background: var(--primary);
-  color: white;
-}
-
-.datetime-btn.save:hover {
-  background: var(--primary-hover, #0369a1);
-}
-
 .datetime-btn.clear {
   background: #fecaca;
   color: #dc2626;
