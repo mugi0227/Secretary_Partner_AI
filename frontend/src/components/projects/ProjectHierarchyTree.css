@@ -1,0 +1,269 @@
+/* ============================
+   FTA-style Hierarchy Tree
+   Left-to-right, column-aligned
+   ============================ */
+
+.hierarchy-tree {
+  overflow-x: auto;
+  padding: 24px;
+  background: var(--bg-main);
+  border-radius: var(--radius-lg);
+  min-height: 200px;
+}
+
+/* Branch: horizontal row (node → children group) */
+.tree-branch {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+/* Children group: vertical stack */
+.tree-children {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  position: relative;
+  margin-left: 24px;
+}
+
+/* Vertical connector line (spanning all children) */
+.tree-children::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  width: 2px;
+  background: var(--border-color);
+}
+
+/* Each child item wrapper */
+.tree-child-item {
+  position: relative;
+  padding: 4px 0;
+}
+
+/* Horizontal connector line from vertical line to child node */
+.tree-child-item::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  width: 12px;
+  height: 2px;
+  background: var(--border-color);
+}
+
+/* Connector from parent to children group */
+.tree-connector {
+  width: 12px;
+  height: 2px;
+  background: var(--border-color);
+  flex-shrink: 0;
+}
+
+/* ============================
+   Tree Node Card
+   ============================ */
+
+.tree-node {
+  min-width: 130px;
+  max-width: 200px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border-left: 4px solid var(--text-muted);
+  background: var(--bg-card);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  border-top: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex-shrink: 0;
+  cursor: default;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+
+.tree-node:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.tree-node.clickable {
+  cursor: pointer;
+}
+
+.tree-node.clickable:hover {
+  transform: translateY(-1px);
+}
+
+/* Node type variations */
+.tree-node.type-project {
+  min-width: 160px;
+  font-weight: 700;
+  font-size: 0.9375rem;
+}
+
+.tree-node.type-child-project {
+  min-width: 140px;
+  font-weight: 600;
+}
+
+.tree-node.type-phase {
+  min-width: 130px;
+}
+
+.tree-node.type-milestone {
+  min-width: 120px;
+  font-style: italic;
+}
+
+.tree-node.type-task {
+  min-width: 120px;
+  max-width: 180px;
+}
+
+/* Node label */
+.tree-node-label {
+  font-size: 0.8125rem;
+  color: var(--text-main);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* Node type badge */
+.tree-node-type {
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+/* Node progress bar */
+.tree-node-progress {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tree-node-progress-bar {
+  flex: 1;
+  height: 3px;
+  background: rgba(148, 163, 184, 0.15);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.tree-node-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.tree-node-progress-text {
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 26px;
+  text-align: right;
+}
+
+/* ============================
+   Status Colors
+   ============================ */
+
+.tree-node.status-active,
+.tree-node.status-in_progress {
+  border-left-color: var(--primary, #0ea5e9);
+}
+
+.tree-node.status-active .tree-node-progress-fill,
+.tree-node.status-in_progress .tree-node-progress-fill {
+  background: var(--primary, #0ea5e9);
+}
+
+.tree-node.status-completed,
+.tree-node.status-done {
+  border-left-color: var(--accent-green, #22c55e);
+}
+
+.tree-node.status-completed .tree-node-progress-fill,
+.tree-node.status-done .tree-node-progress-fill {
+  background: var(--accent-green, #22c55e);
+}
+
+.tree-node.status-planned,
+.tree-node.status-todo {
+  border-left-color: var(--text-muted);
+}
+
+.tree-node.status-planned .tree-node-progress-fill,
+.tree-node.status-todo .tree-node-progress-fill {
+  background: var(--text-muted);
+}
+
+.tree-node.status-waiting {
+  border-left-color: var(--warning, #f59e0b);
+}
+
+.tree-node.status-waiting .tree-node-progress-fill {
+  background: var(--warning, #f59e0b);
+}
+
+.tree-node.status-archived {
+  border-left-color: rgba(148, 163, 184, 0.4);
+  opacity: 0.6;
+}
+
+/* ============================
+   Empty State
+   ============================ */
+
+.hierarchy-tree-empty {
+  padding: 3rem 2rem;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+/* ============================
+   Responsive
+   ============================ */
+
+@media (max-width: 768px) {
+  .hierarchy-tree {
+    padding: 12px;
+  }
+
+  .tree-node {
+    min-width: 100px;
+    max-width: 150px;
+    padding: 6px 8px;
+  }
+
+  .tree-children {
+    margin-left: 16px;
+  }
+
+  .tree-children::before {
+    left: -8px;
+  }
+
+  .tree-child-item::before {
+    left: -8px;
+    width: 8px;
+  }
+
+  .tree-connector {
+    width: 8px;
+  }
+
+  .tree-node-label {
+    font-size: 0.75rem;
+  }
+}

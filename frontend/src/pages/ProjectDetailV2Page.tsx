@@ -17,6 +17,7 @@ import {
   FaTimes,
   FaTrash,
   FaTrophy,
+  FaSitemap,
   FaUsers,
 } from 'react-icons/fa';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -47,6 +48,7 @@ import { MilestoneEditModal } from '../components/gantt/MilestoneEditModal';
 import { ProjectGanttChart } from '../components/gantt/ProjectGanttChart';
 import { MeetingsTab } from '../components/meetings/MeetingsTab';
 import { ProjectAchievementsSection } from '../components/projects/ProjectAchievementsSection';
+import { ProjectHierarchyTree } from '../components/projects/ProjectHierarchyTree';
 import { ChildProjectsSection } from '../components/projects/ChildProjectsSection';
 import { ProjectDetailModal } from '../components/projects/ProjectDetailModal';
 import { ProjectTasksView } from '../components/projects/ProjectTasksView';
@@ -59,7 +61,7 @@ import { useTimezone } from '../hooks/useTimezone';
 import { formatDate, getDeadlineStatus, toDateKey, toDateTime, todayInTimezone } from '../utils/dateTime';
 import './ProjectDetailV2Page.css';
 
-type TabId = 'dashboard' | 'team' | 'timeline' | 'board' | 'gantt' | 'meetings' | 'achievements';
+type TabId = 'dashboard' | 'team' | 'timeline' | 'board' | 'gantt' | 'meetings' | 'achievements' | 'tree';
 type InviteMode = 'email' | 'user_id';
 
 const TAB_LABELS: Record<TabId, string> = {
@@ -70,6 +72,7 @@ const TAB_LABELS: Record<TabId, string> = {
   gantt: 'ガント',
   meetings: 'ミーティング',
   achievements: '達成項目',
+  tree: 'ツリー',
 };
 
 const TAB_ICONS: Record<TabId, ReactElement> = {
@@ -80,6 +83,7 @@ const TAB_ICONS: Record<TabId, ReactElement> = {
   gantt: <FaChartBar />,
   meetings: <FaCalendarAlt />,
   achievements: <FaTrophy />,
+  tree: <FaSitemap />,
 };
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
@@ -135,7 +139,7 @@ const getInitial = (value?: string) => {
   return trimmed ? trimmed.charAt(0) : '?';
 };
 
-const VALID_TABS: TabId[] = ['dashboard', 'team', 'timeline', 'board', 'gantt', 'meetings', 'achievements'];
+const VALID_TABS: TabId[] = ['dashboard', 'team', 'timeline', 'board', 'gantt', 'meetings', 'achievements', 'tree'];
 
 export function ProjectDetailV2Page() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -2436,6 +2440,15 @@ export function ProjectDetailV2Page() {
 
         {activeTab === 'achievements' && (
           <ProjectAchievementsSection projectId={projectId!} />
+        )}
+
+        {activeTab === 'tree' && project && (
+          <ProjectHierarchyTree
+            project={project}
+            phases={phases}
+            milestones={milestones}
+            tasks={tasks}
+          />
         )}
       </section>
 
