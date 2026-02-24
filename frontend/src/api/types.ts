@@ -104,6 +104,7 @@ export interface Task {
   completion_note?: string;
   completed_at?: string;
   completed_by?: string;
+  auto_completed_by_parent_id?: string;
 
   // Multi-member completion
   requires_all_completion: boolean;
@@ -441,6 +442,11 @@ export interface Milestone {
   due_date?: string;
   created_at: string;
   updated_at: string;
+  progress?: number;
+  total_estimated_minutes?: number;
+  remaining_minutes?: number;
+  task_count?: number;
+  completed_task_count?: number;
 }
 
 export interface MilestoneCreate {
@@ -458,6 +464,19 @@ export interface MilestoneUpdate {
   status?: MilestoneStatus;
   order_in_phase?: number;
   due_date?: string;
+}
+
+export interface LightningLinePoint {
+  task_id: string;
+  row_key: string;
+  planned_progress: number;
+  actual_progress: number;
+  deviation_days: number;
+}
+
+export interface LightningLineResponse {
+  reference_date: string;
+  points: LightningLinePoint[];
 }
 
 // Phase AI breakdown models

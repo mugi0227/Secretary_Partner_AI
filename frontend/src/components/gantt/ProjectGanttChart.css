@@ -1246,6 +1246,10 @@
   opacity: 1;
 }
 
+.pgantt-lightning-line {
+  pointer-events: none;
+}
+
 /* Delete confirmation popup */
 .pgantt-delete-confirm {
   background: var(--c-bg);
@@ -1584,6 +1588,39 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.pgantt-lightning-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.24);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.pgantt-lightning-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+.pgantt-lightning-btn.active {
+  color: #ffffff;
+  background: #ef4444;
+  border-color: #dc2626;
+}
+
+.pgantt-lightning-error {
+  font-size: 0.68rem;
+  color: #b91c1c;
+  white-space: nowrap;
 }
 
 /* ============================================

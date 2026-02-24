@@ -59,6 +59,17 @@ async def run_migrations():
         if "progress" not in columns:
             await conn.execute(text("ALTER TABLE tasks ADD COLUMN progress INTEGER DEFAULT 0 NOT NULL"))
 
+        if "auto_completed_by_parent_id" not in columns:
+            await conn.execute(
+                text("ALTER TABLE tasks ADD COLUMN auto_completed_by_parent_id VARCHAR(36)")
+            )
+            await conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_tasks_auto_completed_by_parent_id "
+                    "ON tasks(auto_completed_by_parent_id)"
+                )
+            )
+
         if "order_in_parent" not in columns:
             await conn.execute(text("ALTER TABLE tasks ADD COLUMN order_in_parent INTEGER"))
 

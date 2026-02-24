@@ -51,3 +51,13 @@ class Milestone(MilestoneBase):
 
     class Config:
         from_attributes = True
+
+
+class MilestoneWithProgress(Milestone):
+    """Milestone with computed progress metrics."""
+
+    progress: int = Field(default=0, ge=0, le=100)
+    total_estimated_minutes: int = Field(default=0, ge=0)
+    remaining_minutes: int = Field(default=0, ge=0)
+    task_count: int = Field(default=0, ge=0)
+    completed_task_count: int = Field(default=0, ge=0)

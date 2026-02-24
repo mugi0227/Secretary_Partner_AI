@@ -39,7 +39,9 @@ import type {
   Phase,
   Milestone,
   TaskUpdate,
+  LightningLineResponse,
 } from '../../api/types';
+import { lightningLineApi } from '../../api/lightningLine';
 import { useTimezone } from '../../hooks/useTimezone';
 import { toDateKey, toDateTime, todayInTimezone } from '../../utils/dateTime';
 import './ProjectGanttChart.css';
@@ -52,6 +54,7 @@ type ViewMode = 'day' | 'week' | 'month';
 type BufferStatus = 'healthy' | 'warning' | 'critical';
 
 interface ProjectGanttChartProps {
+  projectId?: string;
   tasks: Task[];
   phases: Phase[];
   milestones: Milestone[];
@@ -560,6 +563,7 @@ const SortableSidebarRow: React.FC<SortableSidebarRowProps> = ({
 // ============================================
 
 export const ProjectGanttChart: React.FC<ProjectGanttChartProps> = ({
+  projectId,
   tasks,
   phases,
   milestones,
@@ -611,6 +615,11 @@ export const ProjectGanttChart: React.FC<ProjectGanttChartProps> = ({
 
   // Milestone deletion confirmation state
   const [pendingDeleteMilestone, setPendingDeleteMilestone] = useState<{ id: string; title: string } | null>(null);
+
+  // Lightning line state
+  const [showLightningLine, setShowLightningLine] = useState(false);
+  const [lightningData, setLightningData] = useState<LightningLineResponse | null>(null);
+  const [lightningError, setLightningError] = useState<string | null>(null);
 
   // Scroll position management - prevent unwanted scrolls on state changes
   const initialScrollDoneRef = useRef(false);
@@ -1319,6 +1328,44 @@ export const ProjectGanttChart: React.FC<ProjectGanttChartProps> = ({
     return viewMode === 'day' ? 40 : viewMode === 'week' ? 16 : 6;
   }, [viewMode]);
 
+  const taskRowIndexMap = useMemo(() => {
+    const map = new Map<string, number>();
+    rows.forEach((row, index) => {
+      if (row.type === 'task' || row.type === 'subtask') {
+        map.set(row.id, index);
+      }
+    });
+    return map;
+  }, [rows]);
+
+  const todayIndex = useMemo(() => {
+    return dateIndexMap.get(today.toISODate() ?? '') ?? 0;
+  }, [dateIndexMap, today]);
+
+  const lightningPolylinePoints = useMemo(() => {
+    if (!showLightningLine || !lightningData?.points?.length) {
+      return '';
+    }
+
+    const maxIndex = Math.max(dateRange.length - 1, 0);
+    const plotted = lightningData.points
+      .map((point) => {
+        const rowIndex = taskRowIndexMap.get(point.row_key);
+        if (rowIndex === undefined) {
+          return null;
+        }
+
+        const xIndex = Math.max(0, Math.min(todayIndex + point.deviation_days, maxIndex));
+        const x = xIndex * dayWidth + dayWidth / 2;
+        const y = rowIndex * 44 + 22;
+        return { x, y, rowIndex };
+      })
+      .filter((point): point is { x: number; y: number; rowIndex: number } => point !== null)
+      .sort((a, b) => a.rowIndex - b.rowIndex);
+
+    return plotted.map((point) => `${point.x},${point.y}`).join(' ');
+  }, [showLightningLine, lightningData, taskRowIndexMap, todayIndex, dateRange.length, dayWidth]);
+
   // Deadline status map for task/subtask rows
   const deadlineStatusMap = useMemo(() => {
     const map = new Map<string, 'overdue' | 'approaching' | null>();
@@ -1329,6 +1376,36 @@ export const ProjectGanttChart: React.FC<ProjectGanttChartProps> = ({
     });
     return map;
   }, [rows, today, timezone]);
+
+  useEffect(() => {
+    if (!showLightningLine || !projectId) {
+      setLightningData(null);
+      setLightningError(null);
+      return;
+    }
+
+    let isCancelled = false;
+    const fetchLightningLine = async () => {
+      try {
+        const data = await lightningLineApi.get(projectId);
+        if (!isCancelled) {
+          setLightningData(data);
+          setLightningError(null);
+        }
+      } catch (error) {
+        console.error('Failed to fetch lightning line:', error);
+        if (!isCancelled) {
+          setLightningData(null);
+          setLightningError('イナズマ線データの取得に失敗しました');
+        }
+      }
+    };
+
+    fetchLightningLine();
+    return () => {
+      isCancelled = true;
+    };
+  }, [showLightningLine, projectId, tasks]);
 
   // Scroll to today's position
   const scrollToToday = useCallback(() => {
@@ -2213,6 +2290,18 @@ export const ProjectGanttChart: React.FC<ProjectGanttChartProps> = ({
           </div>
         </div>
         <div className="pgantt-controls-right">
+          {projectId && (
+            <button
+              className={`pgantt-lightning-btn ${showLightningLine ? 'active' : ''}`}
+              onClick={() => setShowLightningLine(prev => !prev)}
+              title="イナズマ線の表示切り替え"
+            >
+              <span>イナズマ線</span>
+            </button>
+          )}
+          {showLightningLine && lightningError && (
+            <span className="pgantt-lightning-error">{lightningError}</span>
+          )}
           <button
             className="pgantt-today-btn"
             onClick={scrollToToday}
@@ -2362,6 +2451,16 @@ export const ProjectGanttChart: React.FC<ProjectGanttChartProps> = ({
                   <polygon points="0 0, 8 3, 0 6" fill="#ef4444" />
                 </marker>
               </defs>
+              {showLightningLine && lightningPolylinePoints && (
+                <polyline
+                  points={lightningPolylinePoints}
+                  fill="none"
+                  stroke="#ef4444"
+                  strokeWidth={2}
+                  strokeDasharray="5 3"
+                  className="pgantt-lightning-line"
+                />
+              )}
               {dependencyArrows.map((arrow, index) => {
                 const rowHeight = 44;
 

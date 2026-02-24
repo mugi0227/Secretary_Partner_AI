@@ -2297,6 +2297,7 @@ export function ProjectDetailV2Page() {
             <div className="project-v2-grid">
               <div className="project-v2-card">
                 <ProjectGanttChart
+                  projectId={projectId}
                   tasks={tasks}
                   phases={phases}
                   milestones={milestones}

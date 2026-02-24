@@ -63,6 +63,7 @@ class TaskORM(Base):
     same_day_allowed = Column(Boolean, default=True)
     min_gap_days = Column(Integer, default=0)
     progress = Column(Integer, default=0, nullable=False)
+    auto_completed_by_parent_id = Column(String(36), nullable=True, index=True)
     source_capture_id = Column(String(36), nullable=True)
     created_by = Column(String(10), default="USER")
     created_at = Column(DateTime, default=now_utc)

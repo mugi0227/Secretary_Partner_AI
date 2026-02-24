@@ -55,6 +55,7 @@ from app.models.enums import (
     ProjectRole,
     ProjectVisibility,
 )
+from app.models.lightning_line import LightningLineResponse
 from app.models.memory import Memory, MemoryCreate
 from app.models.project import Project, ProjectCreate, ProjectUpdate, ProjectWithTaskCount
 from app.models.project_kpi import ProjectKpiTemplate
@@ -62,6 +63,7 @@ from app.models.project_link import ProjectLinkRequest, ProjectLinkRequestCreate
 from app.services import notification_service as notify
 from app.services.kpi_calculator import apply_project_kpis
 from app.services.kpi_templates import get_kpi_templates
+from app.services.lightning_line_service import LightningLineService
 from app.services.llm_utils import generate_text, generate_text_with_status
 from app.services.project_permissions import ProjectAction
 from app.utils.datetime_utils import ensure_utc, now_utc
@@ -396,6 +398,25 @@ async def list_projects(
         user.id, status=status, top_level_only=top_level_only,
     )
     return [await apply_project_kpis(user.id, project, task_repo) for project in projects]
+
+
+@router.get("/{project_id}/lightning-line", response_model=LightningLineResponse)
+async def get_project_lightning_line(
+    project_id: UUID,
+    user: CurrentUser,
+    repo: ProjectRepo,
+    member_repo: ProjectMemberRepo,
+    task_repo: TaskRepo,
+    reference_date: Optional[date] = Query(None, description="Reference date (YYYY-MM-DD)"),
+):
+    """Get lightning line points for project tasks."""
+    access = await require_project_member(user, project_id, repo, member_repo)
+    service = LightningLineService(task_repo)
+    return await service.calculate(
+        user_id=access.owner_id,
+        project_id=project_id,
+        reference_date=reference_date,
+    )
 
 
 @router.patch("/{project_id}", response_model=Project)
