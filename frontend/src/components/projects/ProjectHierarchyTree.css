@@ -1,6 +1,5 @@
 /* ============================
-   FTA-style Hierarchy Tree
-   Left-to-right, column-aligned
+   Column-Aligned Hierarchy Tree
    ============================ */
 
 .hierarchy-tree {
@@ -11,54 +10,50 @@
   min-height: 200px;
 }
 
-/* Branch: horizontal row (node → children group) */
-.tree-branch {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
+.hierarchy-tree-scroll {
+  display: inline-block;
+  min-width: 100%;
 }
 
-/* Children group: vertical stack */
-.tree-children {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+/* ============================
+   Column Headers
+   ============================ */
+
+.hierarchy-tree-headers {
   position: relative;
-  margin-left: 24px;
+  height: 28px;
+  margin-bottom: 16px;
 }
 
-/* Vertical connector line (spanning all children) */
-.tree-children::before {
-  content: '';
-  position: absolute;
-  left: -12px;
-  width: 2px;
-  background: var(--border-color);
+.hierarchy-tree-header {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  text-align: center;
+  opacity: 0.7;
 }
 
-/* Each child item wrapper */
-.tree-child-item {
+/* ============================
+   Tree Canvas
+   ============================ */
+
+.hierarchy-tree-canvas {
   position: relative;
-  padding: 4px 0;
 }
 
-/* Horizontal connector line from vertical line to child node */
-.tree-child-item::before {
-  content: '';
+/* SVG connector lines */
+.hierarchy-tree-svg {
   position: absolute;
-  left: -12px;
-  top: 50%;
-  width: 12px;
-  height: 2px;
-  background: var(--border-color);
+  top: 0;
+  left: 0;
+  pointer-events: none;
 }
 
-/* Connector from parent to children group */
-.tree-connector {
-  width: 12px;
-  height: 2px;
-  background: var(--border-color);
-  flex-shrink: 0;
+.hierarchy-tree-svg line {
+  stroke: var(--border-color);
+  stroke-width: 2;
 }
 
 /* ============================
@@ -66,9 +61,7 @@
    ============================ */
 
 .tree-node {
-  min-width: 130px;
-  max-width: 200px;
-  padding: 8px 12px;
+  padding: 6px 10px;
   border-radius: 8px;
   border-left: 4px solid var(--text-muted);
   background: var(--bg-card);
@@ -78,10 +71,12 @@
   border-bottom: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  flex-shrink: 0;
+  justify-content: center;
+  gap: 2px;
   cursor: default;
-  transition: box-shadow 0.15s, transform 0.15s;
+  transition: box-shadow 0.15s;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .tree-node:hover {
@@ -98,28 +93,12 @@
 
 /* Node type variations */
 .tree-node.type-project {
-  min-width: 160px;
   font-weight: 700;
   font-size: 0.9375rem;
 }
 
 .tree-node.type-child-project {
-  min-width: 140px;
   font-weight: 600;
-}
-
-.tree-node.type-phase {
-  min-width: 130px;
-}
-
-.tree-node.type-milestone {
-  min-width: 120px;
-  font-style: italic;
-}
-
-.tree-node.type-task {
-  min-width: 120px;
-  max-width: 180px;
 }
 
 /* Node label */
@@ -238,32 +217,5 @@
 @media (max-width: 768px) {
   .hierarchy-tree {
     padding: 12px;
-  }
-
-  .tree-node {
-    min-width: 100px;
-    max-width: 150px;
-    padding: 6px 8px;
-  }
-
-  .tree-children {
-    margin-left: 16px;
-  }
-
-  .tree-children::before {
-    left: -8px;
-  }
-
-  .tree-child-item::before {
-    left: -8px;
-    width: 8px;
-  }
-
-  .tree-connector {
-    width: 8px;
-  }
-
-  .tree-node-label {
-    font-size: 0.75rem;
   }
 }

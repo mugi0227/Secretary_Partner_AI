@@ -55,7 +55,6 @@ function buildTree(
   tasks: Task[],
   childProjects: ProjectWithTaskCount[],
 ): TreeNode {
-  // Group helpers
   const milestonesByPhase = new Map<string, Milestone[]>();
   milestones.forEach((ms) => {
     const list = milestonesByPhase.get(ms.phase_id) || [];
@@ -82,7 +81,6 @@ function buildTree(
     }
   });
 
-  // Build milestone nodes
   const buildMilestoneNode = (ms: Milestone): TreeNode => {
     const msTasks = tasksByMilestone.get(ms.id) || [];
     return {
@@ -103,7 +101,6 @@ function buildTree(
     };
   };
 
-  // Build phase nodes
   const buildPhaseNode = (phase: PhaseWithTaskCount): TreeNode => {
     const phaseMilestones = (milestonesByPhase.get(phase.id) || [])
       .sort((a, b) => a.order_in_phase - b.order_in_phase);
@@ -134,7 +131,6 @@ function buildTree(
     };
   };
 
-  // Build child project nodes
   const buildChildProjectNode = (cp: ProjectWithTaskCount): TreeNode => ({
     id: cp.id,
     type: 'child-project',
@@ -147,10 +143,8 @@ function buildTree(
     children: [],
   });
 
-  // Sort phases
   const sortedPhases = [...phases].sort((a, b) => a.order_in_project - b.order_in_project);
 
-  // Root children
   const rootChildren: TreeNode[] = [
     ...sortedPhases.map(buildPhaseNode),
     ...childProjects.sort((a, b) => a.name.localeCompare(b.name)).map(buildChildProjectNode),
@@ -177,80 +171,143 @@ function buildTree(
 }
 
 /* ============================
-   Tree Node Renderer
+   Layout Constants
    ============================ */
 
-function TreeNodeCard({ node }: { node: TreeNode }) {
-  const navigate = useNavigate();
-  const cls = statusClass(node.status);
-  const isClickable = !!node.linkTo;
+const NODE_W = 180;
+const NODE_H = 68;
+const ROW_GAP = 10;
+const COL_GAP = 60;
 
-  const TYPE_LABELS: Record<string, string> = {
-    project: 'Project',
-    'child-project': 'Sub Project',
-    phase: 'Phase',
-    milestone: 'Milestone',
-    task: 'Task',
-  };
+/* ============================
+   Column Detection
+   ============================ */
 
-  return (
-    <div
-      className={`tree-node type-${node.type} ${cls}${isClickable ? ' clickable' : ''}`}
-      onClick={isClickable ? () => navigate(node.linkTo!) : undefined}
-      title={node.label}
-    >
-      <span className="tree-node-type">{TYPE_LABELS[node.type]}</span>
-      <span className="tree-node-label">{node.label}</span>
-      {node.progress !== undefined && (
-        <div className="tree-node-progress">
-          <div className="tree-node-progress-bar">
-            <div
-              className="tree-node-progress-fill"
-              style={{ width: `${node.progress}%` }}
-            />
-          </div>
-          <span className="tree-node-progress-text">{node.progress}%</span>
-        </div>
-      )}
-    </div>
-  );
+interface ColumnDef {
+  key: string;
+  label: string;
+}
+
+function detectColumns(root: TreeNode): ColumnDef[] {
+  const types = new Set<string>();
+  (function collect(n: TreeNode) {
+    types.add(n.type);
+    n.children.forEach(collect);
+  })(root);
+
+  const cols: ColumnDef[] = [{ key: 'project', label: 'プロジェクト' }];
+
+  if (types.has('phase') || types.has('child-project')) {
+    const hasPhase = types.has('phase');
+    const hasChild = types.has('child-project');
+    let label = 'フェーズ';
+    if (hasChild && !hasPhase) label = 'サブプロジェクト';
+    else if (hasChild && hasPhase) label = 'フェーズ / サブPJ';
+    cols.push({ key: 'phase', label });
+  }
+
+  if (types.has('milestone')) {
+    cols.push({ key: 'milestone', label: 'マイルストーン' });
+  }
+
+  if (types.has('task')) {
+    cols.push({ key: 'task', label: 'タスク' });
+  }
+
+  return cols;
+}
+
+function columnX(type: string, cols: ColumnDef[]): number {
+  const key = type === 'child-project' ? 'phase' : type;
+  const idx = cols.findIndex((c) => c.key === key);
+  return (idx < 0 ? 0 : idx) * (NODE_W + COL_GAP);
 }
 
 /* ============================
-   Recursive Branch Renderer
+   Layout Computation
    ============================ */
 
-function TreeBranch({ node }: { node: TreeNode }) {
-  if (node.children.length === 0) {
-    return <TreeNodeCard node={node} />;
+interface LayoutItem {
+  node: TreeNode;
+  x: number;
+  y: number;
+  centerY: number;
+}
+
+interface Seg {
+  x1: number; y1: number;
+  x2: number; y2: number;
+}
+
+function subtreeH(n: TreeNode): number {
+  if (n.children.length === 0) return NODE_H;
+  return n.children.reduce((s, c) => s + subtreeH(c), 0)
+    + (n.children.length - 1) * ROW_GAP;
+}
+
+function computeLayout(root: TreeNode, cols: ColumnDef[]) {
+  const items: LayoutItem[] = [];
+  const segs: Seg[] = [];
+
+  function lay(node: TreeNode, yStart: number): void {
+    const x = columnX(node.type, cols);
+    const h = subtreeH(node);
+    const cy = yStart + h / 2;
+
+    items.push({ node, x, y: cy - NODE_H / 2, centerY: cy });
+
+    if (node.children.length === 0) return;
+
+    const childInfos: { x: number; cy: number }[] = [];
+    let childY = yStart;
+
+    for (const ch of node.children) {
+      const chH = subtreeH(ch);
+      const chCY = childY + chH / 2;
+      childInfos.push({ x: columnX(ch.type, cols), cy: chCY });
+      lay(ch, childY);
+      childY += chH + ROW_GAP;
+    }
+
+    // Connector lines
+    const pRight = x + NODE_W;
+    const minCX = Math.min(...childInfos.map((c) => c.x));
+    const midX = pRight + (minCX - pRight) / 2;
+
+    // Horizontal stub from parent
+    segs.push({ x1: pRight, y1: cy, x2: midX, y2: cy });
+
+    // Vertical bar connecting children
+    if (childInfos.length > 1) {
+      const minCY = Math.min(...childInfos.map((c) => c.cy));
+      const maxCY = Math.max(...childInfos.map((c) => c.cy));
+      segs.push({ x1: midX, y1: minCY, x2: midX, y2: maxCY });
+    }
+
+    // Horizontal stub to each child
+    for (const ci of childInfos) {
+      segs.push({ x1: midX, y1: ci.cy, x2: ci.x, y2: ci.cy });
+    }
   }
 
-  return (
-    <div className="tree-branch">
-      <TreeNodeCard node={node} />
-      <div className="tree-connector" />
-      <div className="tree-children">
-        {node.children.map((child, i) => (
-          <div
-            key={child.id}
-            className="tree-child-item"
-            style={
-              node.children.length === 1
-                ? undefined
-                : {
-                    // Adjust vertical connector height
-                    '--is-first': i === 0 ? '1' : '0',
-                    '--is-last': i === node.children.length - 1 ? '1' : '0',
-                  } as React.CSSProperties
-            }
-          >
-            <TreeBranch node={child} />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  lay(root, 0);
+
+  const totalH = subtreeH(root);
+  const totalW = (cols.length - 1) * (NODE_W + COL_GAP) + NODE_W;
+  return { items, segs, totalW, totalH };
 }
+
+/* ============================
+   Node Type Labels
+   ============================ */
+
+const TYPE_LABELS: Record<string, string> = {
+  project: 'Project',
+  'child-project': 'Sub Project',
+  phase: 'Phase',
+  milestone: 'Milestone',
+  task: 'Task',
+};
 
 /* ============================
    Main Component
@@ -262,6 +319,8 @@ export function ProjectHierarchyTree({
   milestones,
   tasks,
 }: ProjectHierarchyTreeProps) {
+  const navigate = useNavigate();
+
   const { data: childProjects } = useQuery({
     queryKey: ['project-children', project.id],
     queryFn: () => projectsApi.getChildren(project.id),
@@ -270,6 +329,13 @@ export function ProjectHierarchyTree({
   const tree = useMemo(
     () => buildTree(project, phases, milestones, tasks, childProjects || []),
     [project, phases, milestones, tasks, childProjects],
+  );
+
+  const cols = useMemo(() => detectColumns(tree), [tree]);
+
+  const { items, segs, totalW, totalH } = useMemo(
+    () => computeLayout(tree, cols),
+    [tree, cols],
   );
 
   if (tree.children.length === 0) {
@@ -284,7 +350,75 @@ export function ProjectHierarchyTree({
 
   return (
     <div className="hierarchy-tree">
-      <TreeBranch node={tree} />
+      <div className="hierarchy-tree-scroll">
+        {/* Column headers */}
+        <div className="hierarchy-tree-headers" style={{ width: totalW }}>
+          {cols.map((c, i) => (
+            <div
+              key={c.key}
+              className="hierarchy-tree-header"
+              style={{
+                position: 'absolute',
+                left: i * (NODE_W + COL_GAP),
+                width: NODE_W,
+              }}
+            >
+              {c.label}
+            </div>
+          ))}
+        </div>
+
+        {/* Tree canvas */}
+        <div
+          className="hierarchy-tree-canvas"
+          style={{ width: totalW, height: totalH }}
+        >
+          {/* SVG connector lines */}
+          <svg
+            className="hierarchy-tree-svg"
+            width={totalW}
+            height={totalH}
+          >
+            {segs.map((s, i) => (
+              <line key={i} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} />
+            ))}
+          </svg>
+
+          {/* Node cards */}
+          {items.map((item) => {
+            const isClickable = !!item.node.linkTo;
+            return (
+              <div
+                key={item.node.id}
+                className={`tree-node type-${item.node.type} ${statusClass(item.node.status)}${isClickable ? ' clickable' : ''}`}
+                style={{
+                  position: 'absolute',
+                  left: item.x,
+                  top: item.y,
+                  width: NODE_W,
+                  height: NODE_H,
+                }}
+                onClick={isClickable ? () => navigate(item.node.linkTo!) : undefined}
+                title={item.node.label}
+              >
+                <span className="tree-node-type">{TYPE_LABELS[item.node.type]}</span>
+                <span className="tree-node-label">{item.node.label}</span>
+                {item.node.progress !== undefined && (
+                  <div className="tree-node-progress">
+                    <div className="tree-node-progress-bar">
+                      <div
+                        className="tree-node-progress-fill"
+                        style={{ width: `${item.node.progress}%` }}
+                      />
+                    </div>
+                    <span className="tree-node-progress-text">{item.node.progress}%</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
