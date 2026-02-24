@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaStar, FaPlus, FaLock, FaUsers, FaChevronRight } from 'react-icons/fa6';
+import { FaStar, FaPlus, FaLock, FaUsers, FaChevronRight, FaGrip, FaSitemap } from 'react-icons/fa6';
 import {
   DndContext,
   PointerSensor,
@@ -19,6 +19,8 @@ import { usePageTour } from '../hooks/usePageTour';
 import { PageTour } from '../components/onboarding/PageTour';
 import { TourHelpButton } from '../components/onboarding/TourHelpButton';
 import type { ProjectWithTaskCount } from '../api/types';
+import { userStorage } from '../utils/userStorage';
+import { ProjectTreeView } from '../components/projects/ProjectTreeView';
 import '../components/projects/ProjectDetailModal.css';
 import './ProjectsPage.css';
 
@@ -77,6 +79,14 @@ export function ProjectsPage() {
   } | null>(null);
   const [linkError, setLinkError] = useState('');
   const [isLinking, setIsLinking] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'tree'>(() => {
+    return (userStorage.get('projectsPageView') as 'grid' | 'tree') || 'grid';
+  });
+
+  const handleViewModeChange = useCallback((mode: 'grid' | 'tree') => {
+    setViewMode(mode);
+    userStorage.set('projectsPageView', mode);
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -192,13 +202,38 @@ export function ProjectsPage() {
         <h2 className="page-title">プロジェクト</h2>
         <div className="header-actions">
           <TourHelpButton onClick={tour.startTour} />
-          <span className="project-total">全{projects.length}件</span>
+          <div className="projects-view-toggle">
+            <button
+              className={`projects-view-btn${viewMode === 'grid' ? ' active' : ''}`}
+              onClick={() => handleViewModeChange('grid')}
+              title="グリッド表示"
+            >
+              <FaGrip />
+            </button>
+            <button
+              className={`projects-view-btn${viewMode === 'tree' ? ' active' : ''}`}
+              onClick={() => handleViewModeChange('tree')}
+              title="ツリー表示"
+            >
+              <FaSitemap />
+            </button>
+          </div>
+          <span className="project-total">
+            全{viewMode === 'grid' ? projects.length : allProjects.length}件
+          </span>
           <button className="button button-primary" onClick={() => setShowCreateModal(true)}>
             <FaPlus /> 新規プロジェクト
           </button>
         </div>
       </div>
 
+      {viewMode === 'tree' ? (
+        <ProjectTreeView
+          topLevelProjects={topLevelProjects}
+          childrenMap={childrenMap}
+          allProjects={allProjects}
+        />
+      ) : (
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div className="projects-grid">
           {projects.length === 0 ? (
@@ -332,6 +367,7 @@ export function ProjectsPage() {
           ) : null}
         </DragOverlay>
       </DndContext>
+      )}
 
       {linkConfirmation && (
         <div className="modal-overlay" onMouseDown={(e) => e.target === e.currentTarget && setLinkConfirmation(null)}>

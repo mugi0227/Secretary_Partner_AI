@@ -51,6 +51,42 @@
   box-shadow: 0 8px 24px -4px rgba(14, 165, 233, 0.4);
 }
 
+/* View toggle (grid / tree) */
+.projects-view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.projects-view-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: var(--bg-card);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.15s ease;
+}
+
+.projects-view-btn:not(:last-child) {
+  border-right: 1px solid var(--border-color);
+}
+
+.projects-view-btn:hover {
+  background: var(--bg-hover, rgba(148, 163, 184, 0.08));
+  color: var(--text-main);
+}
+
+.projects-view-btn.active {
+  background: rgba(14, 165, 233, 0.1);
+  color: var(--primary);
+}
+
 .project-total {
   font-size: 0.95rem;
   color: var(--text-muted);

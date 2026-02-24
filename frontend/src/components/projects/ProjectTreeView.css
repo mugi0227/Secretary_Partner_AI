@@ -1,0 +1,227 @@
+.project-tree-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Toolbar */
+.project-tree-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border-color);
+}
+
+.project-tree-toolbar button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.project-tree-toolbar button:hover {
+  background: var(--bg-hover, rgba(148, 163, 184, 0.08));
+  color: var(--text-main);
+}
+
+/* Tree list container */
+.project-tree-list {
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+/* Tree node row */
+.project-tree-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  padding-left: calc(16px + var(--depth, 0) * 20px);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+  transition: background 0.15s;
+}
+
+.project-tree-node:last-child {
+  border-bottom: none;
+}
+
+.project-tree-node:hover {
+  background: var(--bg-hover, rgba(148, 163, 184, 0.06));
+}
+
+.project-tree-node.depth-0 {
+  font-weight: 600;
+}
+
+/* Expand/collapse toggle */
+.project-tree-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  border-radius: 4px;
+  transition: all 0.15s;
+  font-size: 0.625rem;
+}
+
+.project-tree-toggle:hover {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text-main);
+}
+
+.project-tree-toggle.spacer {
+  visibility: hidden;
+}
+
+/* Project name */
+.project-tree-name {
+  flex: 1;
+  font-size: 0.9375rem;
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.project-tree-name:hover {
+  color: var(--primary);
+}
+
+/* Status badge (reuse project-status pattern) */
+.project-tree-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.project-tree-status.status-active {
+  background: rgba(34, 197, 94, 0.1);
+  color: #16a34a;
+}
+
+.project-tree-status.status-completed {
+  background: rgba(99, 102, 241, 0.1);
+  color: #6366f1;
+}
+
+.project-tree-status.status-archived {
+  background: rgba(148, 163, 184, 0.1);
+  color: var(--text-muted);
+}
+
+/* Progress bar */
+.project-tree-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.project-tree-progress-bar {
+  width: 60px;
+  height: 4px;
+  background: rgba(148, 163, 184, 0.15);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.project-tree-progress-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.project-tree-progress-text {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  min-width: 32px;
+  text-align: right;
+}
+
+/* Task stats */
+.project-tree-stats {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Child count badge */
+.project-tree-child-badge {
+  font-size: 0.6875rem;
+  background: rgba(14, 165, 233, 0.1);
+  color: var(--primary);
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* Empty state */
+.project-tree-empty {
+  padding: 4rem 2rem;
+  text-align: center;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border-color);
+}
+
+.project-tree-empty-icon {
+  font-size: 2rem;
+  margin-bottom: 8px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .project-tree-node {
+    padding-left: calc(12px + var(--depth, 0) * 14px);
+    padding-right: 12px;
+    gap: 6px;
+  }
+
+  .project-tree-progress-bar {
+    width: 40px;
+  }
+
+  .project-tree-stats {
+    display: none;
+  }
+
+  .project-tree-name {
+    font-size: 0.875rem;
+  }
+}
