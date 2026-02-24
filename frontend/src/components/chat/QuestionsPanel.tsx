@@ -425,8 +425,6 @@ export function QuestionsPanel({ questions, context, onSubmit, onCancel }: Quest
 
   const unansweredCount = questions.length - answeredCount;
 
-  const isAllAnswered = unansweredCount === 0;
-
   const currentAnswer = answers[currentQuestion.id];
   const currentIsFreeText = isFreeTextQuestion(currentQuestion);
 

@@ -33,7 +33,7 @@ export function EditableDateTime({
   const [isSaving, setIsSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const blurTimeoutRef = useRef<number>();
+  const blurTimeoutRef = useRef<number | undefined>(undefined);
 
   // Convert ISO string to local datetime-local format
   const toLocalInput = useCallback((isoString: string | null | undefined): string => {
