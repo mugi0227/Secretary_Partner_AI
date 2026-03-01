@@ -11,6 +11,7 @@ import './ChildProjectsSection.css';
 interface ChildProjectsSectionProps {
   projectId: string;
   projectName: string;
+  onTaskClick?: (taskId: string) => void;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -26,12 +27,65 @@ const TASK_STATUS_COLORS: Record<string, string> = {
   DONE: '#22c55e',
 };
 
+function CollapsibleTaskNode({
+  task,
+  subtasks,
+  onTaskClick,
+}: {
+  task: { id: string; title: string; status: string; assignee_names: string[] };
+  subtasks: { id: string; title: string; status: string; assignee_names: string[] }[];
+  onTaskClick?: (taskId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const hasChildren = subtasks.length > 0;
+
+  return (
+    <div className="child-task-group">
+      <div
+        className={`child-task-row${onTaskClick || hasChildren ? ' clickable' : ''}`}
+        onClick={hasChildren ? () => setOpen(!open) : (onTaskClick ? () => onTaskClick(task.id) : undefined)}
+      >
+        <span className="child-task-toggle">
+          {hasChildren ? (open ? <FaChevronDown /> : <FaChevronRight />) : null}
+        </span>
+        <FaCircle
+          className="child-task-status-dot"
+          style={{ color: TASK_STATUS_COLORS[task.status] || '#94a3b8' }}
+        />
+        <span className="child-task-title">{task.title}</span>
+        {hasChildren && <span className="child-task-count">{subtasks.length}</span>}
+        {task.assignee_names.length > 0 && (
+          <span className="child-task-assignee">{task.assignee_names.join(', ')}</span>
+        )}
+      </div>
+      {open && subtasks.map(sub => (
+        <div
+          key={sub.id}
+          className={`child-task-row child-task-indent${onTaskClick ? ' clickable' : ''}`}
+          onClick={onTaskClick ? () => onTaskClick(sub.id) : undefined}
+        >
+          <FaCircle
+            className="child-task-status-dot"
+            style={{ color: TASK_STATUS_COLORS[sub.status] || '#94a3b8' }}
+          />
+          <span className="child-task-title">{sub.title}</span>
+          {sub.assignee_names.length > 0 && (
+            <span className="child-task-assignee">{sub.assignee_names.join(', ')}</span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ChildProjectCard({
   project,
   parentProjectId,
+  onTaskClick,
 }: {
   project: ProjectWithTaskCount;
   parentProjectId: string;
+  onTaskClick?: (taskId: string) => void;
 }) {
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
@@ -96,20 +150,29 @@ function ChildProjectCard({
                 <FaSpinner className="spinner" /> 読み込み中...
               </div>
             ) : tasks && tasks.length > 0 ? (
-              tasks.map((task) => (
-                <div key={task.id} className="child-task-row">
-                  <FaCircle
-                    className="child-task-status-dot"
-                    style={{ color: TASK_STATUS_COLORS[task.status] || '#94a3b8' }}
+              (() => {
+                const taskIds = new Set(tasks.map(t => t.id));
+                const childrenMap = new Map<string, typeof tasks>();
+                const roots: typeof tasks = [];
+                for (const t of tasks) {
+                  if (t.parent_id && taskIds.has(t.parent_id)) {
+                    const arr = childrenMap.get(t.parent_id) || [];
+                    arr.push(t);
+                    childrenMap.set(t.parent_id, arr);
+                  } else {
+                    roots.push(t);
+                  }
+                }
+
+                return roots.map(task => (
+                  <CollapsibleTaskNode
+                    key={task.id}
+                    task={task}
+                    subtasks={childrenMap.get(task.id) || []}
+                    onTaskClick={onTaskClick}
                   />
-                  <span className="child-task-title">{task.title}</span>
-                  {task.assignee_names.length > 0 && (
-                    <span className="child-task-assignee">
-                      {task.assignee_names.join(', ')}
-                    </span>
-                  )}
-                </div>
-              ))
+                ));
+              })()
             ) : (
               <div className="child-project-tasks-empty">タスクなし</div>
             )}
@@ -268,7 +331,7 @@ function IncomingRequestCard({
   );
 }
 
-export function ChildProjectsSection({ projectId, projectName }: ChildProjectsSectionProps) {
+export function ChildProjectsSection({ projectId, projectName, onTaskClick }: ChildProjectsSectionProps) {
   const queryClient = useQueryClient();
   const [showAddOptions, setShowAddOptions] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -360,7 +423,7 @@ export function ChildProjectsSection({ projectId, projectName }: ChildProjectsSe
                   </div>
                   <div className="child-projects-grid">
                     {projects.map((child) => (
-                      <ChildProjectCard key={child.id} project={child} parentProjectId={projectId} />
+                      <ChildProjectCard key={child.id} project={child} parentProjectId={projectId} onTaskClick={onTaskClick} />
                     ))}
                   </div>
                 </div>
@@ -368,7 +431,7 @@ export function ChildProjectsSection({ projectId, projectName }: ChildProjectsSe
             ) : (
               <div className="child-projects-grid">
                 {children?.map((child) => (
-                  <ChildProjectCard key={child.id} project={child} parentProjectId={projectId} />
+                  <ChildProjectCard key={child.id} project={child} parentProjectId={projectId} onTaskClick={onTaskClick} />
                 ))}
               </div>
             )

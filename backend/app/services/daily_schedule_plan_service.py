@@ -23,6 +23,7 @@ from app.models.schedule import (
     ScheduleDay,
     ScheduleResponse,
     TaskAllocation,
+    TaskScheduleInfo,
 )
 from app.models.schedule_plan import (
     DailySchedulePlanCreate,
@@ -206,6 +207,24 @@ def _build_task_snapshots(tasks: list[Task]) -> list[TaskPlanSnapshot]:
         TaskPlanSnapshot(task_id=task.id, title=task.title, fingerprint=_task_fingerprint(task))
         for task in tasks
     ]
+
+
+def _merge_task_info_lists(
+    *lists: list[TaskScheduleInfo],
+) -> list[TaskScheduleInfo]:
+    """Merge multiple TaskScheduleInfo lists, deduplicating by task_id (last wins)."""
+    seen: dict[UUID, TaskScheduleInfo] = {}
+    for info_list in lists:
+        for info in info_list:
+            seen[info.task_id] = info
+    return list(seen.values())
+
+
+def _merge_task_infos_from_plans(plans: list) -> list[TaskScheduleInfo]:
+    """Collect TaskScheduleInfo from all plans, deduplicating by task_id."""
+    if not plans:
+        return []
+    return _merge_task_info_lists(*(plan.tasks for plan in plans))
 
 
 def _compute_pending_changes(tasks: list[Task], snapshots: list[TaskPlanSnapshot]) -> list[PendingChange]:
@@ -808,13 +827,14 @@ class DailySchedulePlanService:
         past_end: date,
         all_tasks: list[Task],
         timezone: str,
-    ) -> tuple[list[ScheduleDay], list[ScheduleTimeBlock]]:
+    ) -> tuple[list[ScheduleDay], list[ScheduleTimeBlock], list[TaskScheduleInfo]]:
         """Load saved plans for past days. Returns meeting-only data for days without plans."""
         plans = await self._plan_repo.list_by_range(user_id, past_start, past_end)
         plan_map = {plan.plan_date: plan for plan in plans}
 
         days: list[ScheduleDay] = []
         time_blocks: list[ScheduleTimeBlock] = []
+        past_tasks = _merge_task_infos_from_plans(plans)
         cursor = past_start
         while cursor <= past_end:
             plan = plan_map.get(cursor)
@@ -842,6 +862,17 @@ class DailySchedulePlanService:
                     )
                     duration = int((end_dt - start_dt).total_seconds() / 60)
                     meeting_allocations.append(TaskAllocation(task_id=task.id, minutes=max(0, duration)))
+                    if task.id not in {t.task_id for t in past_tasks}:
+                        past_tasks.append(TaskScheduleInfo(
+                            task_id=task.id,
+                            title=task.title,
+                            project_id=task.project_id,
+                            total_minutes=max(0, duration),
+                            priority_score=0,
+                            is_fixed_time=True,
+                            start_time=task.start_time,
+                            end_time=task.end_time,
+                        ))
                 time_blocks.extend(meeting_blocks)
                 meeting_minutes = sum(a.minutes for a in meeting_allocations)
                 days.append(ScheduleDay(
@@ -855,7 +886,7 @@ class DailySchedulePlanService:
                 ))
             cursor += timedelta(days=1)
 
-        return days, time_blocks
+        return days, time_blocks, past_tasks
 
     async def get_plan_or_forecast(
         self,
@@ -877,7 +908,7 @@ class DailySchedulePlanService:
             future_days_count = max(0, max_days - past_days_count)
 
             all_tasks = await self._task_repo.list(user_id, include_done=True, limit=1000)
-            past_days, past_time_blocks = await self._get_past_days_from_plans(
+            past_days, past_time_blocks, past_task_infos = await self._get_past_days_from_plans(
                 user_id, resolved_start, past_end, all_tasks, timezone,
             )
 
@@ -888,10 +919,11 @@ class DailySchedulePlanService:
                 )
                 merged_days = past_days + list(future_result.days)
                 merged_time_blocks = past_time_blocks + list(future_result.time_blocks)
+                merged_tasks = _merge_task_info_lists(past_task_infos, list(future_result.tasks))
                 return SchedulePlanResponse(
                     start_date=resolved_start,
                     days=merged_days,
-                    tasks=future_result.tasks,
+                    tasks=merged_tasks,
                     unscheduled_task_ids=future_result.unscheduled_task_ids,
                     excluded_tasks=future_result.excluded_tasks,
                     plan_state=future_result.plan_state,
@@ -905,7 +937,7 @@ class DailySchedulePlanService:
                 return SchedulePlanResponse(
                     start_date=resolved_start,
                     days=past_days,
-                    tasks=[],
+                    tasks=past_task_infos,
                     unscheduled_task_ids=[],
                     excluded_tasks=[],
                     plan_state="planned",
@@ -933,7 +965,7 @@ class DailySchedulePlanService:
         plans = await self._plan_repo.list_by_range(user_id, resolved_start, end_date)
         if len(plans) == max_days:
             days = [plan.schedule_day for plan in plans]
-            tasks = plans[0].tasks if plans else []
+            tasks = _merge_task_infos_from_plans(plans)
             unscheduled = plans[0].unscheduled_task_ids if plans else []
             excluded = plans[0].excluded_tasks if plans else []
             time_blocks: list[ScheduleTimeBlock] = []

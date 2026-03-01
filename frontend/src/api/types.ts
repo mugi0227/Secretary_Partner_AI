@@ -397,6 +397,7 @@ export interface ChildProjectTaskSummary {
   status: TaskStatus;
   assignee_names: string[];
   due_date?: string;
+  parent_id?: string;
 }
 
 export interface MemberProjectTask {
@@ -406,6 +407,7 @@ export interface MemberProjectTask {
   task_title: string;
   task_status: TaskStatus;
   due_date?: string;
+  parent_id?: string;
 }
 
 export interface MemberChildTasksSummary {

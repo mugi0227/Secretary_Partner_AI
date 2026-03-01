@@ -21,6 +21,7 @@ class ChildProjectTaskSummary(BaseModel):
     status: TaskStatus
     assignee_names: list[str] = Field(default_factory=list)
     due_date: Optional[datetime] = None
+    parent_id: Optional[UUID] = None
 
 
 class MemberProjectTask(BaseModel):
@@ -32,6 +33,7 @@ class MemberProjectTask(BaseModel):
     task_title: str
     task_status: TaskStatus
     due_date: Optional[datetime] = None
+    parent_id: Optional[UUID] = None
 
 
 class MemberChildTasksSummary(BaseModel):

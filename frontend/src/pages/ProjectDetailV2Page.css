@@ -1067,6 +1067,7 @@
   padding-top: 12px;
 }
 
+/* Group label for "このプロジェクト" / child project name */
 .project-v2-task-group-label {
   font-size: 0.75rem;
   font-weight: 600;
@@ -1082,6 +1083,37 @@
   margin-top: 0;
 }
 
+.project-v2-task-group-label.collapsible {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  border-radius: var(--radius-sm, 4px);
+  padding: 6px 4px;
+  transition: background 0.15s;
+}
+
+.project-v2-task-group-label.collapsible:hover {
+  background: var(--bg-hover, rgba(0, 0, 0, 0.04));
+}
+
+.project-v2-task-group-label .group-chevron {
+  font-size: 0.55rem;
+  flex-shrink: 0;
+}
+
+.project-v2-task-group-label .group-task-count {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--bg-hover, rgba(0, 0, 0, 0.06));
+  padding: 0 6px;
+  border-radius: var(--radius-full, 9999px);
+  margin-left: 4px;
+}
+
+/* Child project task rows (read-only) */
 .project-v2-child-task-row {
   display: flex;
   align-items: center;
@@ -1090,6 +1122,11 @@
   font-size: 0.8125rem;
   color: var(--text-main);
   border-radius: var(--radius-sm);
+  transition: background 0.15s;
+}
+
+.project-v2-child-task-row:hover {
+  background: var(--bg-hover, rgba(0, 0, 0, 0.04));
 }
 
 .project-v2-child-task-title {
@@ -1108,6 +1145,32 @@
 .project-v2-child-task-row.done .project-v2-child-task-title {
   text-decoration: line-through;
   opacity: 0.5;
+}
+
+.project-v2-child-task-indent {
+  margin-left: 36px;
+  border-left: 2px solid var(--border-color, #e5e7eb);
+  padding-left: 8px;
+}
+
+.project-v2-child-task-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.5rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  width: 14px;
+}
+
+.project-v2-child-task-count {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--bg-hover, rgba(0, 0, 0, 0.06));
+  padding: 0 5px;
+  border-radius: var(--radius-full, 9999px);
+  flex-shrink: 0;
 }
 
 .project-v2-member-task-status {

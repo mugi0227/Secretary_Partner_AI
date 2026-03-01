@@ -7,6 +7,7 @@ import {
   FaCheck,
   FaCheckCircle,
   FaChevronDown,
+  FaChevronRight,
   FaColumns,
   FaEdit,
   FaLock,
@@ -151,6 +152,108 @@ const getInitial = (value?: string) => {
 };
 
 const VALID_TABS: TabId[] = ['dashboard', 'team', 'timeline', 'board', 'gantt', 'meetings', 'achievements', 'tree'];
+
+function CollapsibleChildTaskNode({
+  task,
+  subtasks,
+  onTaskClick,
+}: {
+  task: MemberProjectTask;
+  subtasks: MemberProjectTask[];
+  onTaskClick: (taskId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const hasChildren = subtasks.length > 0;
+
+  return (
+    <div>
+      <div
+        className={`project-v2-child-task-row${task.task_status === 'DONE' ? ' done' : ''}`}
+        onClick={hasChildren ? () => setOpen(!open) : () => onTaskClick(task.task_id)}
+        style={{ cursor: 'pointer' }}
+      >
+        <span className="project-v2-child-task-toggle">
+          {hasChildren ? (open ? <FaChevronDown /> : <FaChevronRight />) : null}
+        </span>
+        <FaCircle
+          className="project-v2-child-task-dot"
+          style={{ color: CHILD_TASK_STATUS_COLORS[task.task_status] || '#94a3b8' }}
+        />
+        <span className="project-v2-child-task-title">{task.task_title}</span>
+        {hasChildren && <span className="project-v2-child-task-count">{subtasks.length}</span>}
+        <div className="project-v2-member-task-status" data-status={task.task_status}>
+          {STATUS_LABELS[task.task_status as TaskStatus] || task.task_status}
+        </div>
+      </div>
+      {open && subtasks.map(sub => (
+        <div
+          key={sub.task_id}
+          className={`project-v2-child-task-row project-v2-child-task-indent${sub.task_status === 'DONE' ? ' done' : ''}`}
+          onClick={() => onTaskClick(sub.task_id)}
+          style={{ cursor: 'pointer' }}
+        >
+          <FaCircle
+            className="project-v2-child-task-dot"
+            style={{ color: CHILD_TASK_STATUS_COLORS[sub.task_status] || '#94a3b8' }}
+          />
+          <span className="project-v2-child-task-title">{sub.task_title}</span>
+          <div className="project-v2-member-task-status" data-status={sub.task_status}>
+            {STATUS_LABELS[sub.task_status as TaskStatus] || sub.task_status}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CollapsibleChildTaskGroup({
+  projectName,
+  tasks,
+  onTaskClick,
+}: {
+  projectName: string;
+  tasks: MemberProjectTask[];
+  onTaskClick: (taskId: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const taskIdSet = new Set(tasks.map(t => t.task_id));
+  const childrenMap = new Map<string, MemberProjectTask[]>();
+  const roots: MemberProjectTask[] = [];
+  for (const ct of tasks) {
+    if (ct.parent_id && taskIdSet.has(ct.parent_id)) {
+      const arr = childrenMap.get(ct.parent_id) || [];
+      arr.push(ct);
+      childrenMap.set(ct.parent_id, arr);
+    } else {
+      roots.push(ct);
+    }
+  }
+
+  return (
+    <div>
+      <div
+        className="project-v2-task-group-label collapsible"
+        onClick={() => setOpen(!open)}
+      >
+        {open ? <FaChevronDown className="group-chevron" /> : <FaChevronRight className="group-chevron" />}
+        {projectName}
+        <span className="group-task-count">{tasks.length}</span>
+      </div>
+      {open && roots.map((ct) => {
+        const subs = childrenMap.get(ct.task_id) || [];
+        return (
+          <CollapsibleChildTaskNode
+            key={ct.task_id}
+            task={ct}
+            subtasks={subs}
+            onTaskClick={onTaskClick}
+          />
+        );
+      })}
+    </div>
+  );
+}
 
 export function ProjectDetailV2Page() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -1386,6 +1489,7 @@ export function ProjectDetailV2Page() {
               <ChildProjectsSection
                 projectId={projectId}
                 projectName={project?.name || ''}
+                onTaskClick={(taskId) => taskModal.openTaskDetailById(taskId)}
               />
             )}
 
@@ -1475,7 +1579,7 @@ export function ProjectDetailV2Page() {
                                   {focusTask.title}
                                 </div>
                                 {parentTask && (
-                                  <div className="project-v2-focus-parent">{parentTask.title}</div>
+                                  <div className="project-v2-focus-parent">↳ {parentTask.title}</div>
                                 )}
                                 <div className="project-v2-focus-meta">
                                   {focusTask.estimated_minutes ? formatTime(focusTask.estimated_minutes) : '0m'}
@@ -1536,7 +1640,7 @@ export function ProjectDetailV2Page() {
                                     {task.title}
                                   </div>
                                   {parentTask && (
-                                    <div className="project-v2-task-parent">{parentTask.title}</div>
+                                    <div className="project-v2-task-parent">↳ {parentTask.title}</div>
                                   )}
                                 </div>
                                 <div className="project-v2-task-time">
@@ -1722,6 +1826,9 @@ export function ProjectDetailV2Page() {
                                         ? `${Math.floor(est / 60)}h${est % 60 > 0 ? ` ${est % 60}m` : ''}`
                                         : `${est}m`
                                       : '';
+                                    const parentTask = task.parent_id
+                                      ? tasks.find(t => t.id === task.parent_id)
+                                      : null;
                                     return (
                                       <div
                                         key={task.id}
@@ -1743,7 +1850,10 @@ export function ProjectDetailV2Page() {
                                           <div className={`project-v2-task-title ${isDone ? 'done' : ''}`}>
                                             {task.title}
                                           </div>
-                                          {task.due_date && (
+                                          {parentTask && (
+                                            <div className="project-v2-task-parent">↳ {parentTask.title}</div>
+                                          )}
+                                          {!parentTask && task.due_date && (
                                             <div className="project-v2-muted">{formatShortDate(task.due_date)}</div>
                                           )}
                                         </div>
@@ -1761,28 +1871,13 @@ export function ProjectDetailV2Page() {
                                   })}
                                 </div>
                               )}
-                              {childProjectEntries.map(([projectName, tasks]) => (
-                                <div key={projectName}>
-                                  <div className="project-v2-task-group-label">{projectName}</div>
-                                  {tasks.map((task) => (
-                                    <div
-                                      key={task.task_id}
-                                      className={`project-v2-child-task-row${task.task_status === 'DONE' ? ' done' : ''}`}
-                                    >
-                                      <FaCircle
-                                        className="project-v2-child-task-dot"
-                                        style={{ color: CHILD_TASK_STATUS_COLORS[task.task_status] || '#94a3b8' }}
-                                      />
-                                      <span className="project-v2-child-task-title">{task.task_title}</span>
-                                      <div
-                                        className="project-v2-member-task-status"
-                                        data-status={task.task_status}
-                                      >
-                                        {STATUS_LABELS[task.task_status as TaskStatus] || task.task_status}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
+                              {childProjectEntries.map(([projectName, cTasks]) => (
+                                <CollapsibleChildTaskGroup
+                                  key={projectName}
+                                  projectName={projectName}
+                                  tasks={cTasks}
+                                  onTaskClick={(taskId) => taskModal.openTaskDetailById(taskId)}
+                                />
                               ))}
                             </>
                           )}

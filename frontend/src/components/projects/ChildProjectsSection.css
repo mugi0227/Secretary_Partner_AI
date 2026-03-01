@@ -306,8 +306,24 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 0;
+  padding: 4px 4px;
   font-size: 0.8125rem;
+  border-radius: var(--radius-sm, 4px);
+  transition: background 0.15s;
+}
+
+.child-task-row.clickable {
+  cursor: pointer;
+}
+
+.child-task-row.clickable:hover {
+  background: var(--bg-hover, rgba(0, 0, 0, 0.04));
+}
+
+.child-task-indent {
+  margin-left: 36px;
+  border-left: 2px solid var(--border-color, #e5e7eb);
+  padding-left: 8px;
 }
 
 .child-task-status-dot {
@@ -327,6 +343,26 @@
 .child-task-assignee {
   font-size: 0.75rem;
   color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.child-task-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.5rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  width: 14px;
+}
+
+.child-task-count {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--bg-hover, rgba(0, 0, 0, 0.06));
+  padding: 0 5px;
+  border-radius: var(--radius-full, 9999px);
   flex-shrink: 0;
 }
 

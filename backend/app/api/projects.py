@@ -1405,6 +1405,7 @@ async def list_child_project_tasks(
             status=t.status,
             assignee_names=assignment_map.get(str(t.id), []),
             due_date=t.due_date,
+            parent_id=t.parent_id,
         )
         for t in tasks
     ]
@@ -1461,6 +1462,7 @@ async def list_member_tasks_across_children(
                         task_title=task.title,
                         task_status=task.status,
                         due_date=task.due_date,
+                        parent_id=task.parent_id,
                     )
                 )
 
