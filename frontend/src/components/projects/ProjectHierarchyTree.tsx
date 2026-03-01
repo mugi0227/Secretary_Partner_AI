@@ -23,7 +23,11 @@ interface TreeNode {
   linkTo?: string;
   children: TreeNode[];
   dueDate?: string;
+  startNotBefore?: string;
+  startDate?: string;
+  endDate?: string;
   assigneeLabel?: string;
+  ownerLabel?: string;
   subtaskCount?: number;
 }
 
@@ -67,6 +71,17 @@ function truncateAssignee(label: string): string {
   const parts = label.split(',').map((s) => s.trim());
   if (parts.length <= 1) return label.length > 8 ? label.slice(0, 7) + '…' : label;
   return `${parts[0].length > 6 ? parts[0].slice(0, 5) + '…' : parts[0]} +${parts.length - 1}`;
+}
+
+function formatDateRange(start?: string, end?: string): string {
+  if (start && end) return `${formatShortDate(start)} - ${formatShortDate(end)}`;
+  if (start) return `${formatShortDate(start)} -`;
+  if (end) return `- ${formatShortDate(end)}`;
+  return '';
+}
+
+function truncateOwner(name: string): string {
+  return name.length > 10 ? name.slice(0, 9) + '…' : name;
 }
 
 /* ============================
@@ -129,6 +144,7 @@ function buildSubtreeChildren(
     label: t.title,
     status: t.status,
     dueDate: t.due_date,
+    startNotBefore: t.start_not_before,
     assigneeLabel: assigneeByTaskId?.[t.id],
     subtaskCount: subtaskCounts.get(t.id) || 0,
     children: [],
@@ -158,6 +174,8 @@ function buildSubtreeChildren(
       type: 'phase',
       label: phase.name,
       status: phase.status,
+      startDate: phase.start_date,
+      endDate: phase.end_date,
       progress: phase.total_tasks > 0
         ? Math.round((phase.completed_tasks / phase.total_tasks) * 100)
         : undefined,
@@ -200,6 +218,7 @@ function buildTree(
       type: 'child-project',
       label: cp.name,
       status: cp.status,
+      ownerLabel: cp.owner_display_name,
       progress: cp.aggregated_total_tasks > 0
         ? Math.round((cp.aggregated_completed_tasks / cp.aggregated_total_tasks) * 100)
         : undefined,
@@ -234,12 +253,13 @@ function buildTree(
 
 const NODE_W = 180;
 const NODE_H_DEFAULT = 68;
-const NODE_H_TASK = 90;
+const NODE_H_WITH_META = 88;
 const ROW_GAP = 10;
 const COL_GAP = 60;
 
 function nodeHeight(type: string): number {
-  return type === 'task' ? NODE_H_TASK : NODE_H_DEFAULT;
+  if (type === 'task' || type === 'phase' || type === 'child-project') return NODE_H_WITH_META;
+  return NODE_H_DEFAULT;
 }
 
 /* ============================
@@ -635,13 +655,40 @@ export function ProjectHierarchyTree({
                     <span className="tree-node-progress-text">{item.node.progress}%</span>
                   </div>
                 )}
-                {/* Due date & assignee row (tasks only) */}
-                {isTask && (item.node.dueDate || item.node.assigneeLabel) && (
+                {/* Child-project: owner */}
+                {item.node.type === 'child-project' && item.node.ownerLabel && (
                   <div className="tree-node-meta">
-                    {item.node.dueDate && (
-                      <span className="tree-node-due" title={item.node.dueDate}>
+                    <span className="tree-node-assignee" title={item.node.ownerLabel}>
+                      <FaUser className="tree-node-meta-icon" />
+                      {truncateOwner(item.node.ownerLabel)}
+                    </span>
+                  </div>
+                )}
+                {/* Phase: period (start - end) */}
+                {item.node.type === 'phase' && (item.node.startDate || item.node.endDate) && (
+                  <div className="tree-node-meta">
+                    <span className="tree-node-due" title={formatDateRange(item.node.startDate, item.node.endDate)}>
+                      <FaCalendarAlt className="tree-node-meta-icon" />
+                      {formatDateRange(item.node.startDate, item.node.endDate)}
+                    </span>
+                  </div>
+                )}
+                {/* Task: start_not_before ~ due_date + assignee */}
+                {isTask && (item.node.startNotBefore || item.node.dueDate || item.node.assigneeLabel) && (
+                  <div className="tree-node-meta">
+                    {(item.node.startNotBefore || item.node.dueDate) && (
+                      <span className="tree-node-due" title={
+                        item.node.startNotBefore && item.node.dueDate
+                          ? `${item.node.startNotBefore} ~ ${item.node.dueDate}`
+                          : item.node.dueDate || item.node.startNotBefore || ''
+                      }>
                         <FaCalendarAlt className="tree-node-meta-icon" />
-                        {formatShortDate(item.node.dueDate)}
+                        {item.node.startNotBefore && item.node.dueDate
+                          ? `${formatShortDate(item.node.startNotBefore)}~${formatShortDate(item.node.dueDate)}`
+                          : item.node.startNotBefore
+                            ? `${formatShortDate(item.node.startNotBefore)}~`
+                            : `~${formatShortDate(item.node.dueDate!)}`
+                        }
                       </span>
                     )}
                     {item.node.assigneeLabel && (
