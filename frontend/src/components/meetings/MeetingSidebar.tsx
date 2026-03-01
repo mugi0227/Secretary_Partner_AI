@@ -1,5 +1,5 @@
-import { useEffect, useMemo } from 'react';
-import { useQuery, useQueries } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query';
 import { FaCalendarDay, FaRedo } from 'react-icons/fa';
 import { RecurringMeeting, Task, MeetingAgendaItem } from '../../api/types';
 import { tasksApi } from '../../api/tasks';
@@ -7,12 +7,14 @@ import { meetingAgendaApi } from '../../api/meetingAgenda';
 import { meetingSessionApi } from '../../api/meetingSession';
 import { useTimezone } from '../../hooks/useTimezone';
 import { formatDate, toDateTime, nowInTimezone } from '../../utils/dateTime';
-import type { MeetingSession } from '../../types/session';
+import type { MeetingSession, MeetingSessionStatus } from '../../types/session';
 
 interface MeetingStatus {
     hasAgenda: boolean;
     hasSummary: boolean;
     isConducted: boolean;
+    sessionId?: string;
+    sessionStatus?: MeetingSessionStatus;
 }
 
 interface MeetingSidebarProps {
@@ -122,7 +124,7 @@ export function MeetingSidebar({
             }
         }
 
-        const best = closestFuture || closestPast;
+        const best = closestPast || closestFuture;
         if (best) {
             onSelectTask(best, toDateTime(best.start_time!, timezone).toJSDate());
         }
@@ -154,7 +156,7 @@ export function MeetingSidebar({
         })
     });
 
-    // Build status map: taskId -> { hasAgenda, hasSummary, isConducted }
+    // Build status map: taskId -> { hasAgenda, hasSummary, isConducted, sessionId, sessionStatus }
     const statusMap = useMemo(() => {
         const now = nowInTimezone(timezone);
         const map: Record<string, MeetingStatus> = {};
@@ -169,12 +171,70 @@ export function MeetingSidebar({
             map[task.id] = {
                 hasAgenda: Array.isArray(agendaItems) && agendaItems.length > 0,
                 hasSummary: !!(session?.summary),
-                isConducted: meetingEnd < now,
+                isConducted: session ? session.status === 'COMPLETED' : meetingEnd < now,
+                sessionId: session?.id,
+                sessionStatus: session?.status,
             };
         });
 
         return map;
     }, [allMeetingTasks, sessionQueries, agendaQueries, timezone]);
+
+    const queryClient = useQueryClient();
+    const [statusDropdownTaskId, setStatusDropdownTaskId] = useState<string | null>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    // Close dropdown on outside click
+    useEffect(() => {
+        if (!statusDropdownTaskId) return;
+        const handleClick = (e: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+                setStatusDropdownTaskId(null);
+            }
+        };
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
+    }, [statusDropdownTaskId]);
+
+    const statusOptions: { value: MeetingSessionStatus; label: string; badgeClass: string }[] = [
+        { value: 'PREPARATION', label: '準備中', badgeClass: 'badge-upcoming' },
+        { value: 'IN_PROGRESS', label: '会議中', badgeClass: 'badge-in-progress' },
+        { value: 'COMPLETED', label: '実施済', badgeClass: 'badge-conducted' },
+    ];
+
+    // Mutation: update existing session status
+    const updateStatusMutation = useMutation({
+        mutationFn: async ({ sessionId, status }: { sessionId: string; status: MeetingSessionStatus }) => {
+            return meetingSessionApi.update(sessionId, { status });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['meeting-session'] });
+        },
+    });
+
+    // Mutation: create session then set status
+    const createAndSetStatusMutation = useMutation({
+        mutationFn: async ({ taskId, status }: { taskId: string; status: MeetingSessionStatus }) => {
+            const session = await meetingSessionApi.create({ task_id: taskId });
+            if (status !== 'PREPARATION') {
+                return meetingSessionApi.update(session.id, { status });
+            }
+            return session;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['meeting-session'] });
+        },
+    });
+
+    const handleStatusChange = useCallback((taskId: string, newStatus: MeetingSessionStatus) => {
+        const meetingStatus = statusMap[taskId];
+        if (meetingStatus?.sessionId) {
+            updateStatusMutation.mutate({ sessionId: meetingStatus.sessionId, status: newStatus });
+        } else {
+            createAndSetStatusMutation.mutate({ taskId, status: newStatus });
+        }
+        setStatusDropdownTaskId(null);
+    }, [statusMap, updateStatusMutation, createAndSetStatusMutation]);
 
     const formatDateLabel = (value: string | Date) =>
         formatDate(value, { month: 'numeric', day: 'numeric', weekday: 'short' }, timezone);
@@ -189,17 +249,59 @@ export function MeetingSidebar({
         return formatTimeLabel(task.start_time!);
     };
 
+    const getDisplayStatus = (taskId: string): { label: string; badgeClass: string } => {
+        const status = statusMap[taskId];
+        if (!status) return { label: '未実施', badgeClass: 'badge-upcoming' };
+
+        if (status.sessionStatus) {
+            const option = statusOptions.find(o => o.value === status.sessionStatus);
+            if (option) return { label: option.label, badgeClass: option.badgeClass };
+        }
+        return status.isConducted
+            ? { label: '実施済', badgeClass: 'badge-conducted' }
+            : { label: '未実施', badgeClass: 'badge-upcoming' };
+    };
+
     const renderStatusBadges = (taskId: string) => {
         const status = statusMap[taskId];
         if (!status) return null;
 
+        const display = getDisplayStatus(taskId);
+        const isOpen = statusDropdownTaskId === taskId;
+
         return (
             <div className="meeting-nav-item-badges">
-                {status.isConducted ? (
-                    <span className="meeting-badge badge-conducted">実施済</span>
-                ) : (
-                    <span className="meeting-badge badge-upcoming">未実施</span>
-                )}
+                <div className="meeting-status-dropdown-wrapper" ref={isOpen ? dropdownRef : undefined}>
+                    <span
+                        className={`meeting-badge ${display.badgeClass} meeting-badge-clickable`}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setStatusDropdownTaskId(isOpen ? null : taskId);
+                        }}
+                    >
+                        {display.label}
+                    </span>
+                    {isOpen && (
+                        <div className="meeting-status-dropdown">
+                            {statusOptions.map((option) => (
+                                <div
+                                    key={option.value}
+                                    className={`meeting-status-dropdown-item ${
+                                        display.label === option.label ? 'active' : ''
+                                    }`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleStatusChange(taskId, option.value);
+                                    }}
+                                >
+                                    <span className={`meeting-badge ${option.badgeClass}`}>
+                                        {option.label}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
                 {status.hasAgenda && (
                     <span className="meeting-badge badge-agenda">アジェンダ</span>
                 )}

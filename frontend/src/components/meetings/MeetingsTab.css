@@ -203,6 +203,11 @@
     color: #1e40af;
 }
 
+.badge-in-progress {
+    background-color: #fee2e2;
+    color: #991b1b;
+}
+
 .badge-agenda {
     background-color: #fef3c7;
     color: #92400e;
@@ -211,6 +216,94 @@
 .badge-summary {
     background-color: #ede9fe;
     color: #5b21b6;
+}
+
+/* Status dropdown */
+.meeting-status-dropdown-wrapper {
+    position: relative;
+}
+
+.meeting-badge-clickable {
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+}
+
+.meeting-badge-clickable:hover {
+    opacity: 0.75;
+}
+
+.meeting-status-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 4px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    z-index: 50;
+    min-width: 80px;
+    overflow: hidden;
+}
+
+.meeting-status-dropdown-item {
+    padding: 6px 8px;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.meeting-status-dropdown-item:hover {
+    background-color: #f1f5f9;
+}
+
+.meeting-status-dropdown-item.active {
+    background-color: #eff6ff;
+}
+
+/* Main panel status dropdown */
+.main-status-dropdown-wrapper {
+    position: relative;
+}
+
+.meeting-status-badge-clickable {
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+}
+
+.meeting-status-badge-clickable:hover {
+    opacity: 0.75;
+}
+
+.main-status-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    z-index: 50;
+    min-width: 140px;
+    overflow: hidden;
+}
+
+.main-status-dropdown-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.main-status-dropdown-item:hover {
+    background-color: #f1f5f9;
+}
+
+.main-status-dropdown-item.active {
+    background-color: #eff6ff;
+}
+
+.main-status-dropdown-item .meeting-status-badge {
+    text-transform: none;
 }
 
 /* Main Content Styles */

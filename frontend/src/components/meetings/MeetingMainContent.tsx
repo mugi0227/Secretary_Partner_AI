@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FaMagic, FaPlay, FaMapMarkerAlt, FaUsers, FaInfoCircle, FaExpand, FaUndo, FaChevronDown, FaChevronUp, FaHistory, FaTrash, FaClock, FaClipboardList, FaLightbulb, FaCheckCircle } from 'react-icons/fa';
 import { meetingAgendaApi } from '../../api/meetingAgenda';
 import { meetingSessionApi } from '../../api/meetingSession';
@@ -11,6 +11,7 @@ import { EditableDateTime } from '../common/EditableDateTime';
 import {
     useLatestSessionByTask,
     useCreateSession,
+    useUpdateSession,
     useStartSession,
     useEndSession,
     useReopenSession,
@@ -118,6 +119,41 @@ export function MeetingMainContent({
     const endSessionMutation = useEndSession(taskId);
     const reopenSessionMutation = useReopenSession(taskId);
     const resetToPreparationMutation = useResetToPreparation(taskId);
+    const updateSessionMutation = useUpdateSession(taskId);
+
+    // Status dropdown state
+    const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+    const statusDropdownRef = useRef<HTMLDivElement>(null);
+
+    // Close dropdown on outside click
+    useEffect(() => {
+        if (!showStatusDropdown) return;
+        const handleClick = (e: MouseEvent) => {
+            if (statusDropdownRef.current && !statusDropdownRef.current.contains(e.target as Node)) {
+                setShowStatusDropdown(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClick);
+        return () => document.removeEventListener('mousedown', handleClick);
+    }, [showStatusDropdown]);
+
+    const mainStatusOptions: { value: MeetingSessionStatus; label: string; modeClass: string }[] = [
+        { value: 'PREPARATION', label: '準備中', modeClass: 'status-preparation' },
+        { value: 'IN_PROGRESS', label: 'ミーティング中', modeClass: 'status-meeting' },
+        { value: 'COMPLETED', label: '終了', modeClass: 'status-archive' },
+    ];
+
+    const handleMainStatusChange = useCallback(async (newStatus: MeetingSessionStatus) => {
+        setShowStatusDropdown(false);
+        if (session) {
+            updateSessionMutation.mutate({ sessionId: session.id, data: { status: newStatus } });
+        } else if (taskId) {
+            const created = await createSessionMutation.mutateAsync({ task_id: taskId });
+            if (newStatus !== 'PREPARATION') {
+                updateSessionMutation.mutate({ sessionId: created.id, data: { status: newStatus } });
+            }
+        }
+    }, [session, taskId, updateSessionMutation, createSessionMutation]);
 
     // Past sessions for recurring meetings (議事録履歴)
     const { data: pastSessions = [] } = useQuery({
@@ -354,8 +390,30 @@ export function MeetingMainContent({
                     </div>
                 </div>
                 <div className="meeting-header-actions">
-                    <div className={`meeting-status-badge ${mode === 'MEETING' ? 'status-meeting' : mode === 'ARCHIVE' ? 'status-archive' : 'status-preparation'}`}>
-                        {mode === 'MEETING' ? 'ミーティング中' : mode === 'ARCHIVE' ? '終了' : '準備中'}
+                    <div className="main-status-dropdown-wrapper" ref={statusDropdownRef}>
+                        <div
+                            className={`meeting-status-badge meeting-status-badge-clickable ${mode === 'MEETING' ? 'status-meeting' : mode === 'ARCHIVE' ? 'status-archive' : 'status-preparation'}`}
+                            onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+                        >
+                            {mode === 'MEETING' ? 'ミーティング中' : mode === 'ARCHIVE' ? '終了' : '準備中'}
+                        </div>
+                        {showStatusDropdown && (
+                            <div className="main-status-dropdown">
+                                {mainStatusOptions.map((option) => (
+                                    <div
+                                        key={option.value}
+                                        className={`main-status-dropdown-item ${
+                                            session?.status === option.value ? 'active' : ''
+                                        }`}
+                                        onClick={() => handleMainStatusChange(option.value)}
+                                    >
+                                        <span className={`meeting-status-badge ${option.modeClass}`}>
+                                            {option.label}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                     {canEdit && onDeleteTask && (
                         <button
