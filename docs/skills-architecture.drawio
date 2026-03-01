@@ -1,0 +1,379 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2026-02-18" agent="Claude" version="24.0.0" type="device">
+  <diagram id="skills-architecture" name="スキル アーキテクチャ">
+    <mxGraphModel dx="1900" dy="1400" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="1400" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- タイトル -->
+        <mxCell id="title" value="nagi スキル アーキテクチャ" style="text;html=1;fontSize=26;fontStyle=1;align=center;verticalAlign=middle;fontColor=#1a1a2e;" vertex="1" parent="1">
+          <mxGeometry x="450" y="15" width="700" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="subtitle" value="ユーザーの発言内容に応じて、AIの「得意分野(スキル)」と「使えるツール」を動的に切り替える仕組み" style="text;html=1;fontSize=12;align=center;verticalAlign=middle;fontColor=#666666;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="350" y="50" width="900" height="25" as="geometry"/>
+        </mxCell>
+
+        <!-- ======================== -->
+        <!-- ユーザー入力              -->
+        <!-- ======================== -->
+        <mxCell id="user" value="ユーザーのメッセージ" style="shape=mxgraph.flowchart.terminator;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;fontStyle=1;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="680" y="90" width="240" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="user_note" value="チャットに入力されたテキスト&lt;br&gt;(例:「新しいタスクを作って」「会議の予定は？」)" style="text;html=1;fontSize=9;fontColor=#4a6fa5;fontStyle=2;align=center;" vertex="1" parent="1">
+          <mxGeometry x="640" y="140" width="320" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- 矢印: ユーザー → 司令塔 -->
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;strokeColor=#6c8ebf;" edge="1" parent="1" source="user" target="agent_service">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ======================== -->
+        <!-- 司令塔 (AgentService)     -->
+        <!-- ======================== -->
+        <mxCell id="agent_service" value="&lt;b&gt;司令塔: AgentService.process_chat()&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:10px&quot;&gt;agent_service.py&lt;/span&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#666666;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="655" y="195" width="290" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="agent_service_note" value="チャット処理全体を取りまとめる。&lt;br&gt;ルーティングとプロンプト構築を指示する" style="text;html=1;fontSize=9;fontColor=#666666;fontStyle=2;align=center;" vertex="1" parent="1">
+          <mxGeometry x="950" y="200" width="220" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- 矢印: 司令塔 → ルーター -->
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;strokeColor=#d6604d;" edge="1" parent="1" source="agent_service" target="router">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2_label" value="Step 1" style="text;html=1;fontSize=10;fontColor=#d6604d;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="540" y="260" width="50" height="18" as="geometry"/>
+        </mxCell>
+
+        <!-- 矢印: 司令塔 → プロンプト構築 -->
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;strokeColor=#4a90d9;entryX=0.5;entryY=0;" edge="1" parent="1" source="agent_service" target="prompt_builder">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="800" y="270"/>
+              <mxPoint x="875" y="270"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3_label" value="Step 2" style="text;html=1;fontSize=10;fontColor=#4a90d9;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="910" y="260" width="50" height="18" as="geometry"/>
+        </mxCell>
+
+        <!-- ==================================== -->
+        <!-- 左: ランタイムルーター                  -->
+        <!-- ==================================== -->
+        <mxCell id="router_group" value="" style="rounded=1;dashed=1;dashPattern=5 5;fillColor=#fff2cc;strokeColor=#d6b656;opacity=80;" vertex="1" parent="1">
+          <mxGeometry x="80" y="290" width="510" height="240" as="geometry"/>
+        </mxCell>
+        <mxCell id="router_title" value="ランタイムルーター&lt;br&gt;&lt;span style=&quot;font-size:10px&quot;&gt;runtime_router.py&lt;/span&gt;" style="text;html=1;fontSize=14;fontStyle=1;fontColor=#7f6000;" vertex="1" parent="1">
+          <mxGeometry x="90" y="295" width="200" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="router_note" value="メッセージ中のキーワードを見て&lt;br&gt;「どのスキルを使うか」を自動判定する" style="text;html=1;fontSize=9;fontColor=#7f6000;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="290" y="295" width="220" height="30" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="router" value="&lt;b&gt;build_secretary_runtime_routing()&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;キーワードのスコアリングでプロファイルを選択&lt;/span&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="120" y="335" width="280" height="40" as="geometry"/>
+        </mxCell>
+
+        <!-- キーワードマッピング -->
+        <mxCell id="keywords" value="&lt;b&gt;キーワード → プロファイル:&lt;/b&gt;&lt;br&gt;「タスク」「TODO」「やること」 → task&lt;br&gt;「プロジェクト」「PJ」 → project&lt;br&gt;「会議」「ミーティング」「アジェンダ」 → meeting&lt;br&gt;「スケジュール」「予定」 → schedule&lt;br&gt;「覚えて」「手順」「メモ」 → memory&lt;br&gt;「できること」「ツール」 → capability&lt;br&gt;&lt;span style=&quot;font-size:8px;color:#999&quot;&gt;※ どれにも当てはまらない → デフォルトで task&lt;/span&gt;" style="text;html=1;fontSize=9;align=left;verticalAlign=top;fillColor=none;fontColor=#7f6000;" vertex="1" parent="1">
+          <mxGeometry x="95" y="385" width="270" height="135" as="geometry"/>
+        </mxCell>
+
+        <!-- ルーター出力 -->
+        <mxCell id="router_output" value="&lt;b&gt;ルーターの出力&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;profiles: 選ばれたスキル名&lt;br&gt;tool_names: 使えるツール一覧&lt;/span&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="400" y="385" width="175" height="55" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_router_out" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=1;strokeColor=#d6b656;" edge="1" parent="1" source="router" target="router_output">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ==================================== -->
+        <!-- 右: システムプロンプト構築              -->
+        <!-- ==================================== -->
+        <mxCell id="prompt_builder_group" value="" style="rounded=1;dashed=1;dashPattern=5 5;fillColor=#e1d5e7;strokeColor=#9673a6;opacity=80;" vertex="1" parent="1">
+          <mxGeometry x="620" y="290" width="580" height="320" as="geometry"/>
+        </mxCell>
+        <mxCell id="prompt_builder_title" value="指示書(System Prompt)の組み立て&lt;br&gt;&lt;span style=&quot;font-size:10px&quot;&gt;secretary_agent.py&lt;/span&gt;" style="text;html=1;fontSize=14;fontStyle=1;fontColor=#56346e;" vertex="1" parent="1">
+          <mxGeometry x="630" y="295" width="280" height="35" as="geometry"/>
+        </mxCell>
+        <mxCell id="prompt_builder_note" value="AIへの「指示書」を組み立てる。&lt;br&gt;下の6つのパーツを順番に結合する" style="text;html=1;fontSize=9;fontColor=#56346e;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="920" y="295" width="220" height="30" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="prompt_builder" value="&lt;b&gt;build_system_prompt_with_work_memory()&lt;/b&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="720" y="335" width="310" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- プロンプトの6つのパーツ -->
+        <mxCell id="p1" value="&lt;b&gt;1. 現在日時&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:8px&quot;&gt;ユーザーのタイムゾーンで&lt;br&gt;「今何時か」を伝える&lt;/span&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#f3e8ff;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="635" y="380" width="150" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="p2" value="&lt;b&gt;2. コアプロンプト&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:8px&quot;&gt;AIの性格・口調・安全ルール&lt;br&gt;(全リクエスト共通で常に含む)&lt;/span&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="795" y="380" width="170" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="p3" value="&lt;b&gt;3. ツール一覧&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:8px&quot;&gt;今回使えるツールの名前と&lt;br&gt;日本語の使い方ガイド&lt;/span&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="975" y="380" width="155" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="p4" value="&lt;b&gt;4. スキルプロンプト&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:8px&quot;&gt;選ばれた分野の専門手順書&lt;br&gt;(例: タスク作成の詳細手順)&lt;/span&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="635" y="445" width="165" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="p5" value="&lt;b&gt;5. 作業メモ一覧&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:8px&quot;&gt;過去に保存した手順メモの&lt;br&gt;目次 (最新8件)&lt;/span&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="810" y="445" width="160" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="p6" value="&lt;b&gt;6. 関連メモ展開&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:8px&quot;&gt;今回の質問に関係しそうな&lt;br&gt;メモを2件まで全文展開&lt;/span&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="980" y="445" width="155" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- 矢印: 構築関数 → 各パーツ -->
+        <mxCell id="ep1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=1;strokeColor=#9673a6;entryX=0.5;entryY=0;" edge="1" parent="1" source="prompt_builder" target="p1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="ep2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=1;strokeColor=#9673a6;entryX=0.5;entryY=0;" edge="1" parent="1" source="prompt_builder" target="p2">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="ep3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=1;strokeColor=#9673a6;entryX=0.5;entryY=0;" edge="1" parent="1" source="prompt_builder" target="p3">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- 矢印: ルーター出力 → スキルプロンプト -->
+        <mxCell id="e_router_to_prompt" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;strokeColor=#b85450;dashed=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" parent="1" source="router_output" target="p4">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_router_to_prompt_label" value="&lt;span style=&quot;font-size:8px&quot;&gt;どのスキルを&lt;br&gt;読み込むか&lt;/span&gt;" style="text;html=1;fontSize=9;fontColor=#b85450;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="573" y="450" width="65" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- 矢印: ルーター出力 → ツール一覧 -->
+        <mxCell id="e_router_to_tools" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;strokeColor=#82b366;dashed=1;exitX=1;exitY=0.2;entryX=0;entryY=0.5;" edge="1" parent="1" source="router_output" target="p3">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="610" y="396"/>
+              <mxPoint x="610" y="405"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_router_to_tools_label" value="&lt;span style=&quot;font-size:8px&quot;&gt;どのツールを&lt;br&gt;許可するか&lt;/span&gt;" style="text;html=1;fontSize=9;fontColor=#82b366;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="573" y="385" width="65" height="30" as="geometry"/>
+        </mxCell>
+
+        <!-- 完成した指示書 -->
+        <mxCell id="system_prompt" value="&lt;b&gt;完成した指示書 (System Prompt)&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;上の1~6を全て結合した文字列&lt;/span&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="760" y="515" width="240" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="ep_combined1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=1;strokeColor=#9673a6;" edge="1" parent="1" source="p4" target="system_prompt">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="ep_combined2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=1;strokeColor=#9673a6;" edge="1" parent="1" source="p5" target="system_prompt">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ==================================== -->
+        <!-- 全9種類のスキルプロファイル              -->
+        <!-- ==================================== -->
+        <mxCell id="profiles_group" value="" style="rounded=1;dashed=1;dashPattern=5 5;fillColor=#fff2cc;strokeColor=#d6b656;opacity=50;" vertex="1" parent="1">
+          <mxGeometry x="30" y="570" width="570" height="370" as="geometry"/>
+        </mxCell>
+        <mxCell id="profiles_title" value="スキルプロンプト辞書 (全9種類)" style="text;html=1;fontSize=13;fontStyle=1;fontColor=#7f6000;" vertex="1" parent="1">
+          <mxGeometry x="150" y="575" width="300" height="25" as="geometry"/>
+        </mxCell>
+        <mxCell id="profiles_note" value="各スキルは「AIへの専門手順書」+「使えるツールの許可リスト」のセット。&lt;br&gt;ルーターが選んだスキルだけが読み込まれる（全部入りではない）" style="text;html=1;fontSize=9;fontColor=#7f6000;fontStyle=2;align=left;" vertex="1" parent="1">
+          <mxGeometry x="45" y="600" width="540" height="28" as="geometry"/>
+        </mxCell>
+
+        <!-- スキルカード -->
+        <mxCell id="prof_task" value="&lt;b&gt;task&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:8px&quot;&gt;タスクの作成・更新・分割&lt;br&gt;create_task, update_task&lt;br&gt;search_similar_tasks&lt;/span&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="45" y="635" width="125" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="prof_task_note" value="デフォルト" style="text;html=1;fontSize=7;fontColor=#d6b656;fontStyle=3;align=center;" vertex="1" parent="1">
+          <mxGeometry x="70" y="700" width="70" height="12" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="prof_project" value="&lt;b&gt;project&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:8px&quot;&gt;プロジェクト管理全般&lt;br&gt;create_project&lt;br&gt;invite_project_member&lt;/span&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="180" y="635" width="125" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="prof_phase" value="&lt;b&gt;phase&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:8px&quot;&gt;フェーズ・マイルストーン&lt;br&gt;create_phase&lt;br&gt;update_phase&lt;/span&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="315" y="635" width="125" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="prof_meeting" value="&lt;b&gt;meeting&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:8px&quot;&gt;会議・アジェンダ管理&lt;br&gt;add_agenda_item&lt;br&gt;list_agenda_items&lt;/span&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="450" y="635" width="125" height="65" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="prof_schedule" value="&lt;b&gt;schedule&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:8px&quot;&gt;スケジュール最適化&lt;br&gt;apply_schedule_request&lt;br&gt;schedule_agent_task&lt;/span&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="45" y="720" width="125" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="prof_memory" value="&lt;b&gt;memory&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:8px&quot;&gt;作業手順の保存・検索&lt;br&gt;search_work_memory&lt;br&gt;create_work_memory&lt;/span&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="180" y="720" width="125" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="prof_recurring" value="&lt;b&gt;recurring&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:8px&quot;&gt;繰り返しタスク設定&lt;br&gt;create_recurring_task&lt;br&gt;update_recurring_task&lt;/span&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="315" y="720" width="125" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="prof_browser" value="&lt;b&gt;browser&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:8px&quot;&gt;Web自動操作 (RPA)&lt;br&gt;run_browser_task&lt;br&gt;run_hybrid_rpa&lt;/span&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#ffe0b2;strokeColor=#e65100;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="450" y="720" width="125" height="65" as="geometry"/>
+        </mxCell>
+        <mxCell id="browser_badge" value="拡張機能モード限定" style="text;html=1;fontSize=7;fontColor=#e65100;fontStyle=3;align=center;" vertex="1" parent="1">
+          <mxGeometry x="455" y="785" width="115" height="12" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="prof_capability" value="&lt;b&gt;capability&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:8px&quot;&gt;「何ができる？」に回答&lt;br&gt;list_*, get_*, search_* のみ&lt;/span&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#e8eaf6;strokeColor=#5c6bc0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="140" y="810" width="200" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="cap_badge" value="読み取り専用ツールのみ" style="text;html=1;fontSize=7;fontColor=#5c6bc0;fontStyle=3;align=center;" vertex="1" parent="1">
+          <mxGeometry x="155" y="855" width="140" height="12" as="geometry"/>
+        </mxCell>
+
+        <!-- 連結関数 -->
+        <mxCell id="format_fn" value="&lt;b&gt;format_profile_skill_prompts(profiles)&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:8px&quot;&gt;選ばれたスキルの手順書だけを連結して返す関数&lt;/span&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="120" y="880" width="310" height="40" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_fmt" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=1;strokeColor=#d6b656;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" parent="1" source="prof_capability" target="format_fn">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ==================================== -->
+        <!-- ADK エージェント                      -->
+        <!-- ==================================== -->
+        <mxCell id="adk_agent" value="&lt;b&gt;ADK エージェント&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:10px&quot;&gt;Agent(name=&amp;quot;secretary&amp;quot;,&lt;br&gt;instruction=指示書,&lt;br&gt;tools=許可ツール)&lt;/span&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="745" y="600" width="270" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="adk_agent_note" value="Google ADK フレームワークのエージェント。&lt;br&gt;指示書とツールをセットで渡して起動する" style="text;html=1;fontSize=9;fontColor=#527a3a;fontStyle=2;align=left;" vertex="1" parent="1">
+          <mxGeometry x="1030" y="600" width="250" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_sp_to_agent" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;strokeColor=#9673a6;" edge="1" parent="1" source="system_prompt" target="adk_agent">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ==================================== -->
+        <!-- ツール登録簿                           -->
+        <!-- ==================================== -->
+        <mxCell id="tool_registry" value="&lt;b&gt;ツール登録簿&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:9px&quot;&gt;app/tools/ (約60個の関数)&lt;br&gt;task_tools, project_tools,&lt;br&gt;phase_tools, meeting_tools,&lt;br&gt;scheduler_tools, memory_tools,&lt;br&gt;browser_tools, user_tools&lt;/span&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="670" width="190" height="100" as="geometry"/>
+        </mxCell>
+        <mxCell id="tool_registry_note" value="実際にDB操作やAPI呼び出し&lt;br&gt;を行う関数の集まり" style="text;html=1;fontSize=9;fontColor=#527a3a;fontStyle=2;align=left;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="772" width="180" height="25" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_tools_to_agent" value="&lt;span style=&quot;font-size:8px&quot;&gt;許可されたツールのみ渡す&lt;/span&gt;" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;strokeWidth=2;strokeColor=#82b366;" edge="1" parent="1" source="tool_registry" target="adk_agent">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ツール許可リスト -->
+        <mxCell id="tool_filter" value="&lt;b&gt;_PROFILE_TOOL_NAMES&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:8px&quot;&gt;スキルごとの「ツール許可リスト」&lt;br&gt;(使って良いツール名のセット)&lt;/span&gt;" style="rounded=1;html=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="590" width="190" height="55" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_filter_to_reg" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=1;strokeColor=#82b366;dashed=1;" edge="1" parent="1" source="tool_filter" target="tool_registry">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ==================================== -->
+        <!-- LLM 実行                              -->
+        <!-- ==================================== -->
+        <mxCell id="llm" value="&lt;b&gt;Gemini LLM&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size:10px&quot;&gt;AIが考えて応答を生成&lt;/span&gt;" style="ellipse;html=1;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="775" y="710" width="210" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="llm_note" value="指示書を読み、ユーザーの意図を理解し、&lt;br&gt;必要に応じてツールを呼び出して処理を実行する" style="text;html=1;fontSize=9;fontColor=#b85450;fontStyle=2;align=center;" vertex="1" parent="1">
+          <mxGeometry x="700" y="780" width="360" height="25" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_agent_to_llm" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;strokeColor=#82b366;" edge="1" parent="1" source="adk_agent" target="llm">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ツール呼び出しループ -->
+        <mxCell id="tool_calls" value="&lt;span style=&quot;font-size:8px&quot;&gt;ツール呼び出し&lt;br&gt;(create_task 等)&lt;/span&gt;" style="text;html=1;fontSize=9;fontColor=#82b366;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="740" width="85" height="30" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_llm_to_tools" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=1;strokeColor=#82b366;dashed=1;exitX=1;exitY=0.5;entryX=0.5;entryY=1;" edge="1" parent="1" source="llm" target="tool_registry">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1185" y="745"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- レスポンス -->
+        <mxCell id="response" value="ユーザーへの応答" style="shape=mxgraph.flowchart.terminator;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;fontStyle=1;whiteSpace=wrap;" vertex="1" parent="1">
+          <mxGeometry x="790" y="830" width="190" height="45" as="geometry"/>
+        </mxCell>
+        <mxCell id="response_note" value="チャット画面にAIの返答が表示される" style="text;html=1;fontSize=9;fontColor=#4a6fa5;fontStyle=2;align=center;" vertex="1" parent="1">
+          <mxGeometry x="790" y="878" width="190" height="15" as="geometry"/>
+        </mxCell>
+        <mxCell id="e_llm_to_response" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeWidth=2;strokeColor=#b85450;" edge="1" parent="1" source="llm" target="response">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- ==================================== -->
+        <!-- 凡例                                  -->
+        <!-- ==================================== -->
+        <mxCell id="legend_box" value="" style="rounded=1;fillColor=#fafafa;strokeColor=#cccccc;" vertex="1" parent="1">
+          <mxGeometry x="1310" y="80" width="310" height="300" as="geometry"/>
+        </mxCell>
+        <mxCell id="legend_title" value="&lt;b&gt;凡例&lt;/b&gt;" style="text;html=1;fontSize=13;fontColor=#333333;align=center;" vertex="1" parent="1">
+          <mxGeometry x="1410" y="85" width="60" height="25" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="leg1" value="" style="rounded=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="1325" y="118" width="20" height="15" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg1t" value="ルーター / スキルプロンプト" style="text;html=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1350" y="116" width="200" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg2" value="" style="rounded=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="1325" y="145" width="20" height="15" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg2t" value="指示書 (System Prompt) の組立" style="text;html=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1350" y="143" width="240" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg3" value="" style="rounded=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="1325" y="172" width="20" height="15" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg3t" value="エージェント / ツール" style="text;html=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1350" y="170" width="200" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg4" value="" style="rounded=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="1325" y="199" width="20" height="15" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg4t" value="コアプロンプト / LLM" style="text;html=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1350" y="197" width="200" height="20" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg5" value="" style="rounded=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1325" y="226" width="20" height="15" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg5t" value="ユーザー入出力" style="text;html=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1350" y="224" width="200" height="20" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="leg_files_title" value="&lt;b&gt;主要ファイル:&lt;/b&gt;" style="text;html=1;fontSize=9;fontColor=#666;" vertex="1" parent="1">
+          <mxGeometry x="1320" y="255" width="100" height="15" as="geometry"/>
+        </mxCell>
+        <mxCell id="leg_files" value="runtime_router.py (ルーティング)&lt;br&gt;secretary_agent.py (指示書組立)&lt;br&gt;secretary_core_prompt.py (共通ルール)&lt;br&gt;secretary_skill_prompts.py (専門手順書)&lt;br&gt;agent_service.py (司令塔)" style="text;html=1;fontSize=8;align=left;fontColor=#666;" vertex="1" parent="1">
+          <mxGeometry x="1320" y="272" width="240" height="70" as="geometry"/>
+        </mxCell>
+
+        <!-- ==================================== -->
+        <!-- ポイント解説ボックス                    -->
+        <!-- ==================================== -->
+        <mxCell id="keypoint_box" value="" style="rounded=1;fillColor=#e8f5e9;strokeColor=#4caf50;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="1310" y="400" width="310" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="keypoint_title" value="&lt;b&gt;ポイント: なぜスキルを分けるのか？&lt;/b&gt;" style="text;html=1;fontSize=10;fontColor=#2e7d32;" vertex="1" parent="1">
+          <mxGeometry x="1320" y="405" width="280" height="18" as="geometry"/>
+        </mxCell>
+        <mxCell id="keypoint_body" value="1. &lt;b&gt;プロンプトの節約&lt;/b&gt;: 全手順を毎回送ると&lt;br&gt;   トークン(=コスト)が膨大になる&lt;br&gt;2. &lt;b&gt;精度向上&lt;/b&gt;: 関係ない情報が多いと&lt;br&gt;   AIが混乱しやすくなる&lt;br&gt;3. &lt;b&gt;安全性&lt;/b&gt;: 不要なツールを渡さないことで&lt;br&gt;   意図しない操作を防ぐ" style="text;html=1;fontSize=9;align=left;fontColor=#2e7d32;" vertex="1" parent="1">
+          <mxGeometry x="1320" y="425" width="280" height="100" as="geometry"/>
+        </mxCell>
+
+        <!-- ==================================== -->
+        <!-- フローまとめ (下部)                    -->
+        <!-- ==================================== -->
+        <mxCell id="flow_box" value="" style="rounded=1;fillColor=#f0f0f0;strokeColor=#999999;" vertex="1" parent="1">
+          <mxGeometry x="30" y="940" width="1590" height="55" as="geometry"/>
+        </mxCell>
+        <mxCell id="flow_title" value="&lt;b&gt;処理の流れ:&lt;/b&gt; ユーザー発言 → 司令塔(AgentService) → ルーター(キーワードでスキル選択+ツール絞り込み) → 指示書組立(共通ルール+専門手順書+作業メモ) → エージェント起動(選ばれたツールだけ) → Gemini(判断・ツール実行) → 応答" style="text;html=1;fontSize=11;whiteSpace=wrap;align=center;verticalAlign=middle;fontColor=#333;" vertex="1" parent="1">
+          <mxGeometry x="50" y="945" width="1560" height="45" as="geometry"/>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,229 @@
+<mxfile host="65bd71144e">
+    <diagram id="memory-architecture" name="Memory Architecture">
+        <mxGraphModel dx="318" dy="511" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" value="nagi メモリシステム全体アーキテクチャ" style="text;html=1;fontSize=22;fontStyle=1;align=center;verticalAlign=middle;whiteSpace=wrap;" parent="1" vertex="1">
+                    <mxGeometry x="400" y="20" width="800" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="user-group" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;dashed=1;dashPattern=5 5;" parent="1" vertex="1">
+                    <mxGeometry x="580" y="80" width="440" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="user" value="👤 ユーザー / Frontend" style="shape=actor;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="85" width="120" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="chat-ui" value="💬 チャットUI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="780" y="90" width="110" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="memory-ui" value="🧠 メモリ管理画面" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="900" y="90" width="110" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="api-group" value="API Layer (FastAPI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;verticalAlign=top;fontStyle=1;fontSize=13;dashed=1;dashPattern=5 5;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="180" width="1440" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="api-memories" value="/api/memories&#xa;CRUD + Search" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="870" y="205" width="140" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="api-chat" value="/api/chat&#xa;エージェント呼び出し" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="590" y="205" width="150" height="45" as="geometry"/>
+                </mxCell>
+                <mxCell id="agent-group" value="Agent Layer (Google ADK)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;verticalAlign=top;fontStyle=1;fontSize=13;dashed=1;dashPattern=5 5;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="290" width="1440" height="200" as="geometry"/>
+                </mxCell>
+                <mxCell id="runtime-router" value="Runtime Router&#xa;(runtime_router.py)&#xa;&#xa;ユーザーメッセージから&#xa;プロファイル判定&#xa;memory / task / project ..." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="320" width="180" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="secretary-agent" value="Secretary Agent&#xa;(secretary_agent.py)&#xa;&#xa;build_system_prompt_with_work_memory()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="320" y="320" width="250" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="prompt-assembly" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;dashed=1;dashPattern=5 5;" parent="1" vertex="1">
+                    <mxGeometry x="610" y="310" width="890" height="170" as="geometry"/>
+                </mxCell>
+                <mxCell id="prompt-title" value="システムプロンプト組み立て" style="text;html=1;fontSize=12;fontStyle=1;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="920" y="312" width="200" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="core-prompt" value="① Core Prompt&#xa;(secretary_core_prompt.py)&#xa;原則・安全・トーン" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="625" y="340" width="155" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="skill-prompt" value="② Skill Prompts&#xa;(secretary_skill_prompts.py)&#xa;プロファイル別手順書" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="795" y="340" width="155" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="wm-index-prompt" value="③ Work Memory Index&#xa;ID + タイトル + 用途&#xa;(最大8件の一覧)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="965" y="340" width="155" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="wm-loaded-prompt" value="④ Loaded Work Memories&#xa;関連度スコアで自動選択&#xa;(最大2件の全文)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1135" y="340" width="160" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="tools-section" value="⑤ Enabled Tools&#xa;このターンで使える&#xa;ツール一覧" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="1310" y="340" width="155" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="prompt-flow-desc" value="プロンプト注入フロー:&#xa;1. get_work_memory_index() → WORK/RULE全件取得&#xa;2. select_relevant_work_memories(query) → 関連度スコアリング → 上位2件選択&#xa;3. get_work_memory_by_id() → 全文ロード&#xa;4. format_*_for_prompt() → ③④としてシステムプロンプトに注入" style="text;html=1;fontSize=10;align=left;verticalAlign=top;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;rounded=1;" parent="1" vertex="1">
+                    <mxGeometry x="625" y="405" width="480" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="tools-group" value="Tools Layer (ADK FunctionTools)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;verticalAlign=top;fontStyle=1;fontSize=13;dashed=1;dashPattern=5 5;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="520" width="1440" height="160" as="geometry"/>
+                </mxCell>
+                <mxCell id="memory-tools-box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;dashed=1;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="545" width="500" height="125" as="geometry"/>
+                </mxCell>
+                <mxCell id="memory-tools-title" value="memory_tools.py (User/Work Memory)" style="text;html=1;fontSize=11;fontStyle=1;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="130" y="548" width="300" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="tool-search-wm" value="search_work_memory" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" parent="1" vertex="1">
+                    <mxGeometry x="110" y="570" width="130" height="28" as="geometry"/>
+                </mxCell>
+                <mxCell id="tool-search-mem" value="search_memories" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" parent="1" vertex="1">
+                    <mxGeometry x="250" y="570" width="130" height="28" as="geometry"/>
+                </mxCell>
+                <mxCell id="tool-add-mem" value="add_to_memory" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" parent="1" vertex="1">
+                    <mxGeometry x="390" y="570" width="120" height="28" as="geometry"/>
+                </mxCell>
+                <mxCell id="tool-create-wm" value="create_work_memory" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" parent="1" vertex="1">
+                    <mxGeometry x="110" y="605" width="130" height="28" as="geometry"/>
+                </mxCell>
+                <mxCell id="tool-load-wm" value="load_work_memory" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" parent="1" vertex="1">
+                    <mxGeometry x="250" y="605" width="130" height="28" as="geometry"/>
+                </mxCell>
+                <mxCell id="tool-list-wm" value="list_work_memory_index" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" parent="1" vertex="1">
+                    <mxGeometry x="390" y="605" width="120" height="28" as="geometry"/>
+                </mxCell>
+                <mxCell id="tool-refresh-profile" value="refresh_user_profile" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" parent="1" vertex="1">
+                    <mxGeometry x="110" y="638" width="130" height="28" as="geometry"/>
+                </mxCell>
+                <mxCell id="tool-propose-wm" value="propose_work_memory&#xa;(承認フロー)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" parent="1" vertex="1">
+                    <mxGeometry x="250" y="638" width="130" height="28" as="geometry"/>
+                </mxCell>
+                <mxCell id="project-memory-tools-box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;dashed=1;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="545" width="250" height="125" as="geometry"/>
+                </mxCell>
+                <mxCell id="project-memory-tools-title" value="project_memory_tools.py" style="text;html=1;fontSize=11;fontStyle=1;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="650" y="548" width="200" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="tool-create-proj-summary" value="create_project_summary&#xa;&#xa;タスク集計 + LLM要約&#xa;→ ProjectMemory保存" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" parent="1" vertex="1">
+                    <mxGeometry x="640" y="575" width="210" height="85" as="geometry"/>
+                </mxCell>
+                <mxCell id="approval-tools-box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e6d0de;strokeColor=#996185;dashed=1;" parent="1" vertex="1">
+                    <mxGeometry x="890" y="545" width="240" height="125" as="geometry"/>
+                </mxCell>
+                <mxCell id="approval-tools-title" value="承認フロー (approval_tools.py)" style="text;html=1;fontSize=11;fontStyle=1;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="900" y="548" width="220" height="18" as="geometry"/>
+                </mxCell>
+                <mxCell id="approval-desc" value="auto_approve=false の場合&#xa;Proposal を作成し&#xa;ユーザー承認後に実行&#xa;&#xa;ProposalType:&#xa;CREATE_WORK_MEMORY" style="text;html=1;fontSize=10;align=left;verticalAlign=top;whiteSpace=wrap;" parent="1" vertex="1">
+                    <mxGeometry x="900" y="570" width="220" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="service-group" value="Service Layer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;verticalAlign=top;fontStyle=1;fontSize=13;dashed=1;dashPattern=5 5;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="710" width="1440" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="work-memory-service" value="WorkMemoryService&#xa;(work_memory_service.py)&#xa;&#xa;• parse_work_memory() - Markdown解析 (title, when_to_use)&#xa;• get_work_memory_index() - 一覧取得&#xa;• select_relevant_work_memories() - 関連度スコアリング&#xa;• format_*_for_prompt() - プロンプト用フォーマット" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;align=left;spacingLeft=10;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="735" width="370" height="95" as="geometry"/>
+                </mxCell>
+                <mxCell id="llm-utils" value="LLM Utils&#xa;(llm_utils.py)&#xa;&#xa;• generate_text()&#xa;  - Profile要約&#xa;  - Project要約" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10;align=left;spacingLeft=10;" parent="1" vertex="1">
+                    <mxGeometry x="500" y="735" width="170" height="95" as="geometry"/>
+                </mxCell>
+                <mxCell id="interface-group" value="Interface Layer (Abstract)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2efda;strokeColor=#548235;verticalAlign=top;fontStyle=1;fontSize=13;dashed=1;dashPattern=5 5;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="870" width="1440" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="i-memory-repo" value="IMemoryRepository&#xa;(interfaces/memory_repository.py)&#xa;&#xa;create | get | update | delete | list | search | search_work_memory | get_user_memories" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e2efda;strokeColor=#548235;fontSize=10;fontStyle=4;" parent="1" vertex="1">
+                    <mxGeometry x="350" y="890" width="530" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="infra-group" value="Infrastructure Layer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#deebf7;strokeColor=#5b9bd5;verticalAlign=top;fontStyle=1;fontSize=13;dashed=1;dashPattern=5 5;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="990" width="1440" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="sqlite-repo" value="SqliteMemoryRepository&#xa;(infrastructure/local/memory_repository.py)&#xa;&#xa;SQLAlchemy ORM + SequenceMatcher検索" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#deebf7;strokeColor=#5b9bd5;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="250" y="1020" width="310" height="65" as="geometry"/>
+                </mxCell>
+                <mxCell id="sqlite-db" value="🗄️ SQLite&#xa;(MemoryORM テーブル)" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#deebf7;strokeColor=#5b9bd5;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="640" y="1010" width="150" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="gcp-future" value="（将来）GCP実装&#xa;Firestore / Vertex AI&#xa;ベクトル検索" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#deebf7;strokeColor=#5b9bd5;fontSize=10;dashed=1;dashPattern=5 5;fontColor=#999999;" parent="1" vertex="1">
+                    <mxGeometry x="870" y="1020" width="180" height="65" as="geometry"/>
+                </mxCell>
+                <mxCell id="scope-group" value="3つのメモリスコープ (MemoryScope)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff;strokeColor=#333;verticalAlign=top;fontStyle=1;fontSize=13;dashed=1;dashPattern=5 5;" parent="1" vertex="1">
+                    <mxGeometry x="1150" y="710" width="360" height="240" as="geometry"/>
+                </mxCell>
+                <mxCell id="scope-user" value="USER Memory&#xa;(FACT / PREFERENCE / PATTERN)&#xa;&#xa;例: &quot;子供が2人いる&quot;&#xa;&quot;朝型で午前中に集中力が高い&quot;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;align=left;spacingLeft=8;" parent="1" vertex="1">
+                    <mxGeometry x="1165" y="740" width="330" height="55" as="geometry"/>
+                </mxCell>
+                <mxCell id="scope-project" value="PROJECT Memory&#xa;(FACT)&#xa;&#xa;例: 週次サマリ、プロジェクト文脈ログ" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;align=left;spacingLeft=8;" parent="1" vertex="1">
+                    <mxGeometry x="1165" y="805" width="330" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="scope-work" value="WORK Memory (= Skills / 仕事メモリ)&#xa;(RULE)&#xa;&#xa;Markdown形式: # タイトル → ## いつ使うか → ## 内容&#xa;例: &quot;RPA手順: 経費精算&quot;, &quot;議事録テンプレート&quot;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;align=left;spacingLeft=8;fontStyle=1;" parent="1" vertex="1">
+                    <mxGeometry x="1165" y="865" width="330" height="75" as="geometry"/>
+                </mxCell>
+                <mxCell id="arrow-user-chat" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" parent="1" source="chat-ui" target="api-chat" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="arrow-user-memory" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;" parent="1" source="memory-ui" target="api-memories" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="arrow-chat-router" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;" parent="1" source="api-chat" target="runtime-router" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="arrow-router-agent" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;" parent="1" source="runtime-router" target="secretary-agent" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="arrow-router-label" value="profiles=(&quot;memory&quot;, ...)&#xa;tool_names=frozenset(...)" style="text;html=1;fontSize=9;align=left;fillColor=none;" parent="1" vertex="1">
+                    <mxGeometry x="200" y="375" width="120" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="arrow-agent-prompt" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;" parent="1" source="secretary-agent" target="prompt-assembly" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="arrow-agent-tools" value="エージェントがツールを呼び出す" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;fontSize=10;" parent="1" source="secretary-agent" target="memory-tools-box" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="445" y="440"/>
+                            <mxPoint x="350" y="440"/>
+                            <mxPoint x="350" y="510"/>
+                            <mxPoint x="350" y="545"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="arrow-tools-service" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;" parent="1" source="memory-tools-box" target="work-memory-service" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="arrow-projtools-llm" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;" parent="1" source="project-memory-tools-box" target="llm-utils" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="arrow-service-interface" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;" parent="1" source="work-memory-service" target="i-memory-repo" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="arrow-api-interface" value="REST API&#xa;(直接CRUD)" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;dashed=1;fontSize=9;" parent="1" source="api-memories" target="i-memory-repo" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="940" y="870"/>
+                            <mxPoint x="940" y="870"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="arrow-interface-sqlite" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;" parent="1" source="i-memory-repo" target="sqlite-repo" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="arrow-interface-future" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;dashed=1;strokeColor=#999999;" parent="1" source="i-memory-repo" target="gcp-future" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="arrow-repo-db" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;" parent="1" source="sqlite-repo" target="sqlite-db" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="arrow-prompt-wm-service" value="起動時にWork Memory&#xa;自動ロード" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;strokeColor=#b85450;strokeWidth=2;fontSize=9;fontColor=#b85450;" parent="1" source="wm-index-prompt" target="work-memory-service" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1043" y="420"/>
+                            <mxPoint x="1120" y="420"/>
+                            <mxPoint x="1120" y="700"/>
+                            <mxPoint x="285" y="700"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="wm-format" value="Work Memory Markdown形式:&#xa;&#xa;# タイトル&#xa;## いつ使うか&#xa;このスキルを使う状況の説明&#xa;## 内容&#xa;詳細な手順やルール" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;" parent="1" vertex="1">
+                    <mxGeometry x="750" y="735" width="230" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="relevance-box" value="関連度スコアリング:&#xa;&#xa;• トークン重複数&#xa;• タイトル部分一致 (+2.0)&#xa;• タグ完全一致 (+1.5)&#xa;• 3文字以上トークン一致 (+0.2)&#xa;→ 上位2件を自動ロード" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;align=left;spacingLeft=8;verticalAlign=top;" parent="1" vertex="1">
+                    <mxGeometry x="1000" y="735" width="140" height="120" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>
