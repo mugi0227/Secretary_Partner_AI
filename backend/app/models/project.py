@@ -103,3 +103,4 @@ class ProjectWithTaskCount(Project):
     aggregated_completed_tasks: int = 0
     aggregated_in_progress_tasks: int = 0
     aggregated_unassigned_tasks: int = 0
+    owner_display_name: Optional[str] = None

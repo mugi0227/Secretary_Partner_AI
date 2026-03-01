@@ -50,6 +50,8 @@ import { MeetingsTab } from '../components/meetings/MeetingsTab';
 import { ProjectAchievementsSection } from '../components/projects/ProjectAchievementsSection';
 import { ProjectHierarchyTree } from '../components/projects/ProjectHierarchyTree';
 import { ChildProjectsSection } from '../components/projects/ChildProjectsSection';
+import { InviteFromParentSection } from '../components/projects/InviteFromParentSection';
+import { MemberChildTasksView } from '../components/projects/MemberChildTasksView';
 import { ProjectDetailModal } from '../components/projects/ProjectDetailModal';
 import { ProjectTasksView } from '../components/projects/ProjectTasksView';
 import { RecurringTaskList } from '../components/tasks/RecurringTaskList';
@@ -1728,6 +1730,13 @@ export function ProjectDetailV2Page() {
               )}
             </div>
 
+            {projectId && project?.child_project_count && project.child_project_count > 0 ? (
+              <div className="project-v2-card" style={{ marginBottom: '16px' }}>
+                <h3 style={{ marginBottom: '12px' }}>子プロジェクト メンバータスク</h3>
+                <MemberChildTasksView projectId={projectId} />
+              </div>
+            ) : null}
+
             <div className="project-v2-team-panels">
               <div className="project-v2-card">
                 <h3>フェーズ別 負荷積み上げ</h3>
@@ -1929,6 +1938,20 @@ export function ProjectDetailV2Page() {
                       ))
                     )}
                   </div>
+                )}
+
+                {project?.parent_project_id && (
+                  <InviteFromParentSection
+                    projectId={projectId!}
+                    parentProjectId={project.parent_project_id}
+                    currentMembers={members}
+                    ownerUserId={project.user_id}
+                    onMemberAdded={async () => {
+                      if (!projectId) return;
+                      const membersData = await projectsApi.listMembers(projectId);
+                      setMembers(membersData);
+                    }}
+                  />
                 )}
 
                 {pendingInvitations.length > 0 && (

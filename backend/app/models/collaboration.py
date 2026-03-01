@@ -57,6 +57,8 @@ class ProjectMember(ProjectMemberBase):
     created_at: datetime
     updated_at: datetime
     member_display_name: Optional[str] = None
+    member_first_name: Optional[str] = None
+    member_last_name: Optional[str] = None
 
     class Config:
         from_attributes = True

@@ -12,7 +12,7 @@ export type ProjectStatus = 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
 export type ProjectVisibility = 'PRIVATE' | 'TEAM';
 export type PhaseStatus = 'PLANNED' | 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
 export type MilestoneStatus = 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
-export type ProjectRole = 'OWNER' | 'ADMIN' | 'MEMBER';
+export type ProjectRole = 'OWNER' | 'ADMIN' | 'MEMBER' | 'VIEWER';
 export type BlockerStatus = 'OPEN' | 'RESOLVED';
 export type CheckinType = 'weekly' | 'issue' | 'general';
 
@@ -364,6 +364,7 @@ export interface ProjectWithTaskCount extends Project {
   aggregated_completed_tasks: number;
   aggregated_in_progress_tasks: number;
   aggregated_unassigned_tasks: number;
+  owner_display_name?: string;
 }
 
 export type ProjectLinkRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -377,6 +378,8 @@ export interface ProjectLinkRequest {
   member_ids_to_add: string[];
   parent_approved: boolean;
   child_approved: boolean;
+  child_project_name?: string;
+  parent_project_name?: string;
   created_at: string;
   updated_at: string;
 }
@@ -385,6 +388,30 @@ export interface ProjectLinkRequestCreate {
   child_project_id: string;
   parent_project_id: string;
   member_ids_to_add?: string[];
+}
+
+// Child project cross-view models
+export interface ChildProjectTaskSummary {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  assignee_names: string[];
+  due_date?: string;
+}
+
+export interface MemberProjectTask {
+  child_project_id: string;
+  child_project_name: string;
+  task_id: string;
+  task_title: string;
+  task_status: TaskStatus;
+  due_date?: string;
+}
+
+export interface MemberChildTasksSummary {
+  member_user_id: string;
+  member_display_name: string;
+  tasks_by_project: MemberProjectTask[];
 }
 
 // Phase models

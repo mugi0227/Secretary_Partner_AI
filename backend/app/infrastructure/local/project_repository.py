@@ -249,25 +249,15 @@ class SqliteProjectRepository(IProjectRepository):
         user_id: str,
         parent_project_id: UUID,
     ) -> list[ProjectWithTaskCount]:
-        """List direct child projects with task statistics."""
+        """List direct child projects with task statistics.
+
+        Returns ALL children of the parent. The caller is responsible for
+        verifying the user has access to the parent project first.
+        """
         async with self._session_factory() as session:
-            # Get child projects where user is owner or member
             query = (
                 select(ProjectORM)
-                .outerjoin(
-                    ProjectMemberORM,
-                    ProjectORM.id == ProjectMemberORM.project_id
-                )
-                .where(
-                    and_(
-                        ProjectORM.parent_project_id == str(parent_project_id),
-                        or_(
-                            ProjectORM.user_id == user_id,
-                            ProjectMemberORM.member_user_id == user_id,
-                        ),
-                    )
-                )
-                .distinct()
+                .where(ProjectORM.parent_project_id == str(parent_project_id))
                 .order_by(ProjectORM.created_at.desc())
             )
             result = await session.execute(query)
@@ -280,9 +270,12 @@ class SqliteProjectRepository(IProjectRepository):
         user_id: str,
         ancestor_project_id: UUID,
     ) -> list[ProjectWithTaskCount]:
-        """List all descendant projects (recursive) with task statistics."""
+        """List all descendant projects (recursive) with task statistics.
+
+        Returns ALL descendants. The caller is responsible for verifying
+        the user has access to the ancestor project first.
+        """
         async with self._session_factory() as session:
-            # Use CTE to find all descendant project IDs
             descendant_cte = text("""
                 WITH RECURSIVE descendants AS (
                     SELECT id FROM projects WHERE parent_project_id = :ancestor_id
@@ -300,29 +293,25 @@ class SqliteProjectRepository(IProjectRepository):
             if not descendant_ids:
                 return []
 
-            # Fetch those projects where user has access
             query = (
                 select(ProjectORM)
-                .outerjoin(
-                    ProjectMemberORM,
-                    ProjectORM.id == ProjectMemberORM.project_id
-                )
-                .where(
-                    and_(
-                        ProjectORM.id.in_(descendant_ids),
-                        or_(
-                            ProjectORM.user_id == user_id,
-                            ProjectMemberORM.member_user_id == user_id,
-                        ),
-                    )
-                )
-                .distinct()
+                .where(ProjectORM.id.in_(descendant_ids))
                 .order_by(ProjectORM.created_at.desc())
             )
             result = await session.execute(query)
             projects = [self._orm_to_model(orm) for orm in result.scalars().all()]
 
         return await self._compute_task_counts(projects)
+
+    async def get_with_task_count(
+        self, project_id: UUID
+    ) -> Optional[ProjectWithTaskCount]:
+        """Get a single project with task statistics (no user check)."""
+        project = await self.get_by_id(project_id)
+        if not project:
+            return None
+        results = await self._compute_task_counts([project])
+        return results[0] if results else None
 
     async def _compute_task_counts(
         self, projects: list[Project]

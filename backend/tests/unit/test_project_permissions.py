@@ -113,15 +113,18 @@ async def test_get_project_access_missing_project():
 
 
 @pytest.mark.asyncio
-async def test_get_project_access_missing_member():
+async def test_get_project_access_non_member_returns_viewer():
+    """When repo.get() returns a project but user is not direct owner/member,
+    get_project_access returns VIEWER (ancestor access fallback)."""
     owner_id = "owner"
     member_id = "member"
     project = _make_project(owner_id)
     project_repo = FakeProjectRepo(project)
     member_repo = FakeProjectMemberRepo(None)
 
-    with pytest.raises(ForbiddenError):
-        await get_project_access(member_id, project.id, project_repo, member_repo)
+    access = await get_project_access(member_id, project.id, project_repo, member_repo)
+    assert access.role == ProjectRole.VIEWER
+    assert access.owner_id == owner_id
 
 
 def test_ensure_project_action_denies_member_update():

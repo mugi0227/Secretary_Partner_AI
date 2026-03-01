@@ -16,6 +16,7 @@ from app.interfaces.project_invitation_repository import IProjectInvitationRepos
 from app.interfaces.project_member_repository import IProjectMemberRepository
 from app.interfaces.project_repository import IProjectRepository
 from app.interfaces.proposal_repository import IProposalRepository
+from app.interfaces.user_repository import IUserRepository
 from app.models.collaboration import ProjectMemberCreate
 from app.models.enums import ProjectRole
 from app.models.project import ProjectCreate, ProjectUpdate
@@ -705,11 +706,34 @@ class ListProjectMembersInput(BaseModel):
     project_id: str = Field(..., description="Project ID")
 
 
+async def _resolve_member_user_info(
+    user_repo: IUserRepository,
+    member_user_id: str,
+) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """Resolve display_name, first_name, last_name from user_repo."""
+    from uuid import UUID
+
+    user = None
+    try:
+        user = await user_repo.get(UUID(member_user_id))
+    except (ValueError, TypeError):
+        pass
+    if not user and "@" in member_user_id:
+        user = await user_repo.get_by_email(member_user_id)
+    if not user:
+        user = await user_repo.get_by_username(member_user_id)
+    if not user:
+        return None, None, None
+    display_name = user.display_name or user.username
+    return display_name, user.first_name, user.last_name
+
+
 async def list_project_members(
     user_id: str,
     project_repo: IProjectRepository,
     member_repo: IProjectMemberRepository,
     input_data: ListProjectMembersInput,
+    user_repo: Optional[IUserRepository] = None,
 ) -> dict:
     # List members for a project.
     from uuid import UUID
@@ -728,6 +752,17 @@ async def list_project_members(
     if isinstance(access, dict):
         return access
     members = await member_repo.list(access.owner_id, project_id)
+    if user_repo:
+        for member in members:
+            display_name, first_name, last_name = await _resolve_member_user_info(
+                user_repo, member.member_user_id,
+            )
+            if display_name:
+                member.member_display_name = display_name
+            if first_name:
+                member.member_first_name = first_name
+            if last_name:
+                member.member_last_name = last_name
     return {
         "members": [member.model_dump(mode="json") for member in members],
         "count": len(members),
@@ -738,6 +773,7 @@ def list_project_members_tool(
     project_repo: IProjectRepository,
     member_repo: IProjectMemberRepository,
     user_id: str,
+    user_repo: Optional[IUserRepository] = None,
 ) -> FunctionTool:
     """Create ADK tool for listing project members."""
     async def _tool(input_data: dict) -> dict:
@@ -754,6 +790,7 @@ def list_project_members_tool(
             project_repo,
             member_repo,
             ListProjectMembersInput(**input_data),
+            user_repo=user_repo,
         )
 
     _tool.__name__ = "list_project_members"

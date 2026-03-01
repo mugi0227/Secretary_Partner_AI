@@ -12,6 +12,7 @@ import type {
   ProjectInvitationUpdate,
   ProjectLinkRequest,
   ProjectLinkRequestCreate,
+  ProjectRole,
   TaskAssignment,
   Blocker,
   Checkin,
@@ -25,6 +26,8 @@ import type {
   CheckinAgendaItems,
   ProjectKpiTemplate,
   Memory,
+  ChildProjectTaskSummary,
+  MemberChildTasksSummary,
 } from './types';
 
 export const projectsApi = {
@@ -48,6 +51,17 @@ export const projectsApi = {
 
   getDescendants: (projectId: string) =>
     api.get<ProjectWithTaskCount[]>(`/projects/${projectId}/descendants`),
+
+  getChildProjectTasks: (parentProjectId: string, childProjectId: string) =>
+    api.get<ChildProjectTaskSummary[]>(
+      `/projects/${parentProjectId}/children/${childProjectId}/tasks`,
+    ),
+
+  getMemberChildTasks: (projectId: string) =>
+    api.get<MemberChildTasksSummary[]>(`/projects/${projectId}/member-child-tasks`),
+
+  inviteFromParent: (projectId: string, data: { member_user_id: string; role: ProjectRole }) =>
+    api.post<ProjectMember>(`/projects/${projectId}/invite-from-parent`, data),
 
   // Link requests
   createLinkRequest: (projectId: string, data: ProjectLinkRequestCreate) =>

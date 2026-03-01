@@ -83,6 +83,7 @@ class ProjectRole(str, Enum):
     OWNER = "OWNER"
     ADMIN = "ADMIN"
     MEMBER = "MEMBER"
+    VIEWER = "VIEWER"
 
 
 class BlockerStatus(str, Enum):

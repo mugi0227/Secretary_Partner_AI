@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi } from '../../api/projects';
 import type { ProjectWithTaskCount, ProjectLinkRequest } from '../../api/types';
 import { useNavigate } from 'react-router-dom';
-import { FaPlus, FaWandMagicSparkles, FaSpinner, FaCheck, FaXmark, FaFolderOpen, FaLink, FaArrowRight } from 'react-icons/fa6';
+import { FaPlus, FaWandMagicSparkles, FaSpinner, FaCheck, FaXmark, FaFolderOpen, FaLink, FaArrowRight, FaUser, FaChevronDown, FaChevronRight, FaCircle } from 'react-icons/fa6';
 import { ProjectCreateModal } from './ProjectCreateModal';
 import { ChildProjectLinkModal } from './ChildProjectLinkModal';
 import './ChildProjectsSection.css';
@@ -19,25 +19,54 @@ const STATUS_LABELS: Record<string, string> = {
   ARCHIVED: 'アーカイブ',
 };
 
-function ChildProjectCard({ project }: { project: ProjectWithTaskCount }) {
+const TASK_STATUS_COLORS: Record<string, string> = {
+  TODO: '#94a3b8',
+  IN_PROGRESS: '#0ea5e9',
+  WAITING: '#f59e0b',
+  DONE: '#22c55e',
+};
+
+function ChildProjectCard({
+  project,
+  parentProjectId,
+}: {
+  project: ProjectWithTaskCount;
+  parentProjectId: string;
+}) {
   const navigate = useNavigate();
+  const [expanded, setExpanded] = useState(false);
   const progress =
     project.total_tasks > 0
       ? Math.round((project.completed_tasks / project.total_tasks) * 100)
       : 0;
 
+  const { data: tasks, isLoading: tasksLoading } = useQuery({
+    queryKey: ['child-project-tasks', parentProjectId, project.id],
+    queryFn: () => projectsApi.getChildProjectTasks(parentProjectId, project.id),
+    enabled: expanded,
+  });
+
   return (
-    <div className="child-project-card">
+    <div className={`child-project-card ${expanded ? 'expanded' : ''}`}>
       <div className="child-project-info">
-        <span
-          className="child-project-name"
-          onClick={() => navigate(`/projects/${project.id}/v2`)}
-          role="link"
-          tabIndex={0}
-          onKeyDown={(e) => e.key === 'Enter' && navigate(`/projects/${project.id}/v2`)}
-        >
-          {project.name}
-        </span>
+        <div className="child-project-header-row">
+          <button
+            className="child-project-expand-btn"
+            onClick={() => setExpanded(!expanded)}
+            title={expanded ? '折りたたむ' : '展開'}
+          >
+            {expanded ? <FaChevronDown /> : <FaChevronRight />}
+          </button>
+          <span
+            className="child-project-name"
+            onClick={() => navigate(`/projects/${project.id}/v2`)}
+            role="link"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Enter' && navigate(`/projects/${project.id}/v2`)}
+          >
+            {project.name}
+          </span>
+        </div>
         <div className="child-project-meta">
           <span className={`child-project-status-badge status-${project.status}`}>
             {STATUS_LABELS[project.status] || project.status}
@@ -54,9 +83,47 @@ function ChildProjectCard({ project }: { project: ProjectWithTaskCount }) {
             />
           </div>
         </div>
+        {expanded && (
+          <div className="child-project-tasks">
+            {tasksLoading ? (
+              <div className="child-project-tasks-loading">
+                <FaSpinner className="spinner" /> 読み込み中...
+              </div>
+            ) : tasks && tasks.length > 0 ? (
+              tasks.map((task) => (
+                <div key={task.id} className="child-task-row">
+                  <FaCircle
+                    className="child-task-status-dot"
+                    style={{ color: TASK_STATUS_COLORS[task.status] || '#94a3b8' }}
+                  />
+                  <span className="child-task-title">{task.title}</span>
+                  {task.assignee_names.length > 0 && (
+                    <span className="child-task-assignee">
+                      {task.assignee_names.join(', ')}
+                    </span>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="child-project-tasks-empty">タスクなし</div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
+}
+
+function groupChildrenByOwner(
+  children: ProjectWithTaskCount[],
+): Record<string, ProjectWithTaskCount[]> {
+  const grouped: Record<string, ProjectWithTaskCount[]> = {};
+  for (const child of children) {
+    const owner = child.owner_display_name || child.user_id;
+    if (!grouped[owner]) grouped[owner] = [];
+    grouped[owner].push(child);
+  }
+  return grouped;
 }
 
 function PendingRequestCard({
@@ -69,11 +136,6 @@ function PendingRequestCard({
   isOwner: boolean;
 }) {
   const queryClient = useQueryClient();
-
-  const { data: childProject } = useQuery({
-    queryKey: ['project', request.child_project_id],
-    queryFn: () => projectsApi.getById(request.child_project_id),
-  });
 
   const approveMutation = useMutation({
     mutationFn: () => projectsApi.approveLinkRequest(parentProjectId, request.id),
@@ -102,7 +164,7 @@ function PendingRequestCard({
     <div className="child-project-card pending-request">
       <div className="child-project-info">
         <span className="child-project-name" style={{ color: 'var(--text-main)', cursor: 'default' }}>
-          {childProject?.name || '読み込み中...'}
+          {request.child_project_name || '不明なプロジェクト'}
         </span>
         <div className="child-project-meta">
           <span className="child-project-status-badge status-pending">{approvalLabel}</span>
@@ -141,11 +203,6 @@ function IncomingRequestCard({
 }) {
   const queryClient = useQueryClient();
 
-  const { data: parentProject } = useQuery({
-    queryKey: ['project', request.parent_project_id],
-    queryFn: () => projectsApi.getById(request.parent_project_id),
-  });
-
   const approveMutation = useMutation({
     mutationFn: () => projectsApi.approveLinkRequest(request.parent_project_id, request.id),
     onSuccess: () => {
@@ -177,7 +234,7 @@ function IncomingRequestCard({
           親プロジェクトへの紐付けリクエスト
         </div>
         <span className="child-project-name" style={{ color: 'var(--text-main)', cursor: 'default' }}>
-          {parentProject?.name || '読み込み中...'}
+          {request.parent_project_name || '不明なプロジェクト'}
         </span>
         <div className="child-project-meta">
           <span className="child-project-status-badge status-pending">{approvalLabel}</span>
@@ -238,6 +295,14 @@ export function ChildProjectsSection({ projectId, projectName }: ChildProjectsSe
   const isLoading = isLoadingChildren || isLoadingRequests || isLoadingIncoming;
   const childCount = (children?.length || 0) + (pendingRequests?.length || 0);
 
+  const groupedChildren = useMemo(() => {
+    if (!children || children.length === 0) return {};
+    return groupChildrenByOwner(children);
+  }, [children]);
+
+  const ownerGroups = Object.entries(groupedChildren);
+  const hasMultipleOwners = ownerGroups.length > 1;
+
   return (
     <div className="child-projects-section">
       <div className="child-projects-section-header">
@@ -267,9 +332,9 @@ export function ChildProjectsSection({ projectId, projectName }: ChildProjectsSe
         </div>
       ) : (
         <>
-          {(children && children.length > 0) || (pendingRequests && pendingRequests.length > 0) ? (
-            <div className="child-projects-grid">
-              {pendingRequests?.map((request) => (
+          {pendingRequests && pendingRequests.length > 0 && (
+            <div className="child-projects-grid" style={{ marginBottom: '12px' }}>
+              {pendingRequests.map((request) => (
                 <PendingRequestCard
                   key={request.id}
                   request={request}
@@ -277,14 +342,36 @@ export function ChildProjectsSection({ projectId, projectName }: ChildProjectsSe
                   isOwner={true}
                 />
               ))}
-              {children?.map((child) => (
-                <ChildProjectCard key={child.id} project={child} />
-              ))}
             </div>
+          )}
+          {ownerGroups.length > 0 ? (
+            hasMultipleOwners ? (
+              ownerGroups.map(([ownerName, projects]) => (
+                <div key={ownerName} className="child-projects-owner-group">
+                  <div className="child-projects-owner-header">
+                    <FaUser style={{ fontSize: '0.7rem' }} />
+                    <span>{ownerName}</span>
+                  </div>
+                  <div className="child-projects-grid">
+                    {projects.map((child) => (
+                      <ChildProjectCard key={child.id} project={child} parentProjectId={projectId} />
+                    ))}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="child-projects-grid">
+                {children?.map((child) => (
+                  <ChildProjectCard key={child.id} project={child} parentProjectId={projectId} />
+                ))}
+              </div>
+            )
           ) : (
-            <div className="child-projects-empty">
-              子プロジェクトはまだありません
-            </div>
+            !pendingRequests?.length && (
+              <div className="child-projects-empty">
+                子プロジェクトはまだありません
+              </div>
+            )
           )}
         </>
       )}

@@ -414,7 +414,7 @@ async def create_secretary_agent(
         project_creation_tool,
         work_memory_creation_tool,
         list_projects_tool(project_repo, user_id),
-        list_project_members_tool(project_repo, project_member_repo, user_id),
+        list_project_members_tool(project_repo, project_member_repo, user_id, user_repo=user_repo),
         list_project_invitations_tool(project_repo, project_member_repo, project_invitation_repo, user_id),
         load_project_context_tool(project_repo, project_member_repo, user_id),
         create_project_summary_tool(

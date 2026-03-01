@@ -59,7 +59,16 @@ from app.models.lightning_line import LightningLineResponse
 from app.models.memory import Memory, MemoryCreate
 from app.models.project import Project, ProjectCreate, ProjectUpdate, ProjectWithTaskCount
 from app.models.project_kpi import ProjectKpiTemplate
-from app.models.project_link import ProjectLinkRequest, ProjectLinkRequestCreate
+from app.models.child_project_views import (
+    ChildProjectTaskSummary,
+    MemberChildTasksSummary,
+    MemberProjectTask,
+)
+from app.models.project_link import (
+    InviteParentMemberRequest,
+    ProjectLinkRequest,
+    ProjectLinkRequestCreate,
+)
 from app.services import notification_service as notify
 from app.services.kpi_calculator import apply_project_kpis
 from app.services.kpi_templates import get_kpi_templates
@@ -313,6 +322,36 @@ async def _validate_parent_project(
     return parent
 
 
+async def _enrich_owner_names(
+    projects: list[ProjectWithTaskCount],
+    user_repo: UserRepo,
+) -> None:
+    """Populate owner_display_name on project list."""
+    owner_names: dict[str, Optional[str]] = {}
+    for proj in projects:
+        uid = proj.user_id
+        if uid not in owner_names:
+            u = await user_repo.get(UUID(uid))
+            owner_names[uid] = (u.display_name or u.username or u.email) if u else None
+        proj.owner_display_name = owner_names.get(uid)
+
+
+async def _enrich_link_requests(
+    requests: list[ProjectLinkRequest],
+    repo: ProjectRepo,
+) -> list[ProjectLinkRequest]:
+    """Populate child/parent project names on link requests."""
+    project_names: dict[str, str] = {}
+    for req in requests:
+        for pid in (str(req.child_project_id), str(req.parent_project_id)):
+            if pid not in project_names:
+                proj = await repo.get_by_id(UUID(pid))
+                project_names[pid] = proj.name if proj else None
+        req.child_project_name = project_names.get(str(req.child_project_id))
+        req.parent_project_name = project_names.get(str(req.parent_project_id))
+    return requests
+
+
 @router.get("/kpi-templates", response_model=list[ProjectKpiTemplate])
 async def list_kpi_templates(user: CurrentUser):
     """List KPI templates."""
@@ -347,13 +386,13 @@ async def get_project(
     project_id: UUID,
     user: CurrentUser,
     repo: ProjectRepo,
+    member_repo: ProjectMemberRepo,
     task_repo: TaskRepo,
 ):
     """Get a project by ID with task counts and descendant aggregation."""
-    # Use list_with_task_count to get task statistics
-    all_projects = await repo.list_with_task_count(user.id)
-    project = next((p for p in all_projects if p.id == project_id), None)
+    access = await require_project_member(user, project_id, repo, member_repo)
 
+    project = await repo.get_with_task_count(project_id)
     if not project:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -362,7 +401,9 @@ async def get_project(
 
     # Compute aggregated stats from descendants
     try:
-        descendants = await repo.list_descendants_with_task_count(user.id, project_id)
+        descendants = await repo.list_descendants_with_task_count(
+            access.owner_id, project_id,
+        )
         project.child_project_count = sum(
             1 for d in descendants if d.parent_project_id == project_id
         )
@@ -381,8 +422,7 @@ async def get_project(
     except Exception:
         pass  # If descendants fail, return project without aggregation
 
-    # Apply KPI calculations
-    return await apply_project_kpis(user.id, project, task_repo)
+    return await apply_project_kpis(access.owner_id, project, task_repo)
 
 
 @router.get("", response_model=list[ProjectWithTaskCount])
@@ -551,10 +591,14 @@ async def list_project_members(
         display_name = None
         if user_account:
             display_name = user_account.display_name or user_account.username
+            if user_account.first_name:
+                member.member_first_name = user_account.first_name
+            if user_account.last_name:
+                member.member_last_name = user_account.last_name
         if not display_name and member.member_user_id == user.id:
             display_name = user.display_name
         if display_name:
-            setattr(member, "member_display_name", display_name)
+            member.member_display_name = display_name
     return members
 
 
@@ -1295,10 +1339,13 @@ async def list_child_projects(
     user: CurrentUser,
     repo: ProjectRepo,
     member_repo: ProjectMemberRepo,
+    user_repo: UserRepo,
 ):
-    """List direct child projects with task counts."""
+    """List direct child projects with task counts and owner names."""
     await require_project_member(user, project_id, repo, member_repo)
-    return await repo.list_children_with_task_count(user.id, project_id)
+    children = await repo.list_children_with_task_count(user.id, project_id)
+    await _enrich_owner_names(children, user_repo)
+    return children
 
 
 @router.get("/{project_id}/descendants", response_model=list[ProjectWithTaskCount])
@@ -1311,6 +1358,113 @@ async def list_descendant_projects(
     """List all descendant projects (recursive) with task counts."""
     await require_project_member(user, project_id, repo, member_repo)
     return await repo.list_descendants_with_task_count(user.id, project_id)
+
+
+@router.get(
+    "/{project_id}/children/{child_project_id}/tasks",
+    response_model=list[ChildProjectTaskSummary],
+)
+async def list_child_project_tasks(
+    project_id: UUID,
+    child_project_id: UUID,
+    user: CurrentUser,
+    repo: ProjectRepo,
+    member_repo: ProjectMemberRepo,
+    task_repo: TaskRepo,
+    assignment_repo: TaskAssignmentRepo,
+    user_repo: UserRepo,
+):
+    """List task summaries for a child project (read-only for parent members)."""
+    await require_project_member(user, project_id, repo, member_repo)
+
+    child = await repo.get_by_id(child_project_id)
+    if not child or str(child.parent_project_id) != str(project_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="子プロジェクトが見つかりません",
+        )
+
+    tasks = await task_repo.list(
+        child.user_id, project_id=child_project_id, include_done=True,
+    )
+    assignments = await assignment_repo.list_by_project(child.user_id, child_project_id)
+    assignment_map: dict[str, list[str]] = {}
+    user_names: dict[str, str] = {}
+    for a in assignments:
+        tid = str(a.task_id)
+        aid = a.assignee_id
+        if aid not in user_names:
+            u = await user_repo.get(UUID(aid)) if not aid.startswith("inv:") else None
+            user_names[aid] = (u.display_name or u.username or aid) if u else aid
+        assignment_map.setdefault(tid, []).append(user_names[aid])
+
+    return [
+        ChildProjectTaskSummary(
+            id=t.id,
+            title=t.title,
+            status=t.status,
+            assignee_names=assignment_map.get(str(t.id), []),
+            due_date=t.due_date,
+        )
+        for t in tasks
+    ]
+
+
+@router.get(
+    "/{project_id}/member-child-tasks",
+    response_model=list[MemberChildTasksSummary],
+)
+async def list_member_tasks_across_children(
+    project_id: UUID,
+    user: CurrentUser,
+    repo: ProjectRepo,
+    member_repo: ProjectMemberRepo,
+    task_repo: TaskRepo,
+    assignment_repo: TaskAssignmentRepo,
+    user_repo: UserRepo,
+):
+    """Get tasks grouped by member across all child projects."""
+    await require_project_member(user, project_id, repo, member_repo)
+    children = await repo.list_children_with_task_count(user.id, project_id)
+
+    member_map: dict[str, MemberChildTasksSummary] = {}
+    user_names: dict[str, str] = {}
+
+    for child in children:
+        tasks = await task_repo.list(
+            child.user_id, project_id=child.id, include_done=False,
+        )
+        assignments = await assignment_repo.list_by_project(child.user_id, child.id)
+        task_assignments: dict[str, list[str]] = {}
+        for a in assignments:
+            task_assignments.setdefault(str(a.task_id), []).append(a.assignee_id)
+
+        for task in tasks:
+            assignee_ids = task_assignments.get(str(task.id), [])
+            if not assignee_ids:
+                continue
+            for aid in assignee_ids:
+                if aid not in user_names:
+                    u = await user_repo.get(UUID(aid)) if not aid.startswith("inv:") else None
+                    user_names[aid] = (u.display_name or u.username or aid) if u else aid
+                if aid not in member_map:
+                    member_map[aid] = MemberChildTasksSummary(
+                        member_user_id=aid,
+                        member_display_name=user_names[aid],
+                        tasks_by_project=[],
+                    )
+                member_map[aid].tasks_by_project.append(
+                    MemberProjectTask(
+                        child_project_id=child.id,
+                        child_project_name=child.name,
+                        task_id=task.id,
+                        task_title=task.title,
+                        task_status=task.status,
+                        due_date=task.due_date,
+                    )
+                )
+
+    return list(member_map.values())
 
 
 # =============================================================================
@@ -1425,7 +1579,8 @@ async def list_link_requests(
 ):
     """List link requests for a parent project."""
     await require_project_member(user, project_id, repo, member_repo)
-    return await link_request_repo.list_by_parent(project_id, status=request_status)
+    requests = await link_request_repo.list_by_parent(project_id, status=request_status)
+    return await _enrich_link_requests(requests, repo)
 
 
 @router.get("/{project_id}/incoming-link-requests", response_model=list[ProjectLinkRequest])
@@ -1439,7 +1594,8 @@ async def list_incoming_link_requests(
 ):
     """List link requests where this project is the child."""
     await require_project_member(user, project_id, repo, member_repo)
-    return await link_request_repo.list_by_child(project_id, status=request_status)
+    requests = await link_request_repo.list_by_child(project_id, status=request_status)
+    return await _enrich_link_requests(requests, repo)
 
 
 @router.post("/{project_id}/link-requests/{request_id}/approve", response_model=ProjectLinkRequest)
@@ -1581,3 +1737,78 @@ async def reject_link_request(
         )
 
     return rejected
+
+
+@router.post("/{project_id}/invite-from-parent", response_model=ProjectMember)
+async def invite_from_parent(
+    project_id: UUID,
+    body: InviteParentMemberRequest,
+    user: CurrentUser,
+    repo: ProjectRepo,
+    member_repo: ProjectMemberRepo,
+    user_repo: UserRepo,
+):
+    """Invite a parent project member to this child project with a specified role."""
+    # Verify the user can manage members on this child project
+    access = await require_project_action(
+        user, project_id, repo, member_repo, ProjectAction.MEMBER_MANAGE,
+    )
+
+    # Find parent project
+    child_project = access.project
+    if not child_project.parent_project_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="このプロジェクトには親プロジェクトがありません",
+        )
+
+    # Verify target user is a member of the parent project
+    parent_project = await repo.get_by_id(child_project.parent_project_id)
+    if not parent_project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="親プロジェクトが見つかりません",
+        )
+
+    is_parent_member = parent_project.user_id == body.member_user_id
+    if not is_parent_member:
+        parent_members = await member_repo.list_by_project(child_project.parent_project_id)
+        is_parent_member = any(
+            m.member_user_id == body.member_user_id for m in parent_members
+        )
+
+    if not is_parent_member:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="対象ユーザーは親プロジェクトのメンバーではありません",
+        )
+
+    # Check if already a direct member of this child project
+    existing = await member_repo.get_by_project_and_member_user_id(
+        project_id, body.member_user_id,
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="このユーザーは既にメンバーです",
+        )
+
+    # Don't allow inviting the child project owner (they already have full access)
+    if child_project.user_id == body.member_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="このユーザーはプロジェクトオーナーです",
+        )
+
+    # VIEWER role is not valid for direct membership
+    if body.role == ProjectRole.VIEWER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="VIEWERロールでの直接メンバー追加はできません",
+        )
+
+    member_create = ProjectMemberCreate(
+        member_user_id=body.member_user_id,
+        role=body.role,
+    )
+    return await member_repo.create(access.owner_id, project_id, member_create)

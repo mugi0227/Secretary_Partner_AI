@@ -108,10 +108,13 @@ class IProjectRepository(ABC):
         parent_project_id: UUID,
     ) -> list[ProjectWithTaskCount]:
         """
-        List direct child projects with task statistics.
+        List ALL direct child projects with task statistics.
+
+        Returns all children regardless of user membership in each child.
+        Caller must verify the user has access to the parent project.
 
         Args:
-            user_id: User ID (for access check)
+            user_id: User ID (unused, kept for interface compatibility)
             parent_project_id: Parent project ID
 
         Returns:
@@ -126,14 +129,34 @@ class IProjectRepository(ABC):
         ancestor_project_id: UUID,
     ) -> list[ProjectWithTaskCount]:
         """
-        List all descendant projects (recursive) with task statistics.
+        List ALL descendant projects (recursive) with task statistics.
+
+        Returns all descendants regardless of user membership in each.
+        Caller must verify the user has access to the ancestor project.
 
         Args:
-            user_id: User ID (for access check)
+            user_id: User ID (unused, kept for interface compatibility)
             ancestor_project_id: Ancestor project ID
 
         Returns:
             Flat list of all descendant projects with task counts
+        """
+        pass
+
+    @abstractmethod
+    async def get_with_task_count(
+        self, project_id: UUID
+    ) -> Optional[ProjectWithTaskCount]:
+        """
+        Get a single project with task statistics (no user check).
+
+        Used after access has already been verified.
+
+        Args:
+            project_id: Project ID
+
+        Returns:
+            Project with task counts if found, None otherwise
         """
         pass
 

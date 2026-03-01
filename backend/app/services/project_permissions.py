@@ -34,25 +34,26 @@ class ProjectAction(str, Enum):
 
 ALL_PROJECT_ROLES = {ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.MEMBER}
 ADMIN_PROJECT_ROLES = {ProjectRole.OWNER, ProjectRole.ADMIN}
+READ_ONLY_ROLES = {ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.MEMBER, ProjectRole.VIEWER}
 
 PROJECT_ROLE_MATRIX: dict[ProjectAction, set[ProjectRole]] = {
-    ProjectAction.PROJECT_READ: ALL_PROJECT_ROLES,
+    ProjectAction.PROJECT_READ: READ_ONLY_ROLES,
     ProjectAction.PROJECT_UPDATE: ADMIN_PROJECT_ROLES,
     ProjectAction.PROJECT_DELETE: ADMIN_PROJECT_ROLES,
-    ProjectAction.MEMBER_READ: ALL_PROJECT_ROLES,
+    ProjectAction.MEMBER_READ: READ_ONLY_ROLES,
     ProjectAction.MEMBER_MANAGE: ADMIN_PROJECT_ROLES,
     ProjectAction.INVITATION_READ: ADMIN_PROJECT_ROLES,
     ProjectAction.INVITATION_MANAGE: ADMIN_PROJECT_ROLES,
     ProjectAction.PHASE_MANAGE: ALL_PROJECT_ROLES,
     ProjectAction.MILESTONE_MANAGE: ALL_PROJECT_ROLES,
-    ProjectAction.CHECKIN_READ: ALL_PROJECT_ROLES,
+    ProjectAction.CHECKIN_READ: READ_ONLY_ROLES,
     ProjectAction.CHECKIN_WRITE: ALL_PROJECT_ROLES,
-    ProjectAction.ACHIEVEMENT_READ: ALL_PROJECT_ROLES,
+    ProjectAction.ACHIEVEMENT_READ: READ_ONLY_ROLES,
     ProjectAction.ACHIEVEMENT_WRITE: ALL_PROJECT_ROLES,
     ProjectAction.SNAPSHOT_MANAGE: ALL_PROJECT_ROLES,
     ProjectAction.MEETING_AGENDA_MANAGE: ALL_PROJECT_ROLES,
-    ProjectAction.ASSIGNMENT_READ: ALL_PROJECT_ROLES,
-    ProjectAction.BLOCKER_READ: ALL_PROJECT_ROLES,
+    ProjectAction.ASSIGNMENT_READ: READ_ONLY_ROLES,
+    ProjectAction.BLOCKER_READ: READ_ONLY_ROLES,
 }
 
 
@@ -97,7 +98,9 @@ async def get_project_access(
         return ProjectAccess(project=project, role=ProjectRole.OWNER, owner_id=project.user_id)
 
     member = await member_repo.get_by_project_and_member_user_id(project_id, user_id)
-    if not member:
-        raise ForbiddenError("User is not a member of this project")
+    if member:
+        return ProjectAccess(project=project, role=member.role, owner_id=project.user_id)
 
-    return ProjectAccess(project=project, role=member.role, owner_id=project.user_id)
+    # repo.get() returned the project but user is not direct owner/member.
+    # This means access was granted via ancestor membership (read-only).
+    return ProjectAccess(project=project, role=ProjectRole.VIEWER, owner_id=project.user_id)
