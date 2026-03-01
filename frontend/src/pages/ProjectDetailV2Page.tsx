@@ -33,7 +33,6 @@ import { tasksApi } from '../api/tasks';
 import type {
   Blocker,
   CheckinV2,
-  MemberChildTasksSummary,
   MemberProjectTask,
   Milestone,
   MilestoneUpdate,
