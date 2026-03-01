@@ -68,6 +68,12 @@ function ChildProjectCard({
           </span>
         </div>
         <div className="child-project-meta">
+          {project.owner_display_name && (
+            <span className="child-project-owner">
+              <FaUser style={{ fontSize: '0.55rem' }} />
+              {project.owner_display_name}
+            </span>
+          )}
           <span className={`child-project-status-badge status-${project.status}`}>
             {STATUS_LABELS[project.status] || project.status}
           </span>

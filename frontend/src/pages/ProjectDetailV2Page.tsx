@@ -19,6 +19,7 @@ import {
   FaTrophy,
   FaSitemap,
   FaUsers,
+  FaCircle,
 } from 'react-icons/fa';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { usePageTour } from '../hooks/usePageTour';
@@ -31,6 +32,8 @@ import { tasksApi } from '../api/tasks';
 import type {
   Blocker,
   CheckinV2,
+  MemberChildTasksSummary,
+  MemberProjectTask,
   Milestone,
   MilestoneUpdate,
   PhaseWithTaskCount,
@@ -51,7 +54,6 @@ import { ProjectAchievementsSection } from '../components/projects/ProjectAchiev
 import { ProjectHierarchyTree } from '../components/projects/ProjectHierarchyTree';
 import { ChildProjectsSection } from '../components/projects/ChildProjectsSection';
 import { InviteFromParentSection } from '../components/projects/InviteFromParentSection';
-import { MemberChildTasksView } from '../components/projects/MemberChildTasksView';
 import { ProjectDetailModal } from '../components/projects/ProjectDetailModal';
 import { ProjectTasksView } from '../components/projects/ProjectTasksView';
 import { RecurringTaskList } from '../components/tasks/RecurringTaskList';
@@ -93,6 +95,13 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
   IN_PROGRESS: '進行中',
   WAITING: '待機中',
   DONE: '完了',
+};
+
+const CHILD_TASK_STATUS_COLORS: Record<string, string> = {
+  TODO: '#94a3b8',
+  IN_PROGRESS: '#0ea5e9',
+  WAITING: '#f59e0b',
+  DONE: '#22c55e',
 };
 
 const PRIORITY_RANK: Record<string, number> = {
@@ -172,6 +181,27 @@ export function ProjectDetailV2Page() {
     enabled: !!projectId,
   });
   const error = projectError ? 'プロジェクトの取得に失敗しました。' : (!projectId ? 'プロジェクトIDが不正です。' : null);
+
+  const { data: memberChildTasks } = useQuery({
+    queryKey: ['member-child-tasks', projectId],
+    queryFn: () => projectsApi.getMemberChildTasks(projectId!),
+    enabled: !!projectId && (project?.child_project_count ?? 0) > 0,
+  });
+
+  const childTasksByMember = useMemo(() => {
+    if (!memberChildTasks) return {} as Record<string, Record<string, MemberProjectTask[]>>;
+    const map: Record<string, Record<string, MemberProjectTask[]>> = {};
+    for (const m of memberChildTasks) {
+      const byProject: Record<string, MemberProjectTask[]> = {};
+      for (const t of m.tasks_by_project) {
+        if (!byProject[t.child_project_name]) byProject[t.child_project_name] = [];
+        byProject[t.child_project_name].push(t);
+      }
+      map[m.member_user_id] = byProject;
+    }
+    return map;
+  }, [memberChildTasks]);
+
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [invitations, setInvitations] = useState<ProjectInvitation[]>([]);
   const [blockers, setBlockers] = useState<Blocker[]>([]);
@@ -1622,6 +1652,10 @@ export function ProjectDetailV2Page() {
                   const displayName = member.member_display_name || member.member_user_id;
                   const isExpanded = expandedMemberIds.has(member.member_user_id);
                   const memberTasks = tasksByMemberId[member.member_user_id] ?? [];
+                  const childProjects = childTasksByMember[member.member_user_id] ?? {};
+                  const childProjectEntries = Object.entries(childProjects);
+                  const hasChildTasks = childProjectEntries.length > 0;
+                  const showGroupLabels = memberTasks.length > 0 && hasChildTasks;
                   return (
                     <div
                       key={member.id}
@@ -1669,58 +1703,88 @@ export function ProjectDetailV2Page() {
                       </div>
                       {isExpanded && (
                         <div className="project-v2-member-tasks">
-                          {memberTasks.length === 0 ? (
+                          {memberTasks.length === 0 && !hasChildTasks ? (
                             <p className="project-v2-muted">割り当てられたタスクはありません。</p>
                           ) : (
-                            <div className="project-v2-task-list">
-                              {memberTasks.map((task) => {
-                                const isDone = task.status === 'DONE';
-                                const progress = task.progress ?? (isDone ? 100 : 0);
-                                const dlStatus = getDeadlineStatus(task.due_date, task.status, timezone);
-                                const est = task.estimated_minutes;
-                                const timeLabel = est
-                                  ? est >= 60
-                                    ? `${Math.floor(est / 60)}h${est % 60 > 0 ? ` ${est % 60}m` : ''}`
-                                    : `${est}m`
-                                  : '';
-                                return (
-                                  <div
-                                    key={task.id}
-                                    className={`project-v2-task-item ${isDone ? 'done' : ''} ${dlStatus ? `deadline-${dlStatus}` : ''}`}
-                                    onClick={() => taskModal.openTaskDetail(task)}
-                                  >
-                                    <div
-                                      className="project-v2-task-progress-bar"
-                                      style={{ width: `${progress}%` }}
-                                    />
-                                    <div
-                                      className={`project-v2-task-checkbox ${isDone ? 'checked' : ''}`}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        updateTask(task.id, { status: isDone ? 'TODO' : 'DONE' });
-                                      }}
-                                    />
-                                    <div className="project-v2-task-content">
-                                      <div className={`project-v2-task-title ${isDone ? 'done' : ''}`}>
-                                        {task.title}
+                            <>
+                              {showGroupLabels && (
+                                <div className="project-v2-task-group-label">このプロジェクト</div>
+                              )}
+                              {memberTasks.length > 0 && (
+                                <div className="project-v2-task-list">
+                                  {memberTasks.map((task) => {
+                                    const isDone = task.status === 'DONE';
+                                    const progress = task.progress ?? (isDone ? 100 : 0);
+                                    const dlStatus = getDeadlineStatus(task.due_date, task.status, timezone);
+                                    const est = task.estimated_minutes;
+                                    const timeLabel = est
+                                      ? est >= 60
+                                        ? `${Math.floor(est / 60)}h${est % 60 > 0 ? ` ${est % 60}m` : ''}`
+                                        : `${est}m`
+                                      : '';
+                                    return (
+                                      <div
+                                        key={task.id}
+                                        className={`project-v2-task-item ${isDone ? 'done' : ''} ${dlStatus ? `deadline-${dlStatus}` : ''}`}
+                                        onClick={() => taskModal.openTaskDetail(task)}
+                                      >
+                                        <div
+                                          className="project-v2-task-progress-bar"
+                                          style={{ width: `${progress}%` }}
+                                        />
+                                        <div
+                                          className={`project-v2-task-checkbox ${isDone ? 'checked' : ''}`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            updateTask(task.id, { status: isDone ? 'TODO' : 'DONE' });
+                                          }}
+                                        />
+                                        <div className="project-v2-task-content">
+                                          <div className={`project-v2-task-title ${isDone ? 'done' : ''}`}>
+                                            {task.title}
+                                          </div>
+                                          {task.due_date && (
+                                            <div className="project-v2-muted">{formatShortDate(task.due_date)}</div>
+                                          )}
+                                        </div>
+                                        {timeLabel && (
+                                          <div className="project-v2-task-time">{timeLabel}</div>
+                                        )}
+                                        <div
+                                          className="project-v2-member-task-status"
+                                          data-status={task.status}
+                                        >
+                                          {STATUS_LABELS[task.status]}
+                                        </div>
                                       </div>
-                                      {task.due_date && (
-                                        <div className="project-v2-muted">{formatShortDate(task.due_date)}</div>
-                                      )}
-                                    </div>
-                                    {timeLabel && (
-                                      <div className="project-v2-task-time">{timeLabel}</div>
-                                    )}
+                                    );
+                                  })}
+                                </div>
+                              )}
+                              {childProjectEntries.map(([projectName, tasks]) => (
+                                <div key={projectName}>
+                                  <div className="project-v2-task-group-label">{projectName}</div>
+                                  {tasks.map((task) => (
                                     <div
-                                      className="project-v2-member-task-status"
-                                      data-status={task.status}
+                                      key={task.task_id}
+                                      className={`project-v2-child-task-row${task.task_status === 'DONE' ? ' done' : ''}`}
                                     >
-                                      {STATUS_LABELS[task.status]}
+                                      <FaCircle
+                                        className="project-v2-child-task-dot"
+                                        style={{ color: CHILD_TASK_STATUS_COLORS[task.task_status] || '#94a3b8' }}
+                                      />
+                                      <span className="project-v2-child-task-title">{task.task_title}</span>
+                                      <div
+                                        className="project-v2-member-task-status"
+                                        data-status={task.task_status}
+                                      >
+                                        {STATUS_LABELS[task.task_status as TaskStatus] || task.task_status}
+                                      </div>
                                     </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
+                                  ))}
+                                </div>
+                              ))}
+                            </>
                           )}
                         </div>
                       )}
@@ -1729,13 +1793,6 @@ export function ProjectDetailV2Page() {
                 })
               )}
             </div>
-
-            {projectId && project?.child_project_count && project.child_project_count > 0 ? (
-              <div className="project-v2-card" style={{ marginBottom: '16px' }}>
-                <h3 style={{ marginBottom: '12px' }}>子プロジェクト メンバータスク</h3>
-                <MemberChildTasksView projectId={projectId} />
-              </div>
-            ) : null}
 
             <div className="project-v2-team-panels">
               <div className="project-v2-card">
@@ -2471,6 +2528,8 @@ export function ProjectDetailV2Page() {
             phases={phases}
             milestones={milestones}
             tasks={tasks}
+            assigneeByTaskId={assigneeByTaskId}
+            onTaskClick={(id) => taskModal.openTaskDetailById(id)}
           />
         )}
       </section>

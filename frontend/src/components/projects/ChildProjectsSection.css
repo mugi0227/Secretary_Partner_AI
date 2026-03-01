@@ -90,6 +90,18 @@
   gap: 10px;
   font-size: 0.8125rem;
   color: var(--text-muted);
+  flex-wrap: wrap;
+}
+
+.child-project-owner {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--bg-main, rgba(0, 0, 0, 0.04));
+  padding: 1px 7px;
+  border-radius: 10px;
 }
 
 .child-project-task-summary {

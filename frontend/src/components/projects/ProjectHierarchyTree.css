@@ -43,7 +43,7 @@
   position: relative;
 }
 
-/* SVG connector lines */
+/* SVG connector lines — visible on both light & dark */
 .hierarchy-tree-svg {
   position: absolute;
   top: 0;
@@ -52,8 +52,9 @@
 }
 
 .hierarchy-tree-svg line {
-  stroke: var(--border-color);
-  stroke-width: 2;
+  stroke: var(--text-muted, #94a3b8);
+  stroke-width: 1.5;
+  opacity: 0.5;
 }
 
 /* ============================
@@ -77,6 +78,7 @@
   transition: box-shadow 0.15s;
   overflow: hidden;
   box-sizing: border-box;
+  position: relative;
 }
 
 .tree-node:hover {
@@ -150,6 +152,142 @@
   color: var(--text-muted);
   min-width: 26px;
   text-align: right;
+}
+
+/* ============================
+   Meta Row (due date + assignee)
+   ============================ */
+
+.tree-node-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+  overflow: hidden;
+}
+
+.tree-node-meta-icon {
+  font-size: 0.5625rem;
+  flex-shrink: 0;
+}
+
+.tree-node-due {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.tree-node-assignee {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ============================
+   Subtask Toggle Button
+   ============================ */
+
+.tree-node-subtask-toggle {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  border: none;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--text-muted);
+  font-size: 0.5625rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 5px;
+  transition: background 0.15s;
+  z-index: 1;
+}
+
+.tree-node-subtask-toggle:hover {
+  background: rgba(14, 165, 233, 0.15);
+  color: var(--primary, #0ea5e9);
+}
+
+.tree-node-subtask-count {
+  font-size: 0.5625rem;
+  font-weight: 600;
+}
+
+/* ============================
+   Subtask Popover
+   ============================ */
+
+.subtask-popover {
+  background: var(--bg-card, #fff);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  padding: 8px;
+  min-width: 180px;
+  max-width: 260px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.subtask-popover-header {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  padding: 4px 8px;
+  margin-bottom: 4px;
+}
+
+.subtask-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--text-main);
+  transition: background 0.15s;
+}
+
+.subtask-popover-item:hover {
+  background: rgba(14, 165, 233, 0.08);
+}
+
+.subtask-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-muted);
+}
+
+.subtask-dot.status-active,
+.subtask-dot.status-in_progress {
+  background: var(--primary, #0ea5e9);
+}
+
+.subtask-dot.status-done,
+.subtask-dot.status-completed {
+  background: var(--accent-green, #22c55e);
+}
+
+.subtask-dot.status-waiting {
+  background: var(--warning, #f59e0b);
+}
+
+.subtask-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ============================

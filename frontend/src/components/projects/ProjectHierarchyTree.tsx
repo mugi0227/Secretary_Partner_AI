@@ -1,6 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { FaCalendarAlt, FaUser, FaChevronDown, FaChevronRight } from 'react-icons/fa';
 import { projectsApi } from '../../api/projects';
 import type { ProjectWithTaskCount, PhaseWithTaskCount, Milestone, Task } from '../../api/types';
 import './ProjectHierarchyTree.css';
@@ -17,6 +19,9 @@ interface TreeNode {
   progress?: number;
   linkTo?: string;
   children: TreeNode[];
+  dueDate?: string;
+  assigneeLabel?: string;
+  subtaskCount?: number;
 }
 
 /* ============================
@@ -28,6 +33,8 @@ interface ProjectHierarchyTreeProps {
   phases: PhaseWithTaskCount[];
   milestones: Milestone[];
   tasks: Task[];
+  assigneeByTaskId?: Record<string, string>;
+  onTaskClick?: (taskId: string) => void;
 }
 
 /* ============================
@@ -45,6 +52,21 @@ function statusClass(status: string): string {
 }
 
 /* ============================
+   Helpers
+   ============================ */
+
+function formatShortDate(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getMonth() + 1}/${d.getDate()}`;
+}
+
+function truncateAssignee(label: string): string {
+  const parts = label.split(',').map((s) => s.trim());
+  if (parts.length <= 1) return label.length > 8 ? label.slice(0, 7) + '…' : label;
+  return `${parts[0].length > 6 ? parts[0].slice(0, 5) + '…' : parts[0]} +${parts.length - 1}`;
+}
+
+/* ============================
    Build tree from flat data
    ============================ */
 
@@ -54,12 +76,21 @@ function buildTree(
   milestones: Milestone[],
   tasks: Task[],
   childProjects: ProjectWithTaskCount[],
+  assigneeByTaskId?: Record<string, string>,
 ): TreeNode {
   const milestonesByPhase = new Map<string, Milestone[]>();
   milestones.forEach((ms) => {
     const list = milestonesByPhase.get(ms.phase_id) || [];
     list.push(ms);
     milestonesByPhase.set(ms.phase_id, list);
+  });
+
+  // Count subtasks per parent
+  const subtaskCounts = new Map<string, number>();
+  tasks.forEach((t) => {
+    if (t.parent_id) {
+      subtaskCounts.set(t.parent_id, (subtaskCounts.get(t.parent_id) || 0) + 1);
+    }
   });
 
   const parentTasks = tasks.filter((t) => !t.parent_id);
@@ -81,6 +112,17 @@ function buildTree(
     }
   });
 
+  const makeTaskNode = (t: Task): TreeNode => ({
+    id: t.id,
+    type: 'task',
+    label: t.title,
+    status: t.status,
+    dueDate: t.due_date,
+    assigneeLabel: assigneeByTaskId?.[t.id],
+    subtaskCount: subtaskCounts.get(t.id) || 0,
+    children: [],
+  });
+
   const buildMilestoneNode = (ms: Milestone): TreeNode => {
     const msTasks = tasksByMilestone.get(ms.id) || [];
     return {
@@ -91,13 +133,7 @@ function buildTree(
       progress: ms.task_count && ms.task_count > 0
         ? Math.round(((ms.completed_task_count || 0) / ms.task_count) * 100)
         : undefined,
-      children: msTasks.map((t) => ({
-        id: t.id,
-        type: 'task' as const,
-        label: t.title,
-        status: t.status,
-        children: [],
-      })),
+      children: msTasks.map(makeTaskNode),
     };
   };
 
@@ -108,13 +144,7 @@ function buildTree(
 
     const children: TreeNode[] = [
       ...phaseMilestones.map(buildMilestoneNode),
-      ...phaseDirectTasks.map((t) => ({
-        id: t.id,
-        type: 'task' as const,
-        label: t.title,
-        status: t.status,
-        children: [] as TreeNode[],
-      })),
+      ...phaseDirectTasks.map(makeTaskNode),
     ];
 
     const progress = phase.total_tasks > 0
@@ -146,15 +176,9 @@ function buildTree(
   const sortedPhases = [...phases].sort((a, b) => a.order_in_project - b.order_in_project);
 
   const rootChildren: TreeNode[] = [
-    ...sortedPhases.map(buildPhaseNode),
     ...childProjects.sort((a, b) => a.name.localeCompare(b.name)).map(buildChildProjectNode),
-    ...orphanTasks.map((t) => ({
-      id: t.id,
-      type: 'task' as const,
-      label: t.title,
-      status: t.status,
-      children: [] as TreeNode[],
-    })),
+    ...sortedPhases.map(buildPhaseNode),
+    ...orphanTasks.map(makeTaskNode),
   ];
 
   const totalTasks = project.aggregated_total_tasks || project.total_tasks;
@@ -175,12 +199,17 @@ function buildTree(
    ============================ */
 
 const NODE_W = 180;
-const NODE_H = 68;
+const NODE_H_DEFAULT = 68;
+const NODE_H_TASK = 90;
 const ROW_GAP = 10;
 const COL_GAP = 60;
 
+function nodeHeight(type: string): number {
+  return type === 'task' ? NODE_H_TASK : NODE_H_DEFAULT;
+}
+
 /* ============================
-   Column Detection
+   Column Detection (5 columns)
    ============================ */
 
 interface ColumnDef {
@@ -197,13 +226,12 @@ function detectColumns(root: TreeNode): ColumnDef[] {
 
   const cols: ColumnDef[] = [{ key: 'project', label: 'プロジェクト' }];
 
-  if (types.has('phase') || types.has('child-project')) {
-    const hasPhase = types.has('phase');
-    const hasChild = types.has('child-project');
-    let label = 'フェーズ';
-    if (hasChild && !hasPhase) label = 'サブプロジェクト';
-    else if (hasChild && hasPhase) label = 'フェーズ / サブPJ';
-    cols.push({ key: 'phase', label });
+  if (types.has('child-project')) {
+    cols.push({ key: 'child-project', label: 'サブプロジェクト' });
+  }
+
+  if (types.has('phase')) {
+    cols.push({ key: 'phase', label: 'フェーズ' });
   }
 
   if (types.has('milestone')) {
@@ -218,8 +246,7 @@ function detectColumns(root: TreeNode): ColumnDef[] {
 }
 
 function columnX(type: string, cols: ColumnDef[]): number {
-  const key = type === 'child-project' ? 'phase' : type;
-  const idx = cols.findIndex((c) => c.key === key);
+  const idx = cols.findIndex((c) => c.key === type);
   return (idx < 0 ? 0 : idx) * (NODE_W + COL_GAP);
 }
 
@@ -232,6 +259,7 @@ interface LayoutItem {
   x: number;
   y: number;
   centerY: number;
+  h: number;
 }
 
 interface Seg {
@@ -240,7 +268,8 @@ interface Seg {
 }
 
 function subtreeH(n: TreeNode): number {
-  if (n.children.length === 0) return NODE_H;
+  const h = nodeHeight(n.type);
+  if (n.children.length === 0) return h;
   return n.children.reduce((s, c) => s + subtreeH(c), 0)
     + (n.children.length - 1) * ROW_GAP;
 }
@@ -252,9 +281,10 @@ function computeLayout(root: TreeNode, cols: ColumnDef[]) {
   function lay(node: TreeNode, yStart: number): void {
     const x = columnX(node.type, cols);
     const h = subtreeH(node);
+    const nh = nodeHeight(node.type);
     const cy = yStart + h / 2;
 
-    items.push({ node, x, y: cy - NODE_H / 2, centerY: cy });
+    items.push({ node, x, y: cy - nh / 2, centerY: cy, h: nh });
 
     if (node.children.length === 0) return;
 
@@ -310,6 +340,63 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 /* ============================
+   Subtask Popover
+   ============================ */
+
+function SubtaskPopover({
+  parentId,
+  subtasks,
+  position,
+  onClose,
+  onTaskClick,
+}: {
+  parentId: string;
+  subtasks: Task[];
+  position: { top: number; left: number };
+  onClose: () => void;
+  onTaskClick?: (taskId: string) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onClose();
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [onClose]);
+
+  const sorted = [...subtasks].sort(
+    (a, b) => (a.order_in_parent ?? 0) - (b.order_in_parent ?? 0),
+  );
+
+  return createPortal(
+    <div
+      ref={ref}
+      className="subtask-popover"
+      style={{ position: 'fixed', top: position.top, left: position.left, zIndex: 9999 }}
+    >
+      <div className="subtask-popover-header">
+        サブタスク ({sorted.length})
+      </div>
+      {sorted.map((st) => (
+        <div
+          key={st.id}
+          className="subtask-popover-item"
+          onClick={() => onTaskClick?.(st.id)}
+        >
+          <span className={`subtask-dot ${statusClass(st.status)}`} />
+          <span className="subtask-label">{st.title}</span>
+        </div>
+      ))}
+    </div>,
+    document.body,
+  );
+}
+
+/* ============================
    Main Component
    ============================ */
 
@@ -318,8 +405,12 @@ export function ProjectHierarchyTree({
   phases,
   milestones,
   tasks,
+  assigneeByTaskId,
+  onTaskClick,
 }: ProjectHierarchyTreeProps) {
   const navigate = useNavigate();
+  const [expandedSubtaskId, setExpandedSubtaskId] = useState<string | null>(null);
+  const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null);
 
   const { data: childProjects } = useQuery({
     queryKey: ['project-children', project.id],
@@ -327,8 +418,8 @@ export function ProjectHierarchyTree({
   });
 
   const tree = useMemo(
-    () => buildTree(project, phases, milestones, tasks, childProjects || []),
-    [project, phases, milestones, tasks, childProjects],
+    () => buildTree(project, phases, milestones, tasks, childProjects || [], assigneeByTaskId),
+    [project, phases, milestones, tasks, childProjects, assigneeByTaskId],
   );
 
   const cols = useMemo(() => detectColumns(tree), [tree]);
@@ -337,6 +428,35 @@ export function ProjectHierarchyTree({
     () => computeLayout(tree, cols),
     [tree, cols],
   );
+
+  const subtasksByParentId = useMemo(() => {
+    const map = new Map<string, Task[]>();
+    tasks.forEach((t) => {
+      if (t.parent_id) {
+        const list = map.get(t.parent_id) || [];
+        list.push(t);
+        map.set(t.parent_id, list);
+      }
+    });
+    return map;
+  }, [tasks]);
+
+  const handleSubtaskToggle = useCallback((taskId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (expandedSubtaskId === taskId) {
+      setExpandedSubtaskId(null);
+      setPopoverPos(null);
+      return;
+    }
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setPopoverPos({ top: rect.bottom + 4, left: rect.left });
+    setExpandedSubtaskId(taskId);
+  }, [expandedSubtaskId]);
+
+  const closePopover = useCallback(() => {
+    setExpandedSubtaskId(null);
+    setPopoverPos(null);
+  }, []);
 
   if (tree.children.length === 0) {
     return (
@@ -386,7 +506,12 @@ export function ProjectHierarchyTree({
 
           {/* Node cards */}
           {items.map((item) => {
-            const isClickable = !!item.node.linkTo;
+            const hasLink = !!item.node.linkTo;
+            const isTaskOrMs = item.node.type === 'task' || item.node.type === 'milestone';
+            const isClickable = hasLink || (isTaskOrMs && !!onTaskClick);
+            const isTask = item.node.type === 'task';
+            const hasSubtasks = (item.node.subtaskCount ?? 0) > 0;
+
             return (
               <div
                 key={item.node.id}
@@ -396,9 +521,19 @@ export function ProjectHierarchyTree({
                   left: item.x,
                   top: item.y,
                   width: NODE_W,
-                  height: NODE_H,
+                  height: item.h,
                 }}
-                onClick={isClickable ? () => navigate(item.node.linkTo!) : undefined}
+                onClick={
+                  isClickable
+                    ? () => {
+                        if (hasLink) {
+                          navigate(item.node.linkTo!);
+                        } else if (onTaskClick) {
+                          onTaskClick(item.node.id);
+                        }
+                      }
+                    : undefined
+                }
                 title={item.node.label}
               >
                 <span className="tree-node-type">{TYPE_LABELS[item.node.type]}</span>
@@ -414,11 +549,52 @@ export function ProjectHierarchyTree({
                     <span className="tree-node-progress-text">{item.node.progress}%</span>
                   </div>
                 )}
+                {/* Due date & assignee row (tasks only) */}
+                {isTask && (item.node.dueDate || item.node.assigneeLabel) && (
+                  <div className="tree-node-meta">
+                    {item.node.dueDate && (
+                      <span className="tree-node-due" title={item.node.dueDate}>
+                        <FaCalendarAlt className="tree-node-meta-icon" />
+                        {formatShortDate(item.node.dueDate)}
+                      </span>
+                    )}
+                    {item.node.assigneeLabel && (
+                      <span className="tree-node-assignee" title={item.node.assigneeLabel}>
+                        <FaUser className="tree-node-meta-icon" />
+                        {truncateAssignee(item.node.assigneeLabel)}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {/* Subtask expand toggle */}
+                {isTask && hasSubtasks && (
+                  <button
+                    className="tree-node-subtask-toggle"
+                    onClick={(e) => handleSubtaskToggle(item.node.id, e)}
+                    title={`サブタスク (${item.node.subtaskCount})`}
+                  >
+                    {expandedSubtaskId === item.node.id
+                      ? <FaChevronDown />
+                      : <FaChevronRight />}
+                    <span className="tree-node-subtask-count">{item.node.subtaskCount}</span>
+                  </button>
+                )}
               </div>
             );
           })}
         </div>
       </div>
+
+      {/* Subtask popover */}
+      {expandedSubtaskId && popoverPos && subtasksByParentId.has(expandedSubtaskId) && (
+        <SubtaskPopover
+          parentId={expandedSubtaskId}
+          subtasks={subtasksByParentId.get(expandedSubtaskId)!}
+          position={popoverPos}
+          onClose={closePopover}
+          onTaskClick={onTaskClick}
+        />
+      )}
     </div>
   );
 }

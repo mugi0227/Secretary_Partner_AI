@@ -506,6 +506,7 @@
 }
 
 .project-v2-task-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -513,6 +514,7 @@
   background: var(--bg-main);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
+  overflow: hidden;
 }
 
 .project-v2-task-item:hover {
@@ -1019,6 +1021,7 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
+  align-items: start;
 }
 
 .project-v2-team-card {
@@ -1038,7 +1041,6 @@
 
 .project-v2-team-card.expanded {
   border-color: var(--primary);
-  grid-column: 1 / -1;
 }
 
 .project-v2-team-card-toggle {
@@ -1063,6 +1065,49 @@
 .project-v2-member-tasks {
   border-top: 1px solid var(--border-color);
   padding-top: 12px;
+}
+
+.project-v2-task-group-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.03em;
+  padding: 8px 0 4px;
+  border-top: 1px solid var(--border-color);
+  margin-top: 4px;
+}
+
+.project-v2-task-group-label:first-child {
+  border-top: none;
+  margin-top: 0;
+}
+
+.project-v2-child-task-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  font-size: 0.8125rem;
+  color: var(--text-main);
+  border-radius: var(--radius-sm);
+}
+
+.project-v2-child-task-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-v2-child-task-dot {
+  font-size: 0.4rem;
+  flex-shrink: 0;
+}
+
+.project-v2-child-task-row.done .project-v2-child-task-title {
+  text-decoration: line-through;
+  opacity: 0.5;
 }
 
 .project-v2-member-task-status {
