@@ -1,8 +1,11 @@
 import { useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueries } from '@tanstack/react-query';
 import { FaCalendarAlt, FaUser, FaChevronDown, FaChevronRight } from 'react-icons/fa';
+import { phasesApi } from '../../api/phases';
+import { milestonesApi } from '../../api/milestones';
+import { tasksApi } from '../../api/tasks';
 import { projectsApi } from '../../api/projects';
 import type { ProjectWithTaskCount, PhaseWithTaskCount, Milestone, Task } from '../../api/types';
 import './ProjectHierarchyTree.css';
@@ -67,33 +70,41 @@ function truncateAssignee(label: string): string {
 }
 
 /* ============================
-   Build tree from flat data
+   Child Project Data
    ============================ */
 
-function buildTree(
-  project: ProjectWithTaskCount,
-  phases: PhaseWithTaskCount[],
-  milestones: Milestone[],
-  tasks: Task[],
-  childProjects: ProjectWithTaskCount[],
+interface ChildProjectData {
+  phases: PhaseWithTaskCount[];
+  milestones: Milestone[];
+  tasks: Task[];
+}
+
+/* ============================
+   Build subtree from flat data
+   (shared between parent & child projects)
+   ============================ */
+
+function buildSubtreeChildren(
+  projectPhases: PhaseWithTaskCount[],
+  projectMilestones: Milestone[],
+  projectTasks: Task[],
   assigneeByTaskId?: Record<string, string>,
-): TreeNode {
+): TreeNode[] {
   const milestonesByPhase = new Map<string, Milestone[]>();
-  milestones.forEach((ms) => {
+  projectMilestones.forEach((ms) => {
     const list = milestonesByPhase.get(ms.phase_id) || [];
     list.push(ms);
     milestonesByPhase.set(ms.phase_id, list);
   });
 
-  // Count subtasks per parent
   const subtaskCounts = new Map<string, number>();
-  tasks.forEach((t) => {
+  projectTasks.forEach((t) => {
     if (t.parent_id) {
       subtaskCounts.set(t.parent_id, (subtaskCounts.get(t.parent_id) || 0) + 1);
     }
   });
 
-  const parentTasks = tasks.filter((t) => !t.parent_id);
+  const parentTasks = projectTasks.filter((t) => !t.parent_id);
   const tasksByPhase = new Map<string, Task[]>();
   const tasksByMilestone = new Map<string, Task[]>();
   const orphanTasks: Task[] = [];
@@ -142,43 +153,66 @@ function buildTree(
       .sort((a, b) => a.order_in_phase - b.order_in_phase);
     const phaseDirectTasks = tasksByPhase.get(phase.id) || [];
 
-    const children: TreeNode[] = [
-      ...phaseMilestones.map(buildMilestoneNode),
-      ...phaseDirectTasks.map(makeTaskNode),
-    ];
-
-    const progress = phase.total_tasks > 0
-      ? Math.round((phase.completed_tasks / phase.total_tasks) * 100)
-      : undefined;
-
     return {
       id: phase.id,
       type: 'phase',
       label: phase.name,
       status: phase.status,
-      progress,
+      progress: phase.total_tasks > 0
+        ? Math.round((phase.completed_tasks / phase.total_tasks) * 100)
+        : undefined,
+      children: [
+        ...phaseMilestones.map(buildMilestoneNode),
+        ...phaseDirectTasks.map(makeTaskNode),
+      ],
+    };
+  };
+
+  const sortedPhases = [...projectPhases].sort((a, b) => a.order_in_project - b.order_in_project);
+
+  return [
+    ...sortedPhases.map(buildPhaseNode),
+    ...orphanTasks.map(makeTaskNode),
+  ];
+}
+
+/* ============================
+   Build full tree
+   ============================ */
+
+function buildTree(
+  project: ProjectWithTaskCount,
+  phases: PhaseWithTaskCount[],
+  milestones: Milestone[],
+  tasks: Task[],
+  childProjects: ProjectWithTaskCount[],
+  childDataMap: Map<string, ChildProjectData>,
+  assigneeByTaskId?: Record<string, string>,
+): TreeNode {
+  const buildChildProjectNode = (cp: ProjectWithTaskCount): TreeNode => {
+    const childData = childDataMap.get(cp.id);
+    const children = childData
+      ? buildSubtreeChildren(childData.phases, childData.milestones, childData.tasks, assigneeByTaskId)
+      : [];
+
+    return {
+      id: cp.id,
+      type: 'child-project',
+      label: cp.name,
+      status: cp.status,
+      progress: cp.aggregated_total_tasks > 0
+        ? Math.round((cp.aggregated_completed_tasks / cp.aggregated_total_tasks) * 100)
+        : undefined,
+      linkTo: `/projects/${cp.id}/v2?tab=tree`,
       children,
     };
   };
 
-  const buildChildProjectNode = (cp: ProjectWithTaskCount): TreeNode => ({
-    id: cp.id,
-    type: 'child-project',
-    label: cp.name,
-    status: cp.status,
-    progress: cp.aggregated_total_tasks > 0
-      ? Math.round((cp.aggregated_completed_tasks / cp.aggregated_total_tasks) * 100)
-      : undefined,
-    linkTo: `/projects/${cp.id}/v2?tab=tree`,
-    children: [],
-  });
-
-  const sortedPhases = [...phases].sort((a, b) => a.order_in_project - b.order_in_project);
+  const parentChildren = buildSubtreeChildren(phases, milestones, tasks, assigneeByTaskId);
 
   const rootChildren: TreeNode[] = [
     ...childProjects.sort((a, b) => a.name.localeCompare(b.name)).map(buildChildProjectNode),
-    ...sortedPhases.map(buildPhaseNode),
-    ...orphanTasks.map(makeTaskNode),
+    ...parentChildren,
   ];
 
   const totalTasks = project.aggregated_total_tasks || project.total_tasks;
@@ -344,13 +378,11 @@ const TYPE_LABELS: Record<string, string> = {
    ============================ */
 
 function SubtaskPopover({
-  parentId,
   subtasks,
   position,
   onClose,
   onTaskClick,
 }: {
-  parentId: string;
   subtasks: Task[];
   position: { top: number; left: number };
   onClose: () => void;
@@ -412,14 +444,59 @@ export function ProjectHierarchyTree({
   const [expandedSubtaskId, setExpandedSubtaskId] = useState<string | null>(null);
   const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null);
 
+  /* --- Fetch child projects --- */
   const { data: childProjects } = useQuery({
     queryKey: ['project-children', project.id],
     queryFn: () => projectsApi.getChildren(project.id),
   });
 
+  const childIds = useMemo(
+    () => (childProjects || []).map((cp) => cp.id),
+    [childProjects],
+  );
+
+  /* --- Fetch phases/milestones/tasks for each child project --- */
+  const childPhaseQueries = useQueries({
+    queries: childIds.map((id) => ({
+      queryKey: ['child-project-phases', id],
+      queryFn: () => phasesApi.listByProject(id),
+      staleTime: 60_000,
+    })),
+  });
+
+  const childMilestoneQueries = useQueries({
+    queries: childIds.map((id) => ({
+      queryKey: ['child-project-milestones', id],
+      queryFn: () => milestonesApi.listByProject(id),
+      staleTime: 60_000,
+    })),
+  });
+
+  const childTaskQueries = useQueries({
+    queries: childIds.map((id) => ({
+      queryKey: ['child-project-tasks', id],
+      queryFn: () => tasksApi.getAll({ projectId: id, includeDone: true }),
+      staleTime: 60_000,
+    })),
+  });
+
+  /* --- Build child data map --- */
+  const childDataMap = useMemo(() => {
+    const map = new Map<string, ChildProjectData>();
+    childIds.forEach((id, i) => {
+      map.set(id, {
+        phases: childPhaseQueries[i]?.data || [],
+        milestones: childMilestoneQueries[i]?.data || [],
+        tasks: childTaskQueries[i]?.data || [],
+      });
+    });
+    return map;
+  }, [childIds, childPhaseQueries, childMilestoneQueries, childTaskQueries]);
+
+  /* --- Build tree --- */
   const tree = useMemo(
-    () => buildTree(project, phases, milestones, tasks, childProjects || [], assigneeByTaskId),
-    [project, phases, milestones, tasks, childProjects, assigneeByTaskId],
+    () => buildTree(project, phases, milestones, tasks, childProjects || [], childDataMap, assigneeByTaskId),
+    [project, phases, milestones, tasks, childProjects, childDataMap, assigneeByTaskId],
   );
 
   const cols = useMemo(() => detectColumns(tree), [tree]);
@@ -429,9 +506,18 @@ export function ProjectHierarchyTree({
     [tree, cols],
   );
 
+  /* --- Subtask lookup (parent + all child project tasks) --- */
+  const allTasks = useMemo(() => {
+    const combined = [...tasks];
+    childDataMap.forEach((data) => {
+      combined.push(...data.tasks);
+    });
+    return combined;
+  }, [tasks, childDataMap]);
+
   const subtasksByParentId = useMemo(() => {
     const map = new Map<string, Task[]>();
-    tasks.forEach((t) => {
+    allTasks.forEach((t) => {
       if (t.parent_id) {
         const list = map.get(t.parent_id) || [];
         list.push(t);
@@ -439,7 +525,7 @@ export function ProjectHierarchyTree({
       }
     });
     return map;
-  }, [tasks]);
+  }, [allTasks]);
 
   const handleSubtaskToggle = useCallback((taskId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -588,7 +674,6 @@ export function ProjectHierarchyTree({
       {/* Subtask popover */}
       {expandedSubtaskId && popoverPos && subtasksByParentId.has(expandedSubtaskId) && (
         <SubtaskPopover
-          parentId={expandedSubtaskId}
           subtasks={subtasksByParentId.get(expandedSubtaskId)!}
           position={popoverPos}
           onClose={closePopover}
