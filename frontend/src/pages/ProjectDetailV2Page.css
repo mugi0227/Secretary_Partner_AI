@@ -537,11 +537,15 @@
 
 .project-v2-task-content {
   flex: 1;
+  min-width: 0;
 }
 
 .project-v2-task-title {
   font-size: 13px;
   margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .project-v2-task-meta {
@@ -1033,6 +1037,8 @@
   gap: 12px;
   box-shadow: var(--shadow-sm);
   transition: border-color 0.2s;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .project-v2-team-card:hover {
@@ -1047,6 +1053,7 @@
   cursor: pointer;
   display: grid;
   gap: 12px;
+  min-width: 0;
 }
 
 .project-v2-team-chevron {
@@ -1065,6 +1072,8 @@
 .project-v2-member-tasks {
   border-top: 1px solid var(--border-color);
   padding-top: 12px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* Group label for "このプロジェクト" / child project name */
@@ -1151,6 +1160,8 @@
   margin-left: 36px;
   border-left: 2px solid var(--border-color, #e5e7eb);
   padding-left: 8px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .project-v2-child-task-toggle {
@@ -1208,6 +1219,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 
 .project-v2-team-avatar {

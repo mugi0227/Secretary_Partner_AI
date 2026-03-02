@@ -9,6 +9,7 @@ from typing import Optional
 from uuid import UUID, uuid4
 
 from sqlalchemy import and_, func, or_, select, text
+from sqlalchemy.orm import aliased
 
 from app.core.exceptions import NotFoundError
 from app.infrastructure.local.database import (
@@ -152,17 +153,32 @@ class SqliteProjectRepository(IProjectRepository):
     ) -> list[Project]:
         """List projects with optional filters (includes projects where user is owner or member)."""
         async with self._session_factory() as session:
-            # Select projects where user is owner OR member
+            # Aliases for joining parent project and its members
+            ParentProject = aliased(ProjectORM)
+            ParentMember = aliased(ProjectMemberORM)
+
+            # Select projects where user is owner, member,
+            # OR child of a project the user owns/is a member of
             query = (
                 select(ProjectORM)
                 .outerjoin(
                     ProjectMemberORM,
                     ProjectORM.id == ProjectMemberORM.project_id
                 )
+                .outerjoin(
+                    ParentProject,
+                    ProjectORM.parent_project_id == ParentProject.id
+                )
+                .outerjoin(
+                    ParentMember,
+                    ParentProject.id == ParentMember.project_id
+                )
                 .where(
                     or_(
                         ProjectORM.user_id == user_id,
                         ProjectMemberORM.member_user_id == user_id,
+                        ParentProject.user_id == user_id,
+                        ParentMember.member_user_id == user_id,
                     )
                 )
                 .distinct()
