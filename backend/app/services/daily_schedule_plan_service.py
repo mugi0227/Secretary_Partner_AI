@@ -37,7 +37,7 @@ from app.models.schedule_plan import (
     default_weekly_work_hours,
 )
 from app.models.task import Task, TaskUpdate
-from app.services.scheduler_service import SchedulerService
+from app.services.scheduler_service import SchedulerService, _pinned_local_date
 from app.utils.datetime_utils import get_user_today, normalize_timezone, now_utc
 
 DEFAULT_PLAN_DAYS = 30
@@ -341,7 +341,7 @@ def _build_time_blocks(
                     end=end_dt,
                     kind="meeting",
                     status=task.status.value if hasattr(task.status, "value") else str(task.status),
-                    pinned_date=task.pinned_date.date() if task.pinned_date else None,
+                    pinned_date=_pinned_local_date(task.pinned_date, tz) if task.pinned_date else None,
                 )
             )
         meeting_blocks_by_day[day.date] = blocks
@@ -410,7 +410,7 @@ def _build_time_blocks(
                     continue
                 remaining = min(allocation.minutes, remaining_limit)
                 task = task_map.get(allocation.task_id)
-                pinned_date = task.pinned_date.date() if task and task.pinned_date else None
+                pinned_date = _pinned_local_date(task.pinned_date, tz) if task and task.pinned_date else None
                 status_value = None
                 if task:
                     status_value = (
@@ -468,7 +468,7 @@ def _build_time_blocks(
             ghost_slots = _clone_intervals(available_base)
             for allocation in done_ghost_queue:
                 task = task_map.get(allocation.task_id)
-                pinned_date = task.pinned_date.date() if task and task.pinned_date else None
+                pinned_date = _pinned_local_date(task.pinned_date, tz) if task and task.pinned_date else None
                 status_value = None
                 if task:
                     status_value = (
@@ -614,12 +614,13 @@ class DailySchedulePlanService:
             return True
 
         today = get_user_today(timezone)
+        _tz = ZoneInfo(normalize_timezone(timezone))
         return [
             task
             for task in tasks
             if task.is_fixed_time
             or is_my_task(task)
-            or (task.pinned_date and task.pinned_date.date() >= today)
+            or (task.pinned_date and _pinned_local_date(task.pinned_date, _tz) >= today)
         ]
 
     async def _load_settings(self, user_id: str) -> ScheduleSettings:

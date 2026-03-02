@@ -34,6 +34,18 @@ from app.utils.datetime_utils import normalize_timezone
 
 logger = setup_logger(__name__)
 
+_UTC = ZoneInfo("UTC")
+
+
+def _pinned_local_date(pinned_date: datetime, tz: ZoneInfo) -> date:
+    """Extract the local date from a UTC pinned_date.
+
+    Naive datetimes are assumed UTC (backend convention).
+    """
+    if pinned_date.tzinfo is None:
+        pinned_date = pinned_date.replace(tzinfo=_UTC)
+    return pinned_date.astimezone(tz).date()
+
 
 class SchedulerService:
     """
@@ -355,7 +367,8 @@ class SchedulerService:
         - Supports multi-user capacity if members and assignments are provided.
         """
         user_timezone = normalize_timezone(user_timezone)
-        local_today = datetime.now(ZoneInfo(user_timezone)).date()
+        tz = ZoneInfo(user_timezone)
+        local_today = datetime.now(tz).date()
         if not tasks:
             start = start_date or local_today
             return ScheduleResponse(
@@ -422,6 +435,7 @@ class SchedulerService:
             tasks,
             planned_window_by_task=planned_window_by_task,
             reference_today=local_today,
+            user_timezone=user_timezone,
         )
         effective_due_date_by_task: dict[UUID, date] = {
             task_id: due.date() for task_id, due in effective_due_by_task.items()
@@ -517,7 +531,7 @@ class SchedulerService:
             candidate_tasks = [
                 t for t in candidate_tasks
                 if is_my_task(t)
-                or (t.pinned_date and t.pinned_date.date() >= local_today)
+                or (t.pinned_date and _pinned_local_date(t.pinned_date, tz) >= local_today)
             ]
 
         candidate_ids = {task.id for task in candidate_tasks}
@@ -557,7 +571,7 @@ class SchedulerService:
                     planned_end=None,
                     total_minutes=get_effective_estimated_minutes(task, tasks) or self.default_task_minutes,
                     priority_score=self._calculate_task_score(task, project_priorities, start),
-                    pinned_date=task.pinned_date.date() if task.pinned_date else None,
+                    pinned_date=_pinned_local_date(task.pinned_date, tz) if task.pinned_date else None,
                 )
                 for task in candidate_tasks
             ]
@@ -706,7 +720,7 @@ class SchedulerService:
                 tid for tid in list(ready) + list(in_progress)
                 if tid in remaining_task_ids
                 and task_map[tid].pinned_date
-                and task_map[tid].pinned_date.date() == day_cursor
+                and _pinned_local_date(task_map[tid].pinned_date, tz) == day_cursor
                 and remaining_minutes.get(tid, 0) > 0
             ]
             pinned_allocated_minutes = 0
@@ -992,7 +1006,7 @@ class SchedulerService:
                         task_start.get(task.id, start),
                     ),
                     status=task.status.value if hasattr(task.status, 'value') else str(task.status),
-                    pinned_date=task.pinned_date.date() if task.pinned_date else None,
+                    pinned_date=_pinned_local_date(task.pinned_date, tz) if task.pinned_date else None,
                     is_fixed_time=task.is_fixed_time,
                     start_time=task.start_time if task.is_fixed_time else None,
                     end_time=task.end_time if task.is_fixed_time else None,
@@ -1038,7 +1052,7 @@ class SchedulerService:
                     total_minutes=task_mins,
                     priority_score=0.0,
                     status="done",
-                    pinned_date=task.pinned_date.date() if task.pinned_date else None,
+                    pinned_date=_pinned_local_date(task.pinned_date, tz) if task.pinned_date else None,
                 )
             )
 
@@ -1074,12 +1088,14 @@ class SchedulerService:
     ) -> TodayTasksResponse:
         """Extract today's tasks and top3 from schedule."""
         user_timezone = normalize_timezone(user_timezone)
-        today_date = today or datetime.now(ZoneInfo(user_timezone)).date()
+        tz = ZoneInfo(user_timezone)
+        today_date = today or datetime.now(tz).date()
         task_map = {task.id: task for task in tasks}
         project_priorities = project_priorities or {}
         _, effective_due_by_task = self._get_effective_constraints(
             tasks,
             reference_today=today_date,
+            user_timezone=user_timezone,
         )
         effective_due_date_by_task: dict[UUID, date] = {
             task_id: due.date() for task_id, due in effective_due_by_task.items()
@@ -1115,7 +1131,7 @@ class SchedulerService:
         for task in tasks:
             if (
                 task.pinned_date
-                and task.pinned_date.date() == today_date
+                and _pinned_local_date(task.pinned_date, tz) == today_date
                 and task.id not in set(today_task_ids)
                 and task.id in task_map
                 and task.status != TaskStatus.DONE
@@ -1125,7 +1141,6 @@ class SchedulerService:
 
         # Include tasks completed today so they remain visible after unlock
         today_task_id_set = set(today_task_ids)
-        tz = ZoneInfo(user_timezone)
         for task in tasks:
             if (
                 task.status == TaskStatus.DONE
@@ -1267,12 +1282,14 @@ class SchedulerService:
         tasks: list[Task],
         planned_window_by_task: Optional[dict[UUID, tuple[Optional[date], Optional[date]]]] = None,
         reference_today: Optional[date] = None,
+        user_timezone: str = "UTC",
     ) -> tuple[dict[UUID, date], dict[UUID, datetime]]:
         task_map = {task.id: task for task in tasks}
         planned_window_by_task = planned_window_by_task or {}
         effective_start_by_task: dict[UUID, date] = {}
         effective_due_by_task: dict[UUID, datetime] = {}
         today = reference_today or date.today()
+        _tz = ZoneInfo(normalize_timezone(user_timezone))
 
         def get_parent_bounds(task: Task) -> tuple[Optional[datetime], Optional[datetime]]:
             parent_start_candidates: list[datetime] = []
@@ -1302,8 +1319,12 @@ class SchedulerService:
             # Pinned date is the strongest signal — unconditionally override
             # start_not_before / parent constraints.  Past pins are ignored
             # so that "今日やる" only lasts for one day.
-            if task.pinned_date and task.pinned_date.date() >= today:
-                start_dt = task.pinned_date
+            if task.pinned_date and _pinned_local_date(task.pinned_date, _tz) >= today:
+                # Use local-date midnight so that .date() yields the user's
+                # local date, not the UTC date of the stored pinned_date.
+                start_dt = datetime.combine(
+                    _pinned_local_date(task.pinned_date, _tz), datetime.min.time(),
+                )
 
             planned_start, planned_end = planned_window_by_task.get(task.id, (None, None))
             if planned_start:

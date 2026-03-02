@@ -188,6 +188,64 @@ def test_pinned_date_uses_reference_today():
     assert effective_start[pinned_past.id] == blocked_start.date()
 
 
+def test_pinned_date_respects_user_timezone_jst():
+    """pinned_date stored in UTC must be interpreted in user's timezone.
+
+    When user_date_to_utc converts 2026-03-02 00:00 JST to 2026-03-01 15:00 UTC,
+    the scheduler should still treat this as a March 2nd pin (the user's local date).
+    """
+    from zoneinfo import ZoneInfo
+
+    service = SchedulerService()
+    reference_today = date(2026, 3, 2)
+
+    # Simulate "今日やる" in JST: midnight 3/2 JST = 15:00 3/1 UTC
+    pinned_task = make_task(
+        "Pinned today JST",
+        estimated_minutes=60,
+        start_not_before=datetime(2026, 3, 5, 0, 0, 0),  # blocked in future
+    )
+    pinned_task.pinned_date = datetime(2026, 3, 1, 15, 0, 0, tzinfo=ZoneInfo("UTC"))
+
+    effective_start, _ = service._get_effective_constraints(
+        [pinned_task],
+        reference_today=reference_today,
+        user_timezone="Asia/Tokyo",
+    )
+
+    # Pin should override start_not_before — task starts today (3/2)
+    assert effective_start[pinned_task.id] == reference_today
+
+
+def test_pinned_task_appears_in_today_schedule_jst():
+    """A task pinned via 今日やる in JST must appear in today's schedule."""
+    from zoneinfo import ZoneInfo
+
+    service = SchedulerService()
+    today = date(2026, 3, 2)
+
+    # Simulate: midnight 3/2 JST = 15:00 3/1 UTC
+    task = make_task("Do today task", estimated_minutes=30)
+    task.pinned_date = datetime(2026, 3, 1, 15, 0, 0, tzinfo=ZoneInfo("UTC"))
+
+    schedule = service.build_schedule(
+        [task],
+        capacity_hours=8,
+        start_date=today,
+        max_days=3,
+        user_timezone="Asia/Tokyo",
+    )
+
+    today_response = service.get_today_tasks(
+        schedule, [task], today=today, user_timezone="Asia/Tokyo",
+    )
+
+    today_task_ids = [t.id for t in today_response.today_tasks]
+    assert task.id in today_task_ids, (
+        "Pinned task should appear in today's schedule for JST user"
+    )
+
+
 def test_parent_start_not_before_applies_to_subtask():
     service = SchedulerService()
     start_date = date.today()
