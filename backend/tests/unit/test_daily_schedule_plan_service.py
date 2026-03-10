@@ -238,3 +238,18 @@ def test_filter_tasks_for_plan_always_includes_fixed_time_meetings() -> None:
     # Fixed-time meetings are always included regardless of assignment
     # to prevent them from being auto-scheduled like regular tasks
     assert unassigned_team_meeting.id in filtered_ids
+
+
+def test_build_meeting_intervals_treats_naive_values_as_utc() -> None:
+    task_id = uuid4()
+    task = _build_task(
+        task_id,
+        start_time=datetime(2026, 2, 8, 0, 0),
+        end_time=datetime(2026, 2, 8, 1, 0),
+    )
+
+    intervals = _build_meeting_intervals([task], date(2026, 2, 8), "Asia/Tokyo")
+
+    assert len(intervals) == 1
+    assert intervals[0].start_minutes == 9 * 60
+    assert intervals[0].end_minutes == 10 * 60

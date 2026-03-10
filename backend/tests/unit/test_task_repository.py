@@ -2,6 +2,7 @@
 Unit tests for Task repository.
 """
 
+from datetime import datetime, timezone
 
 import pytest
 
@@ -275,3 +276,34 @@ async def test_find_similar_tasks(session_factory, test_user_id):
 
     assert len(similar) >= 1
     assert similar[0].similarity_score >= 0.8
+
+
+@pytest.mark.asyncio
+async def test_datetime_fields_are_restored_as_utc_aware(session_factory, test_user_id):
+    """SQLite round-trips must preserve UTC semantics for task datetimes."""
+    repo = SqliteTaskRepository(session_factory=session_factory)
+    start_time = datetime(2026, 3, 10, 0, 0, tzinfo=timezone.utc)
+    end_time = datetime(2026, 3, 10, 1, 0, tzinfo=timezone.utc)
+
+    created = await repo.create(
+        test_user_id,
+        TaskCreate(
+            title="UTC Task",
+            created_by=CreatedBy.USER,
+            is_fixed_time=True,
+            start_time=start_time,
+            end_time=end_time,
+        ),
+    )
+    completed = await repo.update(
+        test_user_id,
+        created.id,
+        TaskUpdate(status=TaskStatus.DONE),
+    )
+
+    assert created.created_at.tzinfo == timezone.utc
+    assert created.updated_at.tzinfo == timezone.utc
+    assert created.start_time == start_time
+    assert created.end_time == end_time
+    assert completed.completed_at is not None
+    assert completed.completed_at.tzinfo == timezone.utc

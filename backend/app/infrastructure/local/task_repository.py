@@ -48,9 +48,9 @@ class SqliteTaskRepository(ITaskRepository):
             urgency=orm.urgency,
             energy_level=orm.energy_level,
             estimated_minutes=orm.estimated_minutes,
-            due_date=orm.due_date,
-            start_not_before=orm.start_not_before,
-            pinned_date=orm.pinned_date if hasattr(orm, "pinned_date") else None,
+            due_date=ensure_utc(orm.due_date),
+            start_not_before=ensure_utc(orm.start_not_before),
+            pinned_date=ensure_utc(orm.pinned_date) if hasattr(orm, "pinned_date") else None,
             parent_id=UUID(orm.parent_id) if orm.parent_id else None,
             order_in_parent=orm.order_in_parent,
             dependency_ids=[UUID(dep_id) for dep_id in (orm.dependency_ids or [])],
@@ -67,10 +67,10 @@ class SqliteTaskRepository(ITaskRepository):
             progress=orm.progress if hasattr(orm, "progress") and orm.progress is not None else 0,
             source_capture_id=UUID(orm.source_capture_id) if orm.source_capture_id else None,
             created_by=orm.created_by,
-            created_at=orm.created_at,
-            updated_at=orm.updated_at,
-            start_time=orm.start_time,
-            end_time=orm.end_time,
+            created_at=ensure_utc(orm.created_at),
+            updated_at=ensure_utc(orm.updated_at),
+            start_time=ensure_utc(orm.start_time),
+            end_time=ensure_utc(orm.end_time),
             is_fixed_time=bool(orm.is_fixed_time),
             is_all_day=(
                 bool(orm.is_all_day)
@@ -96,7 +96,7 @@ class SqliteTaskRepository(ITaskRepository):
             ),
             touchpoint_steps=orm.touchpoint_steps or [],
             completion_note=orm.completion_note if hasattr(orm, "completion_note") else None,
-            completed_at=orm.completed_at if hasattr(orm, "completed_at") else None,
+            completed_at=ensure_utc(orm.completed_at) if hasattr(orm, "completed_at") else None,
             completed_by=orm.completed_by if hasattr(orm, "completed_by") else None,
             auto_completed_by_parent_id=(
                 UUID(orm.auto_completed_by_parent_id)

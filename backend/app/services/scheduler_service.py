@@ -30,7 +30,7 @@ from app.services.task_utils import (
     get_remaining_minutes,
     is_parent_task,
 )
-from app.utils.datetime_utils import normalize_timezone
+from app.utils.datetime_utils import ensure_utc, normalize_timezone
 
 logger = setup_logger(__name__)
 
@@ -208,9 +208,10 @@ class SchedulerService:
     def _to_local_datetime(value: datetime, timezone: str) -> datetime:
         """Convert a datetime to the user's local timezone."""
         tz = ZoneInfo(normalize_timezone(timezone))
-        if value.tzinfo is None:
-            return value.replace(tzinfo=tz)
-        return value.astimezone(tz)
+        utc_value = ensure_utc(value)
+        if utc_value is None:
+            raise ValueError("datetime value is required")
+        return utc_value.astimezone(tz)
 
     def _get_meetings_for_day(
         self,

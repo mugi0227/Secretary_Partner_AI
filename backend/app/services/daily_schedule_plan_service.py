@@ -38,7 +38,7 @@ from app.models.schedule_plan import (
 )
 from app.models.task import Task, TaskUpdate
 from app.services.scheduler_service import SchedulerService, _pinned_local_date
-from app.utils.datetime_utils import get_user_today, normalize_timezone, now_utc
+from app.utils.datetime_utils import ensure_utc, get_user_today, normalize_timezone, now_utc
 
 DEFAULT_PLAN_DAYS = 30
 
@@ -135,9 +135,10 @@ def _clip_intervals_end(intervals: list[TimeInterval], end_minutes: int) -> list
 
 def _to_local_datetime(value: datetime, timezone: str) -> datetime:
     tz = ZoneInfo(normalize_timezone(timezone))
-    if value.tzinfo is None:
-        return value.replace(tzinfo=tz)
-    return value.astimezone(tz)
+    utc_value = ensure_utc(value)
+    if utc_value is None:
+        raise ValueError("datetime value is required")
+    return utc_value.astimezone(tz)
 
 
 def _build_capacity_by_weekday(settings: ScheduleSettings) -> list[float]:
@@ -778,6 +779,7 @@ class DailySchedulePlanService:
         plan_params = {
             "start_date": str(resolved_start),
             "max_days": max_days,
+            "timezone": timezone,
             "filter_by_assignee": filter_by_assignee,
             "apply_plan_constraints": apply_plan_constraints,
             "capacity_by_weekday": capacity_by_weekday,
@@ -830,7 +832,11 @@ class DailySchedulePlanService:
         timezone: str,
     ) -> tuple[list[ScheduleDay], list[ScheduleTimeBlock], list[TaskScheduleInfo]]:
         """Load saved plans for past days. Returns meeting-only data for days without plans."""
-        plans = await self._plan_repo.list_by_range(user_id, past_start, past_end)
+        plans = [
+            plan
+            for plan in await self._plan_repo.list_by_range(user_id, past_start, past_end)
+            if plan.timezone == timezone
+        ]
         plan_map = {plan.plan_date: plan for plan in plans}
 
         days: list[ScheduleDay] = []
@@ -963,7 +969,11 @@ class DailySchedulePlanService:
     ) -> SchedulePlanResponse:
         """Original get_plan_or_forecast logic for today-or-future start dates."""
         end_date = resolved_start + timedelta(days=max_days - 1)
-        plans = await self._plan_repo.list_by_range(user_id, resolved_start, end_date)
+        plans = [
+            plan
+            for plan in await self._plan_repo.list_by_range(user_id, resolved_start, end_date)
+            if plan.timezone == timezone
+        ]
         if len(plans) == max_days:
             days = [plan.schedule_day for plan in plans]
             tasks = _merge_task_infos_from_plans(plans)
@@ -999,6 +1009,7 @@ class DailySchedulePlanService:
             current_params = {
                 "start_date": str(resolved_start),
                 "max_days": max_days,
+                "timezone": timezone,
                 "filter_by_assignee": filter_by_assignee,
                 "apply_plan_constraints": apply_plan_constraints,
                 "capacity_by_weekday": capacity_by_weekday,
