@@ -14,6 +14,7 @@ from app.core.config import get_settings
 from app.interfaces.achievement_repository import IAchievementRepository
 from app.interfaces.agent_task_repository import IAgentTaskRepository
 from app.interfaces.auth_provider import IAuthProvider, User
+from app.interfaces.email_provider import IEmailProvider
 from app.interfaces.blocker_repository import IBlockerRepository
 from app.interfaces.capture_repository import ICaptureRepository
 from app.interfaces.chat_session_repository import IChatSessionRepository
@@ -413,6 +414,27 @@ def get_heartbeat_event_repository() -> IHeartbeatEventRepository:
 
 
 # ===========================================
+# Email Provider
+# ===========================================
+
+
+@lru_cache()
+def get_email_provider() -> IEmailProvider:
+    """Get email provider instance."""
+    settings = get_settings()
+    if settings.EMAIL_PROVIDER == "ses":
+        from app.infrastructure.aws.ses_email_provider import SESEmailProvider
+
+        return SESEmailProvider(
+            from_email=settings.SES_FROM_EMAIL,
+            region_name=settings.SES_REGION,
+        )
+    from app.infrastructure.local.mock_email_provider import MockEmailProvider
+
+    return MockEmailProvider()
+
+
+# ===========================================
 # Provider Dependencies
 # ===========================================
 
@@ -607,4 +629,5 @@ HeartbeatSettingsRepo = Annotated[
 HeartbeatEventRepo = Annotated[
     IHeartbeatEventRepository, Depends(get_heartbeat_event_repository)
 ]
+EmailProvider = Annotated[IEmailProvider, Depends(get_email_provider)]
 CurrentUser = Annotated[User, Depends(get_current_user)]

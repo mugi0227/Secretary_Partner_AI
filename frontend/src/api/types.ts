@@ -408,6 +408,7 @@ export interface MemberProjectTask {
   task_status: TaskStatus;
   due_date?: string;
   parent_id?: string;
+  completed_at?: string;
 }
 
 export interface MemberChildTasksSummary {

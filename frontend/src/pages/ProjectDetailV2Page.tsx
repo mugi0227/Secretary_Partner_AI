@@ -152,6 +152,14 @@ const getInitial = (value?: string) => {
 
 const VALID_TABS: TabId[] = ['dashboard', 'team', 'timeline', 'board', 'gantt', 'meetings', 'achievements', 'tree'];
 
+/** Check if a completed task is within the last 2 weeks */
+const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000;
+function isRecentlyCompleted(completedAt: string | undefined, updatedAt: string | undefined): boolean {
+  const ref = completedAt || updatedAt;
+  if (!ref) return false;
+  return Date.now() - new Date(ref).getTime() < TWO_WEEKS_MS;
+}
+
 function CollapsibleChildTaskNode({
   task,
   subtasks,
@@ -215,11 +223,20 @@ function CollapsibleChildTaskGroup({
   onTaskClick: (taskId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [oldDoneOpen, setOldDoneOpen] = useState(false);
 
-  const taskIdSet = new Set(tasks.map(t => t.task_id));
+  // Split into recent (open + done within 2 weeks) and old done
+  const recentTasks = tasks.filter(
+    t => t.task_status !== 'DONE' || isRecentlyCompleted(t.completed_at, undefined)
+  );
+  const oldDoneTasks = tasks.filter(
+    t => t.task_status === 'DONE' && !isRecentlyCompleted(t.completed_at, undefined)
+  );
+
+  const taskIdSet = new Set(recentTasks.map(t => t.task_id));
   const childrenMap = new Map<string, MemberProjectTask[]>();
   const roots: MemberProjectTask[] = [];
-  for (const ct of tasks) {
+  for (const ct of recentTasks) {
     if (ct.parent_id && taskIdSet.has(ct.parent_id)) {
       const arr = childrenMap.get(ct.parent_id) || [];
       arr.push(ct);
@@ -229,6 +246,8 @@ function CollapsibleChildTaskGroup({
     }
   }
 
+  const activeCount = recentTasks.length;
+
   return (
     <div>
       <div
@@ -237,19 +256,133 @@ function CollapsibleChildTaskGroup({
       >
         {open ? <FaChevronDown className="group-chevron" /> : <FaChevronRight className="group-chevron" />}
         {projectName}
-        <span className="group-task-count">{tasks.length}</span>
+        <span className="group-task-count">{activeCount}</span>
       </div>
-      {open && roots.map((ct) => {
-        const subs = childrenMap.get(ct.task_id) || [];
-        return (
-          <CollapsibleChildTaskNode
-            key={ct.task_id}
-            task={ct}
-            subtasks={subs}
-            onTaskClick={onTaskClick}
-          />
-        );
-      })}
+      {open && (
+        <>
+          {roots.map((ct) => {
+            const subs = childrenMap.get(ct.task_id) || [];
+            return (
+              <CollapsibleChildTaskNode
+                key={ct.task_id}
+                task={ct}
+                subtasks={subs}
+                onTaskClick={onTaskClick}
+              />
+            );
+          })}
+          {oldDoneTasks.length > 0 && (
+            <div style={{ marginLeft: 8 }}>
+              <div
+                className="project-v2-task-group-label collapsible"
+                onClick={() => setOldDoneOpen(!oldDoneOpen)}
+                style={{ fontSize: '0.8rem' }}
+              >
+                {oldDoneOpen ? <FaChevronDown className="group-chevron" /> : <FaChevronRight className="group-chevron" />}
+                過去の完了タスク
+                <span className="group-task-count">{oldDoneTasks.length}</span>
+              </div>
+              {oldDoneOpen && oldDoneTasks.map((ct) => (
+                <CollapsibleChildTaskNode
+                  key={ct.task_id}
+                  task={ct}
+                  subtasks={[]}
+                  onTaskClick={onTaskClick}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function CollapsibleOldDoneTasks({
+  tasks: doneTasks,
+  allTasks,
+  timezone,
+  onTaskClick,
+  onToggleStatus,
+}: {
+  tasks: Task[];
+  allTasks: Task[];
+  timezone: string;
+  onTaskClick: (task: Task) => void;
+  onToggleStatus: (task: Task) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const fmtDate = (value?: string) => {
+    if (!value) return '';
+    return formatDate(value, { month: 'numeric', day: 'numeric' }, timezone);
+  };
+
+  return (
+    <div>
+      <div
+        className="project-v2-task-group-label collapsible"
+        onClick={() => setOpen(!open)}
+      >
+        {open ? <FaChevronDown className="group-chevron" /> : <FaChevronRight className="group-chevron" />}
+        過去の完了タスク
+        <span className="group-task-count">{doneTasks.length}</span>
+      </div>
+      {open && (
+        <div className="project-v2-task-list">
+          {doneTasks.map((task) => {
+            const progress = task.progress ?? 100;
+            const dlStatus = getDeadlineStatus(task.due_date, task.status, timezone);
+            const est = task.estimated_minutes;
+            const timeLabel = est
+              ? est >= 60
+                ? `${Math.floor(est / 60)}h${est % 60 > 0 ? ` ${est % 60}m` : ''}`
+                : `${est}m`
+              : '';
+            const parentTask = task.parent_id
+              ? allTasks.find(t => t.id === task.parent_id)
+              : null;
+            return (
+              <div
+                key={task.id}
+                className={`project-v2-task-item done ${dlStatus ? `deadline-${dlStatus}` : ''}`}
+                onClick={() => onTaskClick(task)}
+              >
+                <div
+                  className="project-v2-task-progress-bar"
+                  style={{ width: `${progress}%` }}
+                />
+                <div
+                  className="project-v2-task-checkbox checked"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleStatus(task);
+                  }}
+                />
+                <div className="project-v2-task-content">
+                  <div className="project-v2-task-title done">
+                    {task.title}
+                  </div>
+                  {parentTask && (
+                    <div className="project-v2-task-parent">↳ {parentTask.title}</div>
+                  )}
+                  {!parentTask && task.due_date && (
+                    <div className="project-v2-muted">{fmtDate(task.due_date)}</div>
+                  )}
+                </div>
+                {timeLabel && (
+                  <div className="project-v2-task-time">{timeLabel}</div>
+                )}
+                <div
+                  className="project-v2-member-task-status"
+                  data-status={task.status}
+                >
+                  {STATUS_LABELS[task.status]}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1725,6 +1858,25 @@ export function ProjectDetailV2Page() {
 
         {activeTab === 'team' && (
           <div className="project-v2-section">
+            {members.length > 0 && (
+              <div className="project-v2-team-expand-all">
+                <button
+                  className="project-v2-btn-text"
+                  onClick={() => {
+                    const allExpanded = members.every(m => expandedMemberIds.has(m.member_user_id));
+                    if (allExpanded) {
+                      setExpandedMemberIds(new Set());
+                    } else {
+                      setExpandedMemberIds(new Set(members.map(m => m.member_user_id)));
+                    }
+                  }}
+                >
+                  {members.every(m => expandedMemberIds.has(m.member_user_id))
+                    ? 'すべて閉じる'
+                    : 'すべて開く'}
+                </button>
+              </div>
+            )}
             <div className="project-v2-team-grid">
               {members.length === 0 ? (
                 <div className="project-v2-card">
@@ -1804,7 +1956,14 @@ export function ProjectDetailV2Page() {
                           </div>
                         </div>
                       </div>
-                      {isExpanded && (
+                      {isExpanded && (() => {
+                        const recentTasks = memberTasks.filter(
+                          t => t.status !== 'DONE' || isRecentlyCompleted(t.completed_at, t.updated_at)
+                        );
+                        const oldDoneTasks = memberTasks.filter(
+                          t => t.status === 'DONE' && !isRecentlyCompleted(t.completed_at, t.updated_at)
+                        );
+                        return (
                         <div className="project-v2-member-tasks">
                           {memberTasks.length === 0 && !hasChildTasks ? (
                             <p className="project-v2-muted">割り当てられたタスクはありません。</p>
@@ -1813,9 +1972,9 @@ export function ProjectDetailV2Page() {
                               {showGroupLabels && (
                                 <div className="project-v2-task-group-label">このプロジェクト</div>
                               )}
-                              {memberTasks.length > 0 && (
+                              {recentTasks.length > 0 && (
                                 <div className="project-v2-task-list">
-                                  {memberTasks.map((task) => {
+                                  {recentTasks.map((task) => {
                                     const isDone = task.status === 'DONE';
                                     const progress = task.progress ?? (isDone ? 100 : 0);
                                     const dlStatus = getDeadlineStatus(task.due_date, task.status, timezone);
@@ -1870,6 +2029,15 @@ export function ProjectDetailV2Page() {
                                   })}
                                 </div>
                               )}
+                              {oldDoneTasks.length > 0 && (
+                                <CollapsibleOldDoneTasks
+                                  tasks={oldDoneTasks}
+                                  allTasks={tasks}
+                                  timezone={timezone}
+                                  onTaskClick={(task) => taskModal.openTaskDetail(task)}
+                                  onToggleStatus={(task) => updateTask(task.id, { status: task.status === 'DONE' ? 'TODO' : 'DONE' })}
+                                />
+                              )}
                               {childProjectEntries.map(([projectName, cTasks]) => (
                                 <CollapsibleChildTaskGroup
                                   key={projectName}
@@ -1881,7 +2049,8 @@ export function ProjectDetailV2Page() {
                             </>
                           )}
                         </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   );
                 })

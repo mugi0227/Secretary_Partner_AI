@@ -14,6 +14,7 @@ from app.api.deps import (
     BlockerRepo,
     CheckinRepo,
     CurrentUser,
+    EmailProvider,
     LLMProvider,
     MemoryRepo,
     NotificationRepo,
@@ -1144,6 +1145,8 @@ async def create_project_checkin_v2(
     checkin_repo: CheckinRepo,
     member_repo: ProjectMemberRepo,
     notification_repo: NotificationRepo,
+    email_provider: EmailProvider,
+    user_repo: UserRepo,
 ):
     """Create a structured check-in (V2)."""
     access = await require_project_action(
@@ -1161,13 +1164,17 @@ async def create_project_checkin_v2(
     owner_id = access.owner_id
     result = await checkin_repo.create_v2(owner_id, project_id, checkin)
 
-    # Notify project members
+    # Notify project members (in-app + email)
     members = await member_repo.list_by_project(project_id)
     member_ids = {m.member_user_id for m in members}
     member_ids.add(access.owner_id)
     await notify.notify_checkin_change(
         notification_repo, project_id, access.project.name,
         user.id, user.display_name or "", member_ids, is_update=False,
+        email_provider=email_provider,
+        user_repo=user_repo,
+        members=members,
+        checkin=checkin,
     )
     return result
 
@@ -1211,6 +1218,8 @@ async def update_project_checkin_v2(
     checkin_repo: CheckinRepo,
     member_repo: ProjectMemberRepo,
     notification_repo: NotificationRepo,
+    email_provider: EmailProvider,
+    user_repo: UserRepo,
 ):
     """Update a structured check-in (V2). Only the creator can update."""
     access = await require_project_action(
@@ -1246,13 +1255,17 @@ async def update_project_checkin_v2(
             detail=f"Check-in {checkin_id} not found",
         )
 
-    # Notify project members
+    # Notify project members (in-app + email)
     members = await member_repo.list_by_project(project_id)
     member_ids = {m.member_user_id for m in members}
     member_ids.add(access.owner_id)
     await notify.notify_checkin_change(
         notification_repo, project_id, access.project.name,
         user.id, user.display_name or "", member_ids, is_update=True,
+        email_provider=email_provider,
+        user_repo=user_repo,
+        members=members,
+        checkin=result,
     )
     return result
 
@@ -1433,7 +1446,7 @@ async def list_member_tasks_across_children(
 
     for child in children:
         tasks = await task_repo.list(
-            child.user_id, project_id=child.id, include_done=False,
+            child.user_id, project_id=child.id, include_done=True,
         )
         assignments = await assignment_repo.list_by_project(child.user_id, child.id)
         task_assignments: dict[str, list[str]] = {}
@@ -1463,6 +1476,7 @@ async def list_member_tasks_across_children(
                         task_status=task.status,
                         due_date=task.due_date,
                         parent_id=task.parent_id,
+                        completed_at=task.completed_at,
                     )
                 )
 

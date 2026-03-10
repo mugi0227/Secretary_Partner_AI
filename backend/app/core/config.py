@@ -170,6 +170,13 @@ class Settings(BaseSettings):
     DEVELOPER_EMAILS: str = ""
 
     # ===========================================
+    # Email
+    # ===========================================
+    EMAIL_PROVIDER: Literal["ses", "mock"] = "mock"
+    SES_FROM_EMAIL: str = ""
+    SES_REGION: str = "us-east-1"
+
+    # ===========================================
     # Feature Flags
     # ===========================================
     ENABLE_ISSUES: bool = False

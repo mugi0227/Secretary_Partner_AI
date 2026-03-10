@@ -1021,6 +1021,26 @@
   color: var(--success, #16a34a);
 }
 
+.project-v2-team-expand-all {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.project-v2-btn-text {
+  background: none;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.project-v2-btn-text:hover {
+  background: var(--bg-hover);
+}
+
 .project-v2-team-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

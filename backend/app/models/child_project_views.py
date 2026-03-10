@@ -34,6 +34,7 @@ class MemberProjectTask(BaseModel):
     task_status: TaskStatus
     due_date: Optional[datetime] = None
     parent_id: Optional[UUID] = None
+    completed_at: Optional[datetime] = None
 
 
 class MemberChildTasksSummary(BaseModel):

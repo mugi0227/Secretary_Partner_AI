@@ -18,7 +18,7 @@ from app.interfaces.task_repository import ITaskRepository
 from app.models.enums import TaskStatus
 from app.models.task import SimilarTask, Task, TaskCreate, TaskUpdate
 from app.services.progress_calculator import summarize_progress
-from app.utils.datetime_utils import ensure_utc, now_utc
+from app.utils.datetime_utils import now_utc
 
 
 class SqliteTaskRepository(ITaskRepository):

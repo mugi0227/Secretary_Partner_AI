@@ -1,5 +1,9 @@
 # nagi - Development Guide
 
+## Build & Verification
+- Always use `npm run build` (not `tsc`) to check for build errors in this project.
+- Verify you're in the correct project directory (Secretary_Partner_AI) before running commands.
+
 ## Project Overview
 自律型秘書AI「nagi」のバックエンド。
 タスク管理を自律的にサポートし、ユーザーを支えるパートナー的存在。
@@ -158,3 +162,21 @@ AIが対話的に処理
 - Put use-case specific procedures in skill prompts (`secretary_skill_prompts`) and load them by runtime profile.
 - Tool details should be short and index-like in core/runtime sections; long operational playbooks belong to skills.
 - When migrating or adding behavior, update skill prompts first; only add to core if it is universally applicable.
+
+## Workflow Guidelines
+- Before starting implementation, confirm the exact scope of the request. Ask clarifying questions about: (1) which components/modules are in scope, (2) which level of hierarchy the change targets, (3) whether the request covers the full system or a subset. Do NOT assume scope.
+
+## Tech Stack & Conventions
+- This project uses TypeScript (frontend) and Python (backend).
+- Frontend is React with CSS variables for theming (light/dark mode). Always use CSS variables instead of hardcoded colors.
+- When fixing dark mode issues, check for hardcoded color values across all modal and component CSS files.
+
+## Git Workflow
+- After completing code changes, always run the build to verify before committing.
+- When committing, use descriptive commit messages in the style the user prefers.
+- Push to the correct branch — double-check which branch you're on before pushing.
+
+## Common Pitfalls
+- When working with dates and times, always handle timezone-aware datetimes. Use UTC internally and convert to local timezone only at display. Never use naive datetimes without timezone info — always attach tzinfo. Use a helper function for safe `astimezone()` calls on potentially naive datetimes.
+- When fixing query/cache invalidation issues, search the entire codebase for ALL related query keys and invalidation calls. Use grep to find every instance — partial fixes cause sync bugs.
+
