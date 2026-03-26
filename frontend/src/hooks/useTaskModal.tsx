@@ -97,6 +97,8 @@ export function useTaskModal(options: UseTaskModalOptions): UseTaskModalReturn {
   const [openedParentTaskId, setOpenedParentTaskId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [taskCache, setTaskCache] = useState<Record<string, Task>>({});
+  // Track task IDs created via openCreateForm/openCreateSubtaskForm to detect "empty close"
+  const [freshlyCreatedTaskIds, setFreshlyCreatedTaskIds] = useState<Set<string>>(new Set());
 
   const invalidateTaskQueries = () => {
     for (const key of [
@@ -117,7 +119,15 @@ export function useTaskModal(options: UseTaskModalOptions): UseTaskModalReturn {
         await tasksApi.update(id, data);
       }
     },
-    onSuccess: invalidateTaskQueries,
+    onSuccess: (_data, variables) => {
+      // User edited this task, so it's no longer "freshly created with defaults"
+      setFreshlyCreatedTaskIds(prev => {
+        const next = new Set(prev);
+        next.delete(variables.id);
+        return next;
+      });
+      invalidateTaskQueries();
+    },
   });
 
   const createMutation = useMutation({
@@ -198,9 +208,18 @@ export function useTaskModal(options: UseTaskModalOptions): UseTaskModalReturn {
   }, [taskLookup, openTaskDetail]);
 
   const closeTaskDetail = useCallback(() => {
+    // If the closed task was freshly created and never edited, delete it
+    if (selectedTaskId && freshlyCreatedTaskIds.has(selectedTaskId)) {
+      deleteMutation.mutate(selectedTaskId);
+      setFreshlyCreatedTaskIds(prev => {
+        const next = new Set(prev);
+        next.delete(selectedTaskId);
+        return next;
+      });
+    }
     setSelectedTaskId(null);
     setOpenedParentTaskId(null);
-  }, []);
+  }, [selectedTaskId, freshlyCreatedTaskIds, deleteMutation]);
 
   // openEditForm is no longer needed - inline editing handles this
   const openEditForm = useCallback((_task: Task) => {
@@ -224,6 +243,7 @@ export function useTaskModal(options: UseTaskModalOptions): UseTaskModalReturn {
       const created = await createMutation.mutateAsync(taskData);
       // Add to cache and open detail modal
       setTaskCache(prev => ({ ...prev, [created.id]: created }));
+      setFreshlyCreatedTaskIds(prev => new Set(prev).add(created.id));
       setSelectedTaskId(created.id);
       setOpenedParentTaskId(null);
     } catch (error) {
@@ -251,6 +271,7 @@ export function useTaskModal(options: UseTaskModalOptions): UseTaskModalReturn {
       const created = await createMutation.mutateAsync(taskData);
       // Add to cache
       setTaskCache(prev => ({ ...prev, [created.id]: created }));
+      setFreshlyCreatedTaskIds(prev => new Set(prev).add(created.id));
       // Refresh subtasks query
       queryClient.invalidateQueries({ queryKey: ['subtasks', parentTaskId] });
 

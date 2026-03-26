@@ -1718,3 +1718,61 @@
   background: linear-gradient(135deg, #fde68a 0%, #fbbf24 100%);
   box-shadow: 0 1px 4px rgba(245, 158, 11, 0.3);
 }
+
+/* Add Phase Form */
+.pgantt-add-phase-form {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--c-border-light);
+  background: var(--c-bg-alt);
+}
+
+.pgantt-add-phase-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  background: var(--c-bg);
+  color: var(--c-text);
+  outline: none;
+}
+
+.pgantt-add-phase-input:focus {
+  border-color: var(--c-primary);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+.pgantt-add-phase-submit,
+.pgantt-add-phase-cancel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  background: var(--c-bg);
+  color: var(--c-text-secondary);
+  cursor: pointer;
+  font-size: 0.7rem;
+}
+
+.pgantt-add-phase-submit:hover:not(:disabled) {
+  background: var(--c-primary);
+  border-color: var(--c-primary);
+  color: white;
+}
+
+.pgantt-add-phase-submit:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pgantt-add-phase-cancel:hover {
+  background: var(--c-bg-hover);
+  color: var(--c-danger);
+}

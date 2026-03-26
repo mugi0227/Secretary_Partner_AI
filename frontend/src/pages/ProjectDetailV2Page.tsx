@@ -459,6 +459,11 @@ export function ProjectDetailV2Page() {
   const [phaseBufferDrafts, setPhaseBufferDrafts] = useState<Record<string, string>>({});
   const [phaseBufferActionId, setPhaseBufferActionId] = useState<string | null>(null);
 
+  // Phase create state
+  const [isAddingPhase, setIsAddingPhase] = useState(false);
+  const [newPhaseName, setNewPhaseName] = useState('');
+  const [newPhaseDescription, setNewPhaseDescription] = useState('');
+
   // Phase edit/delete state
   const [editingPhaseId, setEditingPhaseId] = useState<string | null>(null);
   const [editPhaseName, setEditPhaseName] = useState('');
@@ -1168,6 +1173,25 @@ export function ProjectDetailV2Page() {
     } catch (err) {
       console.error('Failed to update phase:', err);
       alert('フェーズの更新に失敗しました。');
+    }
+  };
+
+  const handleCreatePhase = async () => {
+    if (!newPhaseName.trim() || !projectId) return;
+    try {
+      await phasesApi.create({
+        project_id: projectId,
+        name: newPhaseName.trim(),
+        description: newPhaseDescription.trim() || undefined,
+        order_in_project: (phases?.length ?? 0) + 1,
+      });
+      await refreshPhases();
+      setNewPhaseName('');
+      setNewPhaseDescription('');
+      setIsAddingPhase(false);
+    } catch (err) {
+      console.error('Failed to create phase:', err);
+      alert('フェーズの作成に失敗しました。');
     }
   };
 
@@ -2343,6 +2367,53 @@ export function ProjectDetailV2Page() {
                   AIでフェーズ生成
                 </button>
               </div>
+              <div className="project-v2-phase-add-section">
+                {isAddingPhase ? (
+                  <div className="project-v2-phase-edit-form">
+                    <input
+                      className="project-v2-input"
+                      type="text"
+                      value={newPhaseName}
+                      onChange={(e) => setNewPhaseName(e.target.value)}
+                      placeholder="フェーズ名"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && newPhaseName.trim()) handleCreatePhase();
+                        if (e.key === 'Escape') { setIsAddingPhase(false); setNewPhaseName(''); setNewPhaseDescription(''); }
+                      }}
+                    />
+                    <textarea
+                      className="project-v2-textarea"
+                      value={newPhaseDescription}
+                      onChange={(e) => setNewPhaseDescription(e.target.value)}
+                      placeholder="説明（任意）"
+                      rows={2}
+                    />
+                    <div className="project-v2-phase-edit-actions">
+                      <button
+                        className="project-v2-button"
+                        onClick={handleCreatePhase}
+                        disabled={!newPhaseName.trim()}
+                      >
+                        <FaCheck /> 作成
+                      </button>
+                      <button
+                        className="project-v2-button ghost"
+                        onClick={() => { setIsAddingPhase(false); setNewPhaseName(''); setNewPhaseDescription(''); }}
+                      >
+                        <FaTimes /> キャンセル
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    className="project-v2-button ghost"
+                    onClick={() => setIsAddingPhase(true)}
+                  >
+                    <FaPlus /> フェーズを追加
+                  </button>
+                )}
+              </div>
               {isPhasesLoading ? (
                 <p className="project-v2-muted">読み込み中...</p>
               ) : sortedPhases.length === 0 ? (
@@ -2764,6 +2835,18 @@ export function ProjectDetailV2Page() {
                     window.dispatchEvent(new CustomEvent('secretary:chat-open', {
                       detail: { draftCard }
                     }));
+                  }}
+                  onPhaseCreate={async (name) => {
+                    try {
+                      await phasesApi.create({
+                        project_id: projectId!,
+                        name,
+                        order_in_project: (phases?.length ?? 0) + 1,
+                      });
+                      await refreshPhases();
+                    } catch (err) {
+                      console.error('Failed to create phase:', err);
+                    }
                   }}
                 />
               </div>

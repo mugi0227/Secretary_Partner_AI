@@ -73,6 +73,7 @@ interface ProjectGanttChartProps {
   onMilestoneLink?: (taskId: string, milestoneId: string | null) => void;
   onDeleteMilestone?: (milestoneId: string) => void;
   onGenerateMilestoneTasks?: (milestoneId: string, milestoneTitle: string) => void;
+  onPhaseCreate?: (name: string) => void;
   className?: string;
 }
 
@@ -582,6 +583,7 @@ export const ProjectGanttChart: React.FC<ProjectGanttChartProps> = ({
   onMilestoneLink,
   onDeleteMilestone,
   onGenerateMilestoneTasks,
+  onPhaseCreate,
   className,
 }) => {
   const timezone = useTimezone();
@@ -591,6 +593,8 @@ export const ProjectGanttChart: React.FC<ProjectGanttChartProps> = ({
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const [showTaskList, setShowTaskList] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(260);
+  const [isAddingPhase, setIsAddingPhase] = useState(false);
+  const [newPhaseName, setNewPhaseName] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const sidebarResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
@@ -2254,6 +2258,16 @@ export const ProjectGanttChart: React.FC<ProjectGanttChartProps> = ({
             <FaSort size={10} />
             <span>ソート</span>
           </button>
+          {onPhaseCreate && (
+            <button
+              className="pgantt-sort-btn"
+              onClick={() => setIsAddingPhase(true)}
+              title="フェーズを追加"
+            >
+              <FaPlus size={10} />
+              <span>フェーズ</span>
+            </button>
+          )}
           {/* Phase 5: Link mode button */}
           {onDependencyUpdate && (
             <div className="pgantt-link-mode-container">
@@ -2368,6 +2382,48 @@ export const ProjectGanttChart: React.FC<ProjectGanttChartProps> = ({
                   ))}
                 </SortableContext>
               </DndContext>
+              {isAddingPhase && onPhaseCreate && (
+                <div className="pgantt-add-phase-form">
+                  <input
+                    className="pgantt-add-phase-input"
+                    type="text"
+                    value={newPhaseName}
+                    onChange={(e) => setNewPhaseName(e.target.value)}
+                    placeholder="フェーズ名を入力..."
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newPhaseName.trim()) {
+                        onPhaseCreate(newPhaseName.trim());
+                        setNewPhaseName('');
+                        setIsAddingPhase(false);
+                      }
+                      if (e.key === 'Escape') {
+                        setNewPhaseName('');
+                        setIsAddingPhase(false);
+                      }
+                    }}
+                  />
+                  <button
+                    className="pgantt-add-phase-submit"
+                    onClick={() => {
+                      if (newPhaseName.trim()) {
+                        onPhaseCreate(newPhaseName.trim());
+                        setNewPhaseName('');
+                        setIsAddingPhase(false);
+                      }
+                    }}
+                    disabled={!newPhaseName.trim()}
+                  >
+                    <FaPlus size={10} />
+                  </button>
+                  <button
+                    className="pgantt-add-phase-cancel"
+                    onClick={() => { setNewPhaseName(''); setIsAddingPhase(false); }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
             </div>
             <div
               className="pgantt-sidebar-resize-handle"
