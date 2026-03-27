@@ -1551,6 +1551,23 @@
   gap: 8px;
 }
 
+.project-v2-phase-date-row {
+  display: flex;
+  gap: 12px;
+}
+
+.project-v2-phase-date-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.project-v2-phase-date-field .project-v2-label {
+  font-size: 0.75rem;
+  margin-bottom: 0;
+}
+
 .project-v2-phase-description {
   margin: 4px 0 8px;
   font-style: italic;

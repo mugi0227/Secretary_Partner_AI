@@ -2,6 +2,8 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  FaArrowDown,
+  FaArrowUp,
   FaCalendarAlt,
   FaChartBar,
   FaCheck,
@@ -468,6 +470,8 @@ export function ProjectDetailV2Page() {
   const [editingPhaseId, setEditingPhaseId] = useState<string | null>(null);
   const [editPhaseName, setEditPhaseName] = useState('');
   const [editPhaseDescription, setEditPhaseDescription] = useState('');
+  const [editPhaseStartDate, setEditPhaseStartDate] = useState('');
+  const [editPhaseEndDate, setEditPhaseEndDate] = useState('');
 
   // Milestone edit/add/delete state
   const [editingMilestoneId, setEditingMilestoneId] = useState<string | null>(null);
@@ -1153,12 +1157,16 @@ export function ProjectDetailV2Page() {
     setEditingPhaseId(phase.id);
     setEditPhaseName(phase.name);
     setEditPhaseDescription(phase.description || '');
+    setEditPhaseStartDate(phase.start_date ? toDateKey(phase.start_date, timezone) : '');
+    setEditPhaseEndDate(phase.end_date ? toDateKey(phase.end_date, timezone) : '');
   };
 
   const handleCancelPhaseEdit = () => {
     setEditingPhaseId(null);
     setEditPhaseName('');
     setEditPhaseDescription('');
+    setEditPhaseStartDate('');
+    setEditPhaseEndDate('');
   };
 
   const handlePhaseUpdate = async () => {
@@ -1167,6 +1175,8 @@ export function ProjectDetailV2Page() {
       await phasesApi.update(editingPhaseId, {
         name: editPhaseName.trim(),
         description: editPhaseDescription.trim() || undefined,
+        start_date: editPhaseStartDate || undefined,
+        end_date: editPhaseEndDate || undefined,
       });
       await refreshPhases();
       handleCancelPhaseEdit();
@@ -1192,6 +1202,22 @@ export function ProjectDetailV2Page() {
     } catch (err) {
       console.error('Failed to create phase:', err);
       alert('フェーズの作成に失敗しました。');
+    }
+  };
+
+  const handleMovePhase = async (phaseId: string, direction: 'up' | 'down') => {
+    const idx = sortedPhases.findIndex(p => p.id === phaseId);
+    if (idx < 0) return;
+    if (direction === 'up' && idx === 0) return;
+    if (direction === 'down' && idx === sortedPhases.length - 1) return;
+    const targetOrder = direction === 'up'
+      ? sortedPhases[idx - 1].order_in_project
+      : sortedPhases[idx + 1].order_in_project;
+    try {
+      await phasesApi.update(phaseId, { order_in_project: targetOrder });
+      await refreshPhases();
+    } catch (err) {
+      console.error('Failed to reorder phase:', err);
     }
   };
 
@@ -2420,7 +2446,7 @@ export function ProjectDetailV2Page() {
                 <p className="project-v2-muted">フェーズがありません。</p>
               ) : (
                 <div className="project-v2-timeline">
-                  {sortedPhases.map((phase) => {
+                  {sortedPhases.map((phase, phaseIndex) => {
                     const isCurrent = currentPhase?.id === phase.id;
                     const isCompleted = phase.status === 'COMPLETED';
                     const isEditing = editingPhaseId === phase.id;
@@ -2447,6 +2473,26 @@ export function ProjectDetailV2Page() {
                                 placeholder="説明（任意）"
                                 rows={2}
                               />
+                              <div className="project-v2-phase-date-row">
+                                <div className="project-v2-phase-date-field">
+                                  <label className="project-v2-label">開始日</label>
+                                  <input
+                                    className="project-v2-input"
+                                    type="date"
+                                    value={editPhaseStartDate}
+                                    onChange={(e) => setEditPhaseStartDate(e.target.value)}
+                                  />
+                                </div>
+                                <div className="project-v2-phase-date-field">
+                                  <label className="project-v2-label">終了日</label>
+                                  <input
+                                    className="project-v2-input"
+                                    type="date"
+                                    value={editPhaseEndDate}
+                                    onChange={(e) => setEditPhaseEndDate(e.target.value)}
+                                  />
+                                </div>
+                              </div>
                               <div className="project-v2-phase-edit-actions">
                                 <button
                                   className="project-v2-button"
@@ -2470,6 +2516,24 @@ export function ProjectDetailV2Page() {
                                   {isCurrent && <span className="project-v2-phase-badge">進行中</span>}
                                 </span>
                                 <div className="project-v2-phase-actions">
+                                  {phaseIndex > 0 && (
+                                    <button
+                                      className="project-v2-icon-btn"
+                                      onClick={() => handleMovePhase(phase.id, 'up')}
+                                      title="上に移動"
+                                    >
+                                      <FaArrowUp />
+                                    </button>
+                                  )}
+                                  {phaseIndex < sortedPhases.length - 1 && (
+                                    <button
+                                      className="project-v2-icon-btn"
+                                      onClick={() => handleMovePhase(phase.id, 'down')}
+                                      title="下に移動"
+                                    >
+                                      <FaArrowDown />
+                                    </button>
+                                  )}
                                   {!isCurrent && (
                                     <button
                                       className="project-v2-phase-set-current-btn"
@@ -2846,6 +2910,14 @@ export function ProjectDetailV2Page() {
                       await refreshPhases();
                     } catch (err) {
                       console.error('Failed to create phase:', err);
+                    }
+                  }}
+                  onPhaseReorder={async (phaseId, newOrder) => {
+                    try {
+                      await phasesApi.update(phaseId, { order_in_project: newOrder });
+                      await refreshPhases();
+                    } catch (err) {
+                      console.error('Failed to reorder phase:', err);
                     }
                   }}
                 />

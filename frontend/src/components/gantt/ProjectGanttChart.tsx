@@ -74,6 +74,7 @@ interface ProjectGanttChartProps {
   onDeleteMilestone?: (milestoneId: string) => void;
   onGenerateMilestoneTasks?: (milestoneId: string, milestoneTitle: string) => void;
   onPhaseCreate?: (name: string) => void;
+  onPhaseReorder?: (phaseId: string, newOrder: number) => void;
   className?: string;
 }
 
@@ -373,8 +374,8 @@ const SortableSidebarRow: React.FC<SortableSidebarRowProps> = ({
     }
   };
 
-  // Tasks, subtasks, and milestones are draggable for reordering
-  const isDraggableType = row.type === 'task' || row.type === 'subtask' || row.type === 'milestone';
+  // Tasks, subtasks, milestones, and phases are draggable for reordering
+  const isDraggableType = row.type === 'task' || row.type === 'subtask' || row.type === 'milestone' || row.type === 'phase';
   const {
     attributes,
     listeners,
@@ -584,6 +585,7 @@ export const ProjectGanttChart: React.FC<ProjectGanttChartProps> = ({
   onDeleteMilestone,
   onGenerateMilestoneTasks,
   onPhaseCreate,
+  onPhaseReorder,
   className,
 }) => {
   const timezone = useTimezone();
@@ -1695,6 +1697,16 @@ export const ProjectGanttChart: React.FC<ProjectGanttChartProps> = ({
       return;
     }
 
+    // Handle phase reordering (phase -> phase)
+    if (activeRow.type === 'phase' && overRow.type === 'phase' && onPhaseReorder) {
+      const phaseRows = rows.filter(r => r.type === 'phase');
+      const overIndex = phaseRows.findIndex(r => r.id === over.id);
+      if (overIndex >= 0) {
+        onPhaseReorder(active.id as string, overIndex + 1);
+      }
+      return;
+    }
+
     // Handle task reordering (task -> task, same phase only)
     if (activeRow.type === 'task' && overRow.type === 'task') {
       // Only allow reordering within the same phase
@@ -1719,7 +1731,7 @@ export const ProjectGanttChart: React.FC<ProjectGanttChartProps> = ({
       });
       setTaskOrderMap(newOrderMap);
     }
-  }, [rows, onMilestoneLink, taskOrderMap, milestoneOrderMap]);
+  }, [rows, onMilestoneLink, onPhaseReorder, taskOrderMap, milestoneOrderMap]);
 
   // Phase 5: Handle link mode task click
   const handleLinkModeClick = useCallback((taskId: string) => {
@@ -2346,7 +2358,7 @@ export const ProjectGanttChart: React.FC<ProjectGanttChartProps> = ({
                 onDragEnd={handleSidebarDragEnd}
               >
                 <SortableContext
-                  items={rows.filter(r => r.type === 'task' || r.type === 'subtask' || r.type === 'milestone').map(r => r.id)}
+                  items={rows.filter(r => r.type === 'task' || r.type === 'subtask' || r.type === 'milestone' || r.type === 'phase').map(r => r.id)}
                   strategy={verticalListSortingStrategy}
                 >
                   {rows.map((row) => (

@@ -1719,6 +1719,15 @@
   box-shadow: 0 1px 4px rgba(245, 158, 11, 0.3);
 }
 
+/* Phase drag handle */
+.pgantt-sidebar-row.phase {
+  cursor: grab;
+}
+
+.pgantt-sidebar-row.phase:active {
+  cursor: grabbing;
+}
+
 /* Add Phase Form */
 .pgantt-add-phase-form {
   display: flex;
