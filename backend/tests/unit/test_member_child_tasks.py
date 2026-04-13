@@ -1,4 +1,4 @@
-"""Tests for list_member_tasks_across_children endpoint.
+"""Tests for member-child-task endpoints.
 
 Verifies that:
 1. Completed (DONE) tasks from child projects are included in the response.
@@ -7,22 +7,20 @@ Verifies that:
 4. Parent tasks (parent_id) are preserved in the response.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 
-from app.api.projects import list_member_tasks_across_children
-from app.models.child_project_views import MemberProjectTask
+from app.api.projects import list_member_tasks_across_children, update_member_child_task
 from app.models.enums import (
     CreatedBy,
-    ProjectStatus,
-    ProjectVisibility,
     TaskStatus,
 )
-from app.models.task import Task
+from app.models.task import Task, TaskUpdate
 
 
 def _make_task(
@@ -315,3 +313,75 @@ async def test_no_children_returns_empty():
         assignments_by_child={},
     )
     assert result == []
+
+
+@pytest.mark.asyncio
+async def test_update_member_child_task_updates_matching_child() -> None:
+    parent_project_id = uuid4()
+    child_project_id = uuid4()
+    task_id = uuid4()
+    task = _make_task(project_id=child_project_id)
+    task.id = task_id
+    task.status = TaskStatus.TODO
+    user = SimpleNamespace(id="caller-user")
+
+    repo = AsyncMock()
+    member_repo = AsyncMock()
+    task_repo = AsyncMock()
+
+    child = SimpleNamespace(id=child_project_id, user_id="owner-user", name="Child")
+    repo.list_children_with_task_count.return_value = [child]
+    task_repo.get.return_value = task
+
+    updated_task = _make_task(status=TaskStatus.DONE, project_id=child_project_id)
+    updated_task.id = task_id
+    task_repo.update.return_value = updated_task
+
+    result = await update_member_child_task(
+        project_id=parent_project_id,
+        task_id=task_id,
+        update=TaskUpdate(status=TaskStatus.DONE),
+        user=user,
+        repo=repo,
+        member_repo=member_repo,
+        task_repo=task_repo,
+    )
+
+    assert result.status == TaskStatus.DONE
+    task_repo.get.assert_awaited_once_with("owner-user", task_id, project_id=child_project_id)
+    task_repo.update.assert_awaited_once_with(
+        "owner-user",
+        task_id,
+        TaskUpdate(status=TaskStatus.DONE),
+        project_id=child_project_id,
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_member_child_task_returns_404_when_task_not_in_children() -> None:
+    parent_project_id = uuid4()
+    task_id = uuid4()
+    user = SimpleNamespace(id="caller-user")
+
+    repo = AsyncMock()
+    member_repo = AsyncMock()
+    task_repo = AsyncMock()
+
+    repo.list_children_with_task_count.return_value = [
+        SimpleNamespace(id=uuid4(), user_id="owner-a", name="Child A"),
+        SimpleNamespace(id=uuid4(), user_id="owner-b", name="Child B"),
+    ]
+    task_repo.get.return_value = None
+
+    with pytest.raises(HTTPException) as exc_info:
+        await update_member_child_task(
+            project_id=parent_project_id,
+            task_id=task_id,
+            update=TaskUpdate(status=TaskStatus.DONE),
+            user=user,
+            repo=repo,
+            member_repo=member_repo,
+            task_repo=task_repo,
+        )
+
+    assert exc_info.value.status_code == 404

@@ -1142,7 +1142,6 @@
   margin-left: 4px;
 }
 
-/* Child project task rows (read-only) */
 .project-v2-child-task-row {
   display: flex;
   align-items: center;
@@ -1192,6 +1191,12 @@
   color: var(--text-muted);
   flex-shrink: 0;
   width: 14px;
+}
+
+.project-v2-child-task-checkbox {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
 
 .project-v2-child-task-count {

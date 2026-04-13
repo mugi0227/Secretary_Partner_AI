@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from app.models.enums import CreatedBy, TaskStatus
+from app.models.schedule import ScheduleResponse
 from app.models.schedule_plan import ScheduleTimeBlock, TimeBlockMoveRequest
 from app.models.task import Task, TaskUpdate
 from app.services.daily_schedule_plan_service import (
@@ -52,6 +53,21 @@ def _build_service(task_repo: AsyncMock, plan_repo: AsyncMock) -> DailyScheduleP
         settings_repo=AsyncMock(),
         plan_repo=plan_repo,
     )
+
+
+class _CapturingSchedulerService:
+    def __init__(self) -> None:
+        self.calls: list[list[Task]] = []
+
+    def build_schedule(self, tasks: list[Task], **kwargs) -> ScheduleResponse:
+        self.calls.append(list(tasks))
+        return ScheduleResponse(
+            start_date=kwargs["start_date"],
+            days=[],
+            tasks=[],
+            unscheduled_task_ids=[],
+            excluded_tasks=[],
+        )
 
 
 @pytest.mark.asyncio
@@ -253,3 +269,85 @@ def test_build_meeting_intervals_treats_naive_values_as_utc() -> None:
     assert len(intervals) == 1
     assert intervals[0].start_minutes == 9 * 60
     assert intervals[0].end_minutes == 10 * 60
+
+
+@pytest.mark.asyncio
+async def test_build_plan_includes_accessible_team_project_tasks() -> None:
+    user_id = str(uuid4())
+    team_project_id = uuid4()
+    personal_task_id = uuid4()
+    team_task_id = uuid4()
+    start = datetime(2026, 2, 8, 9, 0, tzinfo=timezone.utc)
+    end = datetime(2026, 2, 8, 10, 0, tzinfo=timezone.utc)
+
+    personal_task = _build_task(
+        personal_task_id,
+        start_time=start,
+        end_time=end,
+        is_fixed_time=False,
+    )
+    team_task = _build_task(
+        team_task_id,
+        project_id=team_project_id,
+        start_time=start,
+        end_time=end,
+        is_fixed_time=False,
+    )
+
+    task_repo = AsyncMock()
+
+    async def list_side_effect(query_user_id, project_id=None, include_done=False, limit=1000, offset=0):
+        if project_id is None and query_user_id == user_id:
+            return [personal_task]
+        if project_id == team_project_id and query_user_id == "owner-user":
+            return [team_task]
+        return []
+
+    task_repo.list.side_effect = list_side_effect
+
+    project_repo = AsyncMock()
+    project_repo.list.return_value = [
+        SimpleNamespace(
+            id=team_project_id,
+            user_id="owner-user",
+            visibility="TEAM",
+            priority=5,
+        )
+    ]
+
+    assignment_repo = AsyncMock()
+    assignment_repo.list_for_assignee.return_value = [
+        SimpleNamespace(task_id=team_task_id, assignee_id=user_id, status=None),
+    ]
+
+    user_repo = AsyncMock()
+    user_repo.get.return_value = SimpleNamespace(timezone="UTC")
+
+    scheduler_service = _CapturingSchedulerService()
+    plan_repo = AsyncMock()
+    settings_repo = AsyncMock()
+    settings_repo.get.return_value = None
+
+    service = DailySchedulePlanService(
+        task_repo=task_repo,
+        project_repo=project_repo,
+        assignment_repo=assignment_repo,
+        snapshot_repo=AsyncMock(),
+        user_repo=user_repo,
+        settings_repo=settings_repo,
+        plan_repo=plan_repo,
+        scheduler_service=scheduler_service,
+    )
+
+    await service.build_plan(
+        user_id=user_id,
+        start_date=date(2026, 2, 8),
+        max_days=7,
+        filter_by_assignee=True,
+        apply_plan_constraints=False,
+    )
+
+    assert len(scheduler_service.calls) == 1
+    scheduled_task_ids = {task.id for task in scheduler_service.calls[0]}
+    assert personal_task.id in scheduled_task_ids
+    assert team_task.id in scheduled_task_ids

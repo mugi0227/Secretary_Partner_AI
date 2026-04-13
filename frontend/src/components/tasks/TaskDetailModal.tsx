@@ -182,7 +182,7 @@ export function TaskDetailModal({
       });
       for (const key of [
         ['tasks'], ['subtasks'], ['top3'], ['today-tasks'], ['schedule'],
-        ['task-detail'], ['task-assignments'], ['project'],
+        ['task-detail'], ['task-assignments'], ['project'], ['member-child-tasks'],
       ]) {
         queryClient.invalidateQueries({ queryKey: key });
       }

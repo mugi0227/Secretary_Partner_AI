@@ -166,13 +166,16 @@ function CollapsibleChildTaskNode({
   task,
   subtasks,
   onTaskClick,
+  onToggleStatus,
 }: {
   task: MemberProjectTask;
   subtasks: MemberProjectTask[];
   onTaskClick: (taskId: string) => void;
+  onToggleStatus: (taskId: string, status: TaskStatus) => void;
 }) {
   const [open, setOpen] = useState(false);
   const hasChildren = subtasks.length > 0;
+  const isDone = task.task_status === 'DONE';
 
   return (
     <div>
@@ -184,6 +187,15 @@ function CollapsibleChildTaskNode({
         <span className="project-v2-child-task-toggle">
           {hasChildren ? (open ? <FaChevronDown /> : <FaChevronRight />) : null}
         </span>
+        <button
+          type="button"
+          className={`project-v2-task-checkbox project-v2-child-task-checkbox ${isDone ? 'checked' : ''}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleStatus(task.task_id, task.task_status);
+          }}
+          aria-label={isDone ? '未完了に戻す' : '完了にする'}
+        />
         <FaCircle
           className="project-v2-child-task-dot"
           style={{ color: CHILD_TASK_STATUS_COLORS[task.task_status] || '#94a3b8' }}
@@ -201,6 +213,15 @@ function CollapsibleChildTaskNode({
           onClick={() => onTaskClick(sub.task_id)}
           style={{ cursor: 'pointer' }}
         >
+          <button
+            type="button"
+            className={`project-v2-task-checkbox project-v2-child-task-checkbox ${sub.task_status === 'DONE' ? 'checked' : ''}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleStatus(sub.task_id, sub.task_status);
+            }}
+            aria-label={sub.task_status === 'DONE' ? '未完了に戻す' : '完了にする'}
+          />
           <FaCircle
             className="project-v2-child-task-dot"
             style={{ color: CHILD_TASK_STATUS_COLORS[sub.task_status] || '#94a3b8' }}
@@ -219,10 +240,12 @@ function CollapsibleChildTaskGroup({
   projectName,
   tasks,
   onTaskClick,
+  onToggleStatus,
 }: {
   projectName: string;
   tasks: MemberProjectTask[];
   onTaskClick: (taskId: string) => void;
+  onToggleStatus: (taskId: string, status: TaskStatus) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [oldDoneOpen, setOldDoneOpen] = useState(false);
@@ -270,6 +293,7 @@ function CollapsibleChildTaskGroup({
                 task={ct}
                 subtasks={subs}
                 onTaskClick={onTaskClick}
+                onToggleStatus={onToggleStatus}
               />
             );
           })}
@@ -290,6 +314,7 @@ function CollapsibleChildTaskGroup({
                   task={ct}
                   subtasks={[]}
                   onTaskClick={onTaskClick}
+                  onToggleStatus={onToggleStatus}
                 />
               ))}
             </div>
@@ -535,6 +560,42 @@ export function ProjectDetailV2Page() {
   const refetchProject = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['project', projectId] });
   }, [queryClient, projectId]);
+
+  const invalidateTaskViews = useCallback(() => {
+    for (const key of [
+      ['tasks'],
+      ['subtasks'],
+      ['top3'],
+      ['today-tasks'],
+      ['schedule'],
+      ['task-detail'],
+      ['task-assignments'],
+      ['project'],
+      ['meetings'],
+      ['member-child-tasks'],
+    ]) {
+      queryClient.invalidateQueries({ queryKey: key });
+    }
+  }, [queryClient]);
+
+  const handleToggleTaskStatus = useCallback(
+    async (taskId: string, currentStatus: TaskStatus) => {
+      const nextStatus: TaskStatus = currentStatus === 'DONE' ? 'TODO' : 'DONE';
+      try {
+        const isCurrentProjectTask = tasks.some((task) => task.id === taskId);
+        if (!isCurrentProjectTask && projectId) {
+          await projectsApi.updateMemberChildTask(projectId, taskId, { status: nextStatus });
+        } else {
+          await tasksApi.update(taskId, { status: nextStatus });
+        }
+        invalidateTaskViews();
+      } catch (err) {
+        console.error('Failed to update task status:', err);
+        alert('タスク状態の更新に失敗しました。');
+      }
+    },
+    [invalidateTaskViews, projectId, tasks],
+  );
 
   useEffect(() => {
     if (!projectId) return;
@@ -2051,7 +2112,7 @@ export function ProjectDetailV2Page() {
                                           className={`project-v2-task-checkbox ${isDone ? 'checked' : ''}`}
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            updateTask(task.id, { status: isDone ? 'TODO' : 'DONE' });
+                                            handleToggleTaskStatus(task.id, task.status);
                                           }}
                                         />
                                         <div className="project-v2-task-content">
@@ -2085,7 +2146,7 @@ export function ProjectDetailV2Page() {
                                   allTasks={tasks}
                                   timezone={timezone}
                                   onTaskClick={(task) => taskModal.openTaskDetail(task)}
-                                  onToggleStatus={(task) => updateTask(task.id, { status: task.status === 'DONE' ? 'TODO' : 'DONE' })}
+                                  onToggleStatus={(task) => handleToggleTaskStatus(task.id, task.status)}
                                 />
                               )}
                               {childProjectEntries.map(([projectName, cTasks]) => (
@@ -2094,6 +2155,7 @@ export function ProjectDetailV2Page() {
                                   projectName={projectName}
                                   tasks={cTasks}
                                   onTaskClick={(taskId) => taskModal.openTaskDetailById(taskId)}
+                                  onToggleStatus={handleToggleTaskStatus}
                                 />
                               ))}
                             </>

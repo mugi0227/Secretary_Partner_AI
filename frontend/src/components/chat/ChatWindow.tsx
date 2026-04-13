@@ -159,7 +159,7 @@ export function ChatWindow({ isOpen, onClose, initialMessage, onInitialMessageCo
     for (const key of [
       ['tasks'], ['subtasks'], ['top3'], ['today-tasks'], ['schedule'],
       ['task-detail'], ['task-assignments'],
-      ['projects'], ['project'], ['meeting-agendas'],
+      ['projects'], ['project'], ['meeting-agendas'], ['member-child-tasks'],
     ]) {
       queryClient.invalidateQueries({ queryKey: key });
     }

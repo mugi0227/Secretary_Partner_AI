@@ -649,6 +649,36 @@ class DailySchedulePlanService:
         projects = await self._project_repo.list(user_id, limit=1000)
         return {project.id: project.priority for project in projects}
 
+    async def _load_accessible_tasks(
+        self,
+        user_id: str,
+        *,
+        include_done: bool,
+        projects: Optional[list] = None,
+    ) -> list[Task]:
+        accessible_projects = (
+            projects if projects is not None else await self._project_repo.list(user_id, limit=1000)
+        )
+        task_map: dict[UUID, Task] = {}
+
+        own_tasks = await self._task_repo.list(user_id, include_done=include_done, limit=1000)
+        for task in own_tasks:
+            task_map[task.id] = task
+
+        for project in accessible_projects:
+            if project.visibility != ProjectVisibility.TEAM:
+                continue
+            project_tasks = await self._task_repo.list(
+                project.user_id,
+                project_id=project.id,
+                include_done=include_done,
+                limit=1000,
+            )
+            for task in project_tasks:
+                task_map[task.id] = task
+
+        return list(task_map.values())
+
     async def _load_plan_windows(
         self,
         user_id: str,
@@ -687,6 +717,7 @@ class DailySchedulePlanService:
         settings = await self._load_settings(user_id)
         capacity_by_weekday = _build_capacity_by_weekday(settings)
         capacity_by_weekday = _apply_capacity_buffer(capacity_by_weekday, settings.buffer_hours)
+        projects = await self._project_repo.list(user_id, limit=1000)
 
         if from_now and resolved_start == get_user_today(timezone):
             weekday_index = (resolved_start.weekday() + 1) % 7
@@ -701,7 +732,11 @@ class DailySchedulePlanService:
             remaining_work_minutes = sum(
                 interval.end_minutes - interval.start_minutes for interval in remaining_intervals
             )
-            tasks_for_meetings = await self._task_repo.list(user_id, include_done=True, limit=1000)
+            tasks_for_meetings = await self._load_accessible_tasks(
+                user_id,
+                include_done=True,
+                projects=projects,
+            )
             past_meeting_minutes = _meeting_minutes_before_now(
                 tasks_for_meetings,
                 resolved_start,
@@ -712,8 +747,12 @@ class DailySchedulePlanService:
             if len(capacity_by_weekday) == 7:
                 capacity_by_weekday[weekday_index] = adjusted_capacity
 
-        tasks = await self._task_repo.list(user_id, include_done=True, limit=1000)
-        project_priorities = await self._load_project_priorities(user_id)
+        tasks = await self._load_accessible_tasks(
+            user_id,
+            include_done=True,
+            projects=projects,
+        )
+        project_priorities = {project.id: project.priority for project in projects}
         assignments = None
         if filter_by_assignee:
             assignments = await self._assignment_repo.list_for_assignee(user_id)
@@ -721,8 +760,6 @@ class DailySchedulePlanService:
         if apply_plan_constraints:
             planned_windows = await self._load_plan_windows(user_id, tasks)
 
-        # Build TEAM project ID set for PRIVATE/TEAM distinction
-        projects = await self._project_repo.list(user_id, limit=1000)
         team_project_ids = {
             p.id for p in projects
             if p.visibility == ProjectVisibility.TEAM
@@ -914,7 +951,12 @@ class DailySchedulePlanService:
             past_days_count = (past_end - resolved_start).days + 1
             future_days_count = max(0, max_days - past_days_count)
 
-            all_tasks = await self._task_repo.list(user_id, include_done=True, limit=1000)
+            projects = await self._project_repo.list(user_id, limit=1000)
+            all_tasks = await self._load_accessible_tasks(
+                user_id,
+                include_done=True,
+                projects=projects,
+            )
             past_days, past_time_blocks, past_task_infos = await self._get_past_days_from_plans(
                 user_id, resolved_start, past_end, all_tasks, timezone,
             )
@@ -982,11 +1024,15 @@ class DailySchedulePlanService:
             time_blocks: list[ScheduleTimeBlock] = []
             for plan in plans:
                 time_blocks.extend(plan.time_blocks)
-            current_tasks = await self._task_repo.list(user_id, include_done=True, limit=1000)
+            projects = await self._project_repo.list(user_id, limit=1000)
+            current_tasks = await self._load_accessible_tasks(
+                user_id,
+                include_done=True,
+                projects=projects,
+            )
             assignments = None
             if filter_by_assignee:
                 assignments = await self._assignment_repo.list_for_assignee(user_id)
-            projects = await self._project_repo.list(user_id, limit=1000)
             team_project_ids = {
                 p.id for p in projects
                 if p.visibility == ProjectVisibility.TEAM
@@ -1041,14 +1087,23 @@ class DailySchedulePlanService:
         settings = await self._load_settings(user_id)
         capacity_by_weekday = _build_capacity_by_weekday(settings)
         capacity_by_weekday = _apply_capacity_buffer(capacity_by_weekday, settings.buffer_hours)
-        tasks = await self._task_repo.list(user_id, include_done=True, limit=1000)
-        project_priorities = await self._load_project_priorities(user_id)
+        projects = await self._project_repo.list(user_id, limit=1000)
+        tasks = await self._load_accessible_tasks(
+            user_id,
+            include_done=True,
+            projects=projects,
+        )
+        project_priorities = {project.id: project.priority for project in projects}
         assignments = None
         if filter_by_assignee:
             assignments = await self._assignment_repo.list_for_assignee(user_id)
         planned_windows = None
         if apply_plan_constraints:
             planned_windows = await self._load_plan_windows(user_id, tasks)
+        team_project_ids = {
+            p.id for p in projects
+            if p.visibility == ProjectVisibility.TEAM
+        }
         schedule = self._scheduler_service.build_schedule(
             tasks,
             project_priorities=project_priorities,
@@ -1060,6 +1115,7 @@ class DailySchedulePlanService:
             filter_by_assignee=filter_by_assignee,
             planned_window_by_task=planned_windows,
             user_timezone=timezone,
+            team_project_ids=team_project_ids,
         )
 
         return SchedulePlanResponse(

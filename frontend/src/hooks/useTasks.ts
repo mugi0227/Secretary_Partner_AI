@@ -12,6 +12,7 @@ const TASK_INVALIDATION_KEYS: string[][] = [
   ['task-detail'],
   ['task-assignments'],
   ['project'],
+  ['member-child-tasks'],
 ];
 
 export function useTasks(projectId?: string) {

@@ -28,6 +28,7 @@ import type {
   Memory,
   ChildProjectTaskSummary,
   MemberChildTasksSummary,
+  TaskUpdate,
 } from './types';
 
 export const projectsApi = {
@@ -59,6 +60,9 @@ export const projectsApi = {
 
   getMemberChildTasks: (projectId: string) =>
     api.get<MemberChildTasksSummary[]>(`/projects/${projectId}/member-child-tasks`),
+
+  updateMemberChildTask: (projectId: string, taskId: string, data: TaskUpdate) =>
+    api.patch(`/projects/${projectId}/member-child-tasks/${taskId}`, data),
 
   inviteFromParent: (projectId: string, data: { member_user_id: string; role: ProjectRole }) =>
     api.post<ProjectMember>(`/projects/${projectId}/invite-from-parent`, data),

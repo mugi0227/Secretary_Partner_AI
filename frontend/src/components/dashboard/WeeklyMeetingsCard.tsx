@@ -364,7 +364,7 @@ export function WeeklyMeetingsCard({
   const invalidateAfterChange = (includeSchedule = false) => {
     const keys = [
       ['meetings'], ['tasks'], ['subtasks'], ['top3'], ['today-tasks'],
-      ['task-detail'], ['task-assignments'], ['project'],
+      ['task-detail'], ['task-assignments'], ['project'], ['member-child-tasks'],
     ];
     if (includeSchedule) keys.push(['schedule']);
     for (const key of keys) {
@@ -1111,7 +1111,7 @@ export function WeeklyMeetingsCard({
         if (hasPlanBlocks) {
           await tasksApi.moveTimeBlock({
             task_id: taskId,
-            original_date: to.date,
+            original_date: from.dayKey,
             new_start: to.isoStart,
             new_end: to.isoEnd,
           });

@@ -29,6 +29,11 @@ from app.api.deps import (
 from app.api.permissions import require_project_action, require_project_member
 from app.core.config import get_settings
 from app.core.exceptions import ForbiddenError, NotFoundError
+from app.models.child_project_views import (
+    ChildProjectTaskSummary,
+    MemberChildTasksSummary,
+    MemberProjectTask,
+)
 from app.models.collaboration import (
     Blocker,
     Checkin,
@@ -60,16 +65,12 @@ from app.models.lightning_line import LightningLineResponse
 from app.models.memory import Memory, MemoryCreate
 from app.models.project import Project, ProjectCreate, ProjectUpdate, ProjectWithTaskCount
 from app.models.project_kpi import ProjectKpiTemplate
-from app.models.child_project_views import (
-    ChildProjectTaskSummary,
-    MemberChildTasksSummary,
-    MemberProjectTask,
-)
 from app.models.project_link import (
     InviteParentMemberRequest,
     ProjectLinkRequest,
     ProjectLinkRequestCreate,
 )
+from app.models.task import Task, TaskUpdate
 from app.services import notification_service as notify
 from app.services.kpi_calculator import apply_project_kpis
 from app.services.kpi_templates import get_kpi_templates
@@ -1481,6 +1482,39 @@ async def list_member_tasks_across_children(
                 )
 
     return list(member_map.values())
+
+
+@router.patch(
+    "/{project_id}/member-child-tasks/{task_id}",
+    response_model=Task,
+)
+async def update_member_child_task(
+    project_id: UUID,
+    task_id: UUID,
+    update: TaskUpdate,
+    user: CurrentUser,
+    repo: ProjectRepo,
+    member_repo: ProjectMemberRepo,
+    task_repo: TaskRepo,
+):
+    await require_project_member(user, project_id, repo, member_repo)
+    children = await repo.list_children_with_task_count(user.id, project_id)
+
+    for child in children:
+        task = await task_repo.get(child.user_id, task_id, project_id=child.id)
+        if not task:
+            continue
+        return await task_repo.update(
+            child.user_id,
+            task_id,
+            update,
+            project_id=child.id,
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"Task {task_id} not found in child projects of project {project_id}",
+    )
 
 
 # =============================================================================
