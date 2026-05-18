@@ -11,8 +11,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.api.deps import CurrentUser, ProjectRepo, TaskAssignmentRepo, TaskRepo, UserRepo
+from app.core.exceptions import NotFoundError
 from app.models.task import Task
+from app.models.today_plan import TodayPlanResponse, TodaySelectionUpdate
 from app.services.scheduler_service import SchedulerService
+from app.services.today_plan_service import TodayPlanService
 from app.utils.datetime_utils import get_user_today, normalize_timezone
 
 router = APIRouter()
@@ -88,6 +91,77 @@ def apply_capacity_buffer(
     if capacity_by_weekday:
         adjusted_weekday = [max(0.0, hours - buffer_hours) for hours in capacity_by_weekday]
     return max(0.0, base_hours - buffer_hours), adjusted_weekday
+
+
+@router.get("/plan", response_model=TodayPlanResponse, status_code=status.HTTP_200_OK)
+async def get_today_plan(
+    user: CurrentUser,
+    task_repo: TaskRepo,
+    project_repo: ProjectRepo,
+    assignment_repo: TaskAssignmentRepo,
+    user_repo: UserRepo,
+    scheduler_service: SchedulerService = Depends(get_scheduler_service),
+    capacity_hours: Optional[float] = Query(None, description="Daily capacity in hours"),
+    buffer_hours: Optional[float] = Query(None, description="Daily buffer hours"),
+    capacity_by_weekday: Optional[str] = Query(
+        None,
+        description="JSON array of 7 daily capacity values (Sun..Sat)",
+    ),
+    recommendation_limit: int = Query(6, ge=1, le=20),
+):
+    """Get today's user-selected plan plus scheduler recommendations."""
+    parsed_weekly = parse_capacity_by_weekday(capacity_by_weekday)
+    effective_capacity, effective_weekly = apply_capacity_buffer(
+        capacity_hours,
+        buffer_hours,
+        parsed_weekly,
+    )
+    service = TodayPlanService(
+        task_repo=task_repo,
+        project_repo=project_repo,
+        assignment_repo=assignment_repo,
+        user_repo=user_repo,
+        scheduler_service=scheduler_service,
+    )
+    return await service.build_plan(
+        user.id,
+        capacity_hours=effective_capacity,
+        capacity_by_weekday=effective_weekly,
+        recommendation_limit=recommendation_limit,
+    )
+
+
+@router.put("/selection", response_model=TodayPlanResponse, status_code=status.HTTP_200_OK)
+async def update_today_selection(
+    body: TodaySelectionUpdate,
+    user: CurrentUser,
+    task_repo: TaskRepo,
+    project_repo: ProjectRepo,
+    assignment_repo: TaskAssignmentRepo,
+    user_repo: UserRepo,
+    scheduler_service: SchedulerService = Depends(get_scheduler_service),
+    recommendation_limit: int = Query(6, ge=1, le=20),
+):
+    """Persist the tasks the user explicitly chose for today."""
+    service = TodayPlanService(
+        task_repo=task_repo,
+        project_repo=project_repo,
+        assignment_repo=assignment_repo,
+        user_repo=user_repo,
+        scheduler_service=scheduler_service,
+    )
+    try:
+        return await service.update_selection(
+            user.id,
+            body.task_ids,
+            replace=body.replace,
+            recommendation_limit=recommendation_limit,
+        )
+    except NotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get("/top3", response_model=Top3Response, status_code=status.HTTP_200_OK)

@@ -26,7 +26,15 @@ export function AppLayout() {
   const location = useLocation();
   const isMobile = useIsMobile();
   useRealtimeSync();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [mobileMenuState, setMobileMenuState] = useState({
+    isOpen: false,
+    pathname: location.pathname,
+  });
+  const isMobileMenuOpen =
+    mobileMenuState.pathname === location.pathname && mobileMenuState.isOpen;
+  const setMobileMenuOpen = useCallback((isOpen: boolean) => {
+    setMobileMenuState({ isOpen, pathname: location.pathname });
+  }, [location.pathname]);
   const loadChatState = () => userStorage.getJson<ChatState>(CHAT_STORAGE_KEY, {
     isOpen: false,
     width: 400,
@@ -69,27 +77,7 @@ export function AppLayout() {
     userStorage.setJson(SIDEBAR_STORAGE_KEY, isSidebarCollapsed);
   }, [isSidebarCollapsed]);
 
-  // Close mobile menu on route change
-  useEffect(() => {
-    setIsMobileMenuOpen(false);
-  }, [location.pathname]);
-
   const toggleSidebar = () => setIsSidebarCollapsed(!isSidebarCollapsed);
-
-  const startResizing = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    isResizing.current = true;
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', stopResizing);
-    document.body.style.cursor = 'col-resize';
-  }, []);
-
-  const stopResizing = useCallback(() => {
-    isResizing.current = false;
-    document.removeEventListener('mousemove', handleMouseMove);
-    document.removeEventListener('mouseup', stopResizing);
-    document.body.style.cursor = 'default';
-  }, []);
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     if (!isResizing.current) return;
@@ -98,6 +86,20 @@ export function AppLayout() {
       setChatWidth(newWidth);
     }
   }, []);
+
+  const stopResizing = useCallback(() => {
+    isResizing.current = false;
+    document.removeEventListener('mousemove', handleMouseMove);
+    document.body.style.cursor = 'default';
+  }, [handleMouseMove]);
+
+  const startResizing = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', stopResizing, { once: true });
+    document.body.style.cursor = 'col-resize';
+  }, [handleMouseMove, stopResizing]);
 
   // Cleanup
   useEffect(() => {
@@ -148,7 +150,7 @@ export function AppLayout() {
         <div className="mobile-header">
           <button
             className="hamburger-btn"
-            onClick={() => setIsMobileMenuOpen(true)}
+            onClick={() => setMobileMenuOpen(true)}
             aria-label="メニューを開く"
           >
             <FaBars />
@@ -164,7 +166,7 @@ export function AppLayout() {
         onToggle={toggleSidebar}
         isMobile={isMobile}
         mobileOpen={isMobileMenuOpen}
-        onMobileClose={() => setIsMobileMenuOpen(false)}
+        onMobileClose={() => setMobileMenuOpen(false)}
       />
       <main className="main-content">
         <AnimatePresence mode="wait">

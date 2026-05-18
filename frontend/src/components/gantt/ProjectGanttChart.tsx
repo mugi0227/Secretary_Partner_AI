@@ -1298,7 +1298,7 @@ export const ProjectGanttChart: React.FC<ProjectGanttChartProps> = ({
     });
 
     return result;
-  }, [phases, tasks, milestones, expandedPhases, expandedTasks, tasksByPhase, milestonesByPhase, dateRange, getDateIndex, dateIndexMap, taskOrderMap, milestoneOrderMap, parseDate, today, assigneeByTaskId]);
+  }, [phases, tasks, expandedPhases, expandedTasks, tasksByPhase, milestonesByPhase, dateRange, getDateIndex, dateIndexMap, taskOrderMap, milestoneOrderMap, parseDate, today, assigneeByTaskId]);
 
   // 依存関係の矢印データ
   const dependencyArrows = useMemo(() => {
@@ -1635,7 +1635,7 @@ export const ProjectGanttChart: React.FC<ProjectGanttChartProps> = ({
     });
 
     setTaskOrderMap(newOrderMap);
-  }, [tasks, phases, tasksByPhase, milestonesByPhase, milestones, timezone]);
+  }, [tasks, phases, tasksByPhase, milestonesByPhase, timezone]);
 
   // Handle sidebar drag over for milestone highlighting
   const handleSidebarDragOver = useCallback((event: DragOverEvent) => {
@@ -2144,7 +2144,7 @@ export const ProjectGanttChart: React.FC<ProjectGanttChartProps> = ({
     handleMouseUpRef.current = handleMouseUp;
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-  }, [viewMode, dateRange, rows, onTaskUpdate, onPhaseUpdate, onMilestoneUpdate, onTaskClick, onBatchTaskUpdate, findAllDependentTasks, tasks, phases, milestones, parseDate, isLinkMode, handleLinkModeClick, pushToHistory]);
+  }, [viewMode, dateRange, rows, onTaskUpdate, onPhaseUpdate, onMilestoneUpdate, onBatchTaskUpdate, findAllDependentTasks, tasks, phases, milestones, parseDate, isLinkMode, handleLinkModeClick, pushToHistory]);
 
   // コンポーネントのアンマウント時にクリーンアップ
   useEffect(() => {

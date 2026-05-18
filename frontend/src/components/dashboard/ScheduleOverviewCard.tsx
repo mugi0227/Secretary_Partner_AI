@@ -175,7 +175,7 @@ export function ScheduleOverviewCard({
       tasksApi.update(id, data),
     onSuccess: () => {
       for (const key of [
-        ['tasks'], ['subtasks'], ['top3'], ['today-tasks'], ['schedule'],
+        ['tasks'], ['subtasks'], ['top3'], ['today-tasks'], ['today-plan'], ['schedule'],
         ['task-detail'], ['task-assignments'], ['project'], ['meetings'], ['member-child-tasks'],
       ]) {
         queryClient.invalidateQueries({ queryKey: key });
@@ -444,7 +444,7 @@ export function ScheduleOverviewCard({
     try {
       await tasksApi.doToday(taskId, { pin: true });
       for (const key of [
-        ['tasks'], ['subtasks'], ['top3'], ['today-tasks'], ['schedule'],
+        ['tasks'], ['subtasks'], ['top3'], ['today-tasks'], ['today-plan'], ['schedule'],
         ['task-detail'], ['task-assignments'], ['project'], ['meetings'], ['member-child-tasks'],
       ]) {
         queryClient.invalidateQueries({ queryKey: key });

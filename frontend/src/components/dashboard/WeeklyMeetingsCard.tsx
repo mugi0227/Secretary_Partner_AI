@@ -265,20 +265,12 @@ export function WeeklyMeetingsCard({
   const today = todayInTimezone(timezone);
   const todayKey = toDateKey(today.toJSDate(), timezone);
   const currentWeekStart = startOfWeek(today);
-  const currentWeekStartKey = toDateKey(currentWeekStart.toJSDate(), timezone);
-  const weekStart = useMemo(
-    () => currentWeekStart.plus({ days: weekOffset * 7 }),
-    [currentWeekStartKey, weekOffset],
-  );
-  const dayStart = useMemo(
-    () => today.plus({ days: dayOffset }),
-    [dayOffset, todayKey],
-  );
+  const weekStart = currentWeekStart.plus({ days: weekOffset * 7 });
+  const dayStart = today.plus({ days: dayOffset });
   const viewStart = viewMode === 'today' ? dayStart : weekStart;
   const viewDaysCount = viewMode === 'today' ? 1 : viewMode === 'workdays' ? 5 : 7;
   const viewEnd = viewStart.plus({ days: viewDaysCount });
   const viewStartKey = toDateKey(viewStart.toJSDate(), timezone);
-  const viewEndKey = toDateKey(viewEnd.toJSDate(), timezone);
   const viewStartDay = viewStart.startOf('day');
   const scheduleStartKey = toDateKey(viewStartDay.toJSDate(), timezone);
   const scheduleDaysCount = viewDaysCount;
@@ -306,11 +298,11 @@ export function WeeklyMeetingsCard({
     }
   };
 
-  const days = useMemo(() => (
+  const days = (
     Array.from({ length: viewDaysCount }, (_, index) => {
       return viewStart.plus({ days: index });
     })
-  ), [viewStartKey, viewDaysCount]);
+  );
   const visibleDayKeys = useMemo(
     () => new Set(days.map(day => toLocalDateKey(day.toJSDate(), timezone))),
     [days, timezone],
@@ -361,16 +353,16 @@ export function WeeklyMeetingsCard({
     },
   });
 
-  const invalidateAfterChange = (includeSchedule = false) => {
+  const invalidateAfterChange = useCallback((includeSchedule = false) => {
     const keys = [
-      ['meetings'], ['tasks'], ['subtasks'], ['top3'], ['today-tasks'],
+      ['meetings'], ['tasks'], ['subtasks'], ['top3'], ['today-tasks'], ['today-plan'],
       ['task-detail'], ['task-assignments'], ['project'], ['member-child-tasks'],
     ];
     if (includeSchedule) keys.push(['schedule']);
     for (const key of keys) {
       queryClient.invalidateQueries({ queryKey: key });
     }
-  };
+  }, [queryClient]);
 
   // useTaskModal for modal management
   const taskModal = useTaskModal({
@@ -535,7 +527,7 @@ export function WeeklyMeetingsCard({
         } satisfies MeetingBlock;
       })
       .filter(Boolean) as MeetingBlock[];
-  }, [meetingTasks, viewStartKey, viewEndKey, timezone]);
+  }, [meetingTasks, viewStart, viewEnd, timezone]);
 
   const meetingTaskIds = useMemo(() => new Set(meetingTasks.map(task => task.id)), [meetingTasks]);
   const scheduleTaskMap = useMemo(
@@ -698,7 +690,7 @@ export function WeeklyMeetingsCard({
         } satisfies MeetingBlock;
       })
       .filter(Boolean) as MeetingBlock[];
-  }, [scheduleData?.time_blocks, scheduleTaskMap, meetingTaskMap, viewStartKey, viewEndKey, timezone]);
+  }, [scheduleData?.time_blocks, scheduleTaskMap, meetingTaskMap, viewStart, viewEnd, timezone]);
 
   const hasPlanBlocks = planBlocks.length > 0;
 
@@ -964,7 +956,7 @@ export function WeeklyMeetingsCard({
     }
     const viewEndDate = viewEnd.minus({ days: 1 });
     return formatRangeLabel(viewStart.toJSDate(), viewEndDate.toJSDate(), timezone);
-  }, [viewMode, viewStartKey, viewEndKey, timezone]);
+  }, [viewMode, viewStart, viewEnd, timezone]);
   const gridHeight = hourCount * hourHeight;
   const scheduleHasItems = renderMeetingBlocks.length > 0 || renderAutoBlocks.length > 0;
 

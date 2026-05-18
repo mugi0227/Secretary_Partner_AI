@@ -38,6 +38,12 @@ export function EditableSelect({
   const [isOpen, setIsOpen] = useState(false);
   const selectRef = useRef<HTMLDivElement>(null);
 
+  const handleCancel = useCallback(() => {
+    setIsEditing(false);
+    setIsOpen(false);
+    setPendingValue(value ?? null);
+  }, [value]);
+
   useEffect(() => {
     if (isEditing) {
       setPendingValue(value ?? null);
@@ -55,7 +61,7 @@ export function EditableSelect({
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
+  }, [isOpen, handleCancel]);
 
   const handleStartEdit = useCallback(() => {
     if (disabled) return;
@@ -75,12 +81,6 @@ export function EditableSelect({
       setIsSaving(false);
     }
   }, [pendingValue, onSave, isSaving]);
-
-  const handleCancel = useCallback(() => {
-    setIsEditing(false);
-    setIsOpen(false);
-    setPendingValue(value ?? null);
-  }, [value]);
 
   const handleSelect = useCallback(async (optionValue: string | null) => {
     if (isSaving) return;

@@ -139,6 +139,36 @@
   background: rgba(148, 163, 184, 0.06);
 }
 
+.history-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.history-mark-read-btn {
+  border: 1px solid rgba(14, 165, 233, 0.22);
+  background: rgba(14, 165, 233, 0.08);
+  color: var(--primary);
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 700;
+  height: 26px;
+  padding: 0 0.65rem;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.history-mark-read-btn:hover:not(:disabled) {
+  border-color: rgba(14, 165, 233, 0.45);
+  background: rgba(14, 165, 233, 0.14);
+}
+
+.history-mark-read-btn:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .history-panel-list {
   display: flex;
   flex-direction: column;
@@ -169,6 +199,43 @@
 .history-panel-item.active {
   border-color: rgba(14, 165, 233, 0.7);
   background: rgba(14, 165, 233, 0.08);
+}
+
+.history-panel-item.unread {
+  border-color: rgba(251, 146, 60, 0.45);
+  background: rgba(251, 146, 60, 0.08);
+}
+
+.history-panel-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.history-panel-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-panel-date {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.history-new-badge {
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--accent-orange);
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 800;
+  line-height: 1;
+  padding: 0.22rem 0.42rem;
+  box-shadow: 0 5px 12px -7px rgba(251, 146, 60, 0.9);
 }
 
 .chat-title-area {
@@ -244,6 +311,34 @@
   font-size: 1rem;
   transition: all 0.2s ease;
   color: var(--text-muted);
+  position: relative;
+}
+
+.header-btn:hover {
+  background: rgba(14, 165, 233, 0.08);
+  color: var(--primary);
+}
+
+.heartbeat-header-btn.has-unread {
+  color: var(--primary);
+}
+
+.header-btn-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent-orange);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 14px -7px rgba(251, 146, 60, 0.9);
 }
 
 .chat-history {

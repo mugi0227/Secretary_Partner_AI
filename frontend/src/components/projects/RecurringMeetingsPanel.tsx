@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FaCalendarAlt, FaPause, FaPlay, FaPlus, FaTrash, FaPen, FaCalendarPlus } from 'react-icons/fa';
 import { recurringMeetingsApi } from '../../api/recurringMeetings';
 import type { RecurringMeeting, RecurringMeetingCreate, RecurrenceFrequency } from '../../api/types';
@@ -84,7 +84,7 @@ export function RecurringMeetingsPanel({ projectId }: RecurringMeetingsPanelProp
   const [lookaheadDays, setLookaheadDays] = useState(30);
   const [generateSuccess, setGenerateSuccess] = useState<string | null>(null);
 
-  const loadMeetings = async () => {
+  const loadMeetings = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
@@ -96,11 +96,11 @@ export function RecurringMeetingsPanel({ projectId }: RecurringMeetingsPanelProp
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [projectId]);
 
   useEffect(() => {
     loadMeetings();
-  }, [projectId]);
+  }, [loadMeetings]);
 
   const meetingCards = useMemo(() => {
     return meetings.map((meeting) => ({

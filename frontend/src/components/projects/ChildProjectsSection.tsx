@@ -11,6 +11,8 @@ import './ChildProjectsSection.css';
 interface ChildProjectsSectionProps {
   projectId: string;
   projectName: string;
+  canCreateDirectChild?: boolean;
+  canReviewLinkRequests?: boolean;
   onTaskClick?: (taskId: string) => void;
 }
 
@@ -266,9 +268,11 @@ function PendingRequestCard({
 function IncomingRequestCard({
   request,
   childProjectId,
+  canReview,
 }: {
   request: ProjectLinkRequest;
   childProjectId: string;
+  canReview: boolean;
 }) {
   const queryClient = useQueryClient();
 
@@ -309,6 +313,7 @@ function IncomingRequestCard({
           <span className="child-project-status-badge status-pending">{approvalLabel}</span>
         </div>
       </div>
+      {canReview && (
       <div className="child-project-actions">
         <button
           className="btn-approve"
@@ -327,11 +332,18 @@ function IncomingRequestCard({
           <FaXmark /> 拒否
         </button>
       </div>
+      )}
     </div>
   );
 }
 
-export function ChildProjectsSection({ projectId, projectName, onTaskClick }: ChildProjectsSectionProps) {
+export function ChildProjectsSection({
+  projectId,
+  projectName,
+  canCreateDirectChild = false,
+  canReviewLinkRequests = false,
+  onTaskClick,
+}: ChildProjectsSectionProps) {
   const queryClient = useQueryClient();
   const [showAddOptions, setShowAddOptions] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -389,6 +401,7 @@ export function ChildProjectsSection({ projectId, projectName, onTaskClick }: Ch
               key={request.id}
               request={request}
               childProjectId={projectId}
+              canReview={canReviewLinkRequests}
             />
           ))}
         </div>
@@ -408,7 +421,7 @@ export function ChildProjectsSection({ projectId, projectName, onTaskClick }: Ch
                   key={request.id}
                   request={request}
                   parentProjectId={projectId}
-                  isOwner={true}
+                  isOwner={canReviewLinkRequests}
                 />
               ))}
             </div>
@@ -456,6 +469,7 @@ export function ChildProjectsSection({ projectId, projectName, onTaskClick }: Ch
       </div>
 
       {showAddOptions && (
+        <>
         <div className="child-project-add-area" style={{ marginTop: '8px' }}>
           <button
             className="child-project-add-btn"
@@ -463,6 +477,12 @@ export function ChildProjectsSection({ projectId, projectName, onTaskClick }: Ch
               setShowCreateModal(true);
               setShowAddOptions(false);
             }}
+            disabled={!canCreateDirectChild}
+            title={
+              canCreateDirectChild
+                ? undefined
+                : '親プロジェクトのオーナーだけが直接作成できます'
+            }
           >
             <FaPlus className="btn-icon" />
             手動で作成
@@ -470,6 +490,7 @@ export function ChildProjectsSection({ projectId, projectName, onTaskClick }: Ch
           <button
             className="child-project-add-btn"
             onClick={() => {
+              if (!canCreateDirectChild) return;
               const draftCard = {
                 type: 'task' as const,
                 title: '子プロジェクト作成',
@@ -483,6 +504,12 @@ export function ChildProjectsSection({ projectId, projectName, onTaskClick }: Ch
               window.dispatchEvent(event);
               setShowAddOptions(false);
             }}
+            disabled={!canCreateDirectChild}
+            title={
+              canCreateDirectChild
+                ? undefined
+                : '親プロジェクトのオーナーだけが直接作成できます'
+            }
           >
             <FaWandMagicSparkles className="btn-icon" />
             AIで作成
@@ -498,6 +525,12 @@ export function ChildProjectsSection({ projectId, projectName, onTaskClick }: Ch
             既存プロジェクトを紐付け
           </button>
         </div>
+          {!canCreateDirectChild && (
+            <div className="child-project-permission-note">
+              直接作成とAI作成は親プロジェクトのオーナーのみです。既存プロジェクトの紐付けリクエストは送れます。
+            </div>
+          )}
+        </>
       )}
 
       {showCreateModal && (

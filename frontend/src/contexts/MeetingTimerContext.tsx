@@ -1,6 +1,7 @@
 /**
  * Context for managing active meeting session state across pages
  */
+/* eslint-disable react-refresh/only-export-components */
 
 import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
 import type { MeetingSession } from '../types/session';

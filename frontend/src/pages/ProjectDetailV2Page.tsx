@@ -67,6 +67,8 @@ import { useTimezone } from '../hooks/useTimezone';
 import { formatDate, getDeadlineStatus, toDateKey, toDateTime, todayInTimezone } from '../utils/dateTime';
 import './ProjectDetailV2Page.css';
 
+const STATUS_ORDER: Record<string, number> = { IN_PROGRESS: 0, TODO: 1, WAITING: 2, DONE: 3 };
+
 type TabId = 'dashboard' | 'team' | 'timeline' | 'board' | 'gantt' | 'meetings' | 'achievements' | 'tree';
 type InviteMode = 'email' | 'user_id';
 
@@ -567,6 +569,7 @@ export function ProjectDetailV2Page() {
       ['subtasks'],
       ['top3'],
       ['today-tasks'],
+      ['today-plan'],
       ['schedule'],
       ['task-detail'],
       ['task-assignments'],
@@ -625,7 +628,7 @@ export function ProjectDetailV2Page() {
     fetchCollaboration();
   }, [projectId]);
 
-  const refreshPhases = async () => {
+  const refreshPhases = useCallback(async () => {
     if (!projectId) return;
     setIsPhasesLoading(true);
     try {
@@ -636,9 +639,9 @@ export function ProjectDetailV2Page() {
     } finally {
       setIsPhasesLoading(false);
     }
-  };
+  }, [projectId]);
 
-  const refreshMilestones = async () => {
+  const refreshMilestones = useCallback(async () => {
     if (!projectId) return;
     setIsMilestonesLoading(true);
     try {
@@ -649,13 +652,13 @@ export function ProjectDetailV2Page() {
     } finally {
       setIsMilestonesLoading(false);
     }
-  };
+  }, [projectId]);
 
   useEffect(() => {
     if (!projectId) return;
     refreshPhases();
     refreshMilestones();
-  }, [projectId]);
+  }, [projectId, refreshPhases, refreshMilestones]);
 
   useEffect(() => {
     if (members.length === 0) {
@@ -960,8 +963,6 @@ export function ProjectDetailV2Page() {
     });
     return stats;
   }, [assignments, tasks, timezone]);
-
-  const STATUS_ORDER: Record<string, number> = { IN_PROGRESS: 0, TODO: 1, WAITING: 2, DONE: 3 };
 
   const tasksByMemberId = useMemo(() => {
     const map: Record<string, Task[]> = {};
@@ -1520,7 +1521,10 @@ export function ProjectDetailV2Page() {
 
   // Current user's role in this project
   const currentUserMember = members.find((m) => m.member_user_id === currentUser?.id);
-  const canDeleteProject = currentUserMember?.role === 'OWNER' || currentUserMember?.role === 'ADMIN';
+  const isProjectOwner =
+    project?.user_id === currentUser?.id || currentUserMember?.role === 'OWNER';
+  const projectPermissionLabel = isProjectOwner ? 'OWNER' : (currentUserMember?.role ?? 'VIEWER');
+  const canDeleteProject = isProjectOwner || currentUserMember?.role === 'ADMIN';
   const canDeleteAnyCheckin = canDeleteProject;
 
   const handleOpenProjectModal = () => {
@@ -1612,6 +1616,9 @@ export function ProjectDetailV2Page() {
               {project?.name || 'プロジェクト'}
               <span className={`project-v2-visibility-badge ${project?.visibility === 'TEAM' ? 'team' : 'private'}`}>
                 {project?.visibility === 'TEAM' ? <><FaUsers /> チーム</> : <><FaLock /> 個人</>}
+              </span>
+              <span className={`project-v2-permission-badge role-${projectPermissionLabel.toLowerCase()}`}>
+                あなたの権限: {projectPermissionLabel}
               </span>
             </h1>
           </div>
@@ -1732,6 +1739,8 @@ export function ProjectDetailV2Page() {
               <ChildProjectsSection
                 projectId={projectId}
                 projectName={project?.name || ''}
+                canCreateDirectChild={isProjectOwner}
+                canReviewLinkRequests={isProjectOwner}
                 onTaskClick={(taskId) => taskModal.openTaskDetailById(taskId)}
               />
             )}
@@ -2302,7 +2311,9 @@ export function ProjectDetailV2Page() {
                     {members.length === 0 ? (
                       <p className="project-v2-muted">メンバーがまだいません。</p>
                     ) : (
-                      members.map((member) => (
+                      members.map((member) => {
+                        const isOwnerMember = member.member_user_id === project?.user_id;
+                        return (
                         <div key={member.id} className="project-v2-list-item">
                           <div>
                             <div className="project-v2-list-title">
@@ -2352,22 +2363,23 @@ export function ProjectDetailV2Page() {
                               className="project-v2-select"
                               value={member.role}
                               onChange={(e) => handleMemberRoleChange(member.id, e.target.value as ProjectMember['role'])}
-                              disabled={memberActionId === member.id}
+                              disabled={memberActionId === member.id || isOwnerMember}
                             >
-                              <option value="OWNER">OWNER</option>
+                              {isOwnerMember && <option value="OWNER">OWNER</option>}
                               <option value="ADMIN">ADMIN</option>
                               <option value="MEMBER">MEMBER</option>
                             </select>
                             <button
                               className="project-v2-button ghost"
                               onClick={() => handleRemoveMember(member.id)}
-                              disabled={memberActionId === member.id}
+                              disabled={memberActionId === member.id || isOwnerMember}
                             >
                               削除
                             </button>
                           </div>
                         </div>
-                      ))
+                        );
+                      })
                     )}
                   </div>
                 )}

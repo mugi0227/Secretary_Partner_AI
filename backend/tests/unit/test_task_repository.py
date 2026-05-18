@@ -94,6 +94,28 @@ async def test_update_task(session_factory, test_user_id):
 
 
 @pytest.mark.asyncio
+async def test_update_task_can_clear_pinned_date(session_factory, test_user_id):
+    """Explicit None should clear nullable fields such as pinned_date."""
+    repo = SqliteTaskRepository(session_factory=session_factory)
+    pinned_date = datetime(2026, 1, 15, tzinfo=timezone.utc)
+
+    created = await repo.create(
+        test_user_id,
+        TaskCreate(
+            title="Pinned task",
+            pinned_date=pinned_date,
+            created_by=CreatedBy.USER,
+        ),
+    )
+
+    assert created.pinned_date == pinned_date
+
+    updated = await repo.update(test_user_id, created.id, TaskUpdate(pinned_date=None))
+
+    assert updated.pinned_date is None
+
+
+@pytest.mark.asyncio
 async def test_status_done_sets_progress_and_completion_metadata(session_factory, test_user_id):
     """DONE transition should force progress to 100 and set completion metadata."""
     repo = SqliteTaskRepository(session_factory=session_factory)

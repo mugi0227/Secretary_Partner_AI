@@ -13,17 +13,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-import sys
-from datetime import date, datetime, time, timedelta, timezone
-from pathlib import Path
+from datetime import datetime, time, timedelta, timezone
 from uuid import UUID, uuid4
-
-# Suppress noisy SQLAlchemy logs during seed
-logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
-logging.getLogger("sqlalchemy.engine.Engine").setLevel(logging.WARNING)
-
-# Ensure backend root is on sys.path
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.core.config import get_settings
 from app.core.security import create_access_token, hash_password
@@ -58,8 +49,8 @@ from app.models.enums import (
 from app.models.heartbeat import (
     HeartbeatEventCreate,
     HeartbeatIntensity,
-    HeartbeatSeverity,
     HeartbeatSettingsUpdate,
+    HeartbeatSeverity,
 )
 from app.models.meeting_agenda import MeetingAgendaItemCreate
 from app.models.memory import MemoryCreate
@@ -69,6 +60,10 @@ from app.models.project import ProjectCreate
 from app.models.recurring_meeting import RecurrenceFrequency, RecurringMeetingCreate
 from app.models.task import TaskCreate, TaskUpdate
 from app.models.user import UserCreate
+
+# Suppress noisy SQLAlchemy logs during seed
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+logging.getLogger("sqlalchemy.engine.Engine").setLevel(logging.WARNING)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -976,11 +971,23 @@ async def seed(*, dry_run: bool = True) -> None:
     from app.infrastructure.local.achievement_repository import (
         SqliteAchievementRepository,
     )
+    from app.infrastructure.local.chat_session_repository import (
+        SqliteChatSessionRepository,
+    )
     from app.infrastructure.local.checkin_repository import SqliteCheckinRepository
+    from app.infrastructure.local.heartbeat_event_repository import (
+        SqliteHeartbeatEventRepository,
+    )
+    from app.infrastructure.local.heartbeat_settings_repository import (
+        SqliteHeartbeatSettingsRepository,
+    )
     from app.infrastructure.local.meeting_agenda_repository import (
         SqliteMeetingAgendaRepository,
     )
     from app.infrastructure.local.memory_repository import SqliteMemoryRepository
+    from app.infrastructure.local.notification_repository import (
+        SqliteNotificationRepository,
+    )
     from app.infrastructure.local.phase_repository import SqlitePhaseRepository
     from app.infrastructure.local.project_achievement_repository import (
         SqliteProjectAchievementRepository,
@@ -997,18 +1004,6 @@ async def seed(*, dry_run: bool = True) -> None:
     )
     from app.infrastructure.local.task_repository import SqliteTaskRepository
     from app.infrastructure.local.user_repository import SqliteUserRepository
-    from app.infrastructure.local.heartbeat_settings_repository import (
-        SqliteHeartbeatSettingsRepository,
-    )
-    from app.infrastructure.local.heartbeat_event_repository import (
-        SqliteHeartbeatEventRepository,
-    )
-    from app.infrastructure.local.notification_repository import (
-        SqliteNotificationRepository,
-    )
-    from app.infrastructure.local.chat_session_repository import (
-        SqliteChatSessionRepository,
-    )
 
     user_repo = SqliteUserRepository()
     project_repo = SqliteProjectRepository()
@@ -1125,7 +1120,7 @@ async def seed(*, dry_run: bool = True) -> None:
     for pm in _project_members():
         create = pm["create"]
         create.member_user_id = resolve_member_id(create.member_user_id)
-        member = await member_repo.create(
+        await member_repo.create(
             user_id=resolve_user_id(pm["owner"]),
             project_id=real_project_ids[pm["project_key"]],
             member=create,
@@ -1137,7 +1132,7 @@ async def seed(*, dry_run: bool = True) -> None:
     for ci in _checkins():
         create = ci["create"]
         create.member_user_id = resolve_member_id(create.member_user_id)
-        checkin = await checkin_repo.create_v2(
+        await checkin_repo.create_v2(
             user_id=resolve_user_id(ci["owner"]),
             project_id=real_project_ids[ci["project_key"]],
             checkin=create,
@@ -1201,7 +1196,7 @@ async def seed(*, dry_run: bool = True) -> None:
                 if create.project_id == PROJECT_IDS.get(key):
                     create.project_id = pid
                     break
-        memory = await memory_repo.create(
+        await memory_repo.create(
             user_id=resolve_user_id(m["owner"]),
             memory=create,
         )
@@ -1225,7 +1220,7 @@ async def seed(*, dry_run: bool = True) -> None:
         task_title = he["task_title"]
         if task_title in task_ids_by_title:
             event.task_id = task_ids_by_title[task_title]
-        hb_event = await heartbeat_event_repo.create(event)
+        await heartbeat_event_repo.create(event)
         print(f"  [OK] [{event.severity.value:8s}] score={event.risk_score:.2f} {task_title}")
 
     # ---- 15. Heartbeat Chat Messages ----
@@ -1237,7 +1232,7 @@ async def seed(*, dry_run: bool = True) -> None:
         # Resolve task://__resolve__ to actual task id
         if task_title in task_ids_by_title:
             content = content.replace("__resolve__", str(task_ids_by_title[task_title]))
-        msg = await chat_repo.add_message(
+        await chat_repo.add_message(
             user_id=mugi_uid,
             session_id=hc["session_id"],
             role="assistant",
@@ -1260,7 +1255,7 @@ async def seed(*, dry_run: bool = True) -> None:
                 if notif.project_id == PROJECT_IDS.get(key):
                     notif.project_id = pid
                     break
-        created_notif = await notification_repo.create(notif)
+        await notification_repo.create(notif)
         print(f"  [OK] {notif.title}: {task_title}")
 
     # ---- Summary ----
@@ -1282,35 +1277,35 @@ def _print_plan() -> None:
     for p in _projects():
         print(f"  - {p['create'].name} (owner: {p['owner']}, vis: {p['create'].visibility})")
 
-    print(f"\nPhases (2): A社PJ設計・実装フェーズ")
+    print("\nPhases (2): A社PJ設計・実装フェーズ")
 
     print(f"\nTasks ({len(_existing_tasks())}):")
     for t in _existing_tasks():
         status = t.get("status", "TODO")
         print(f"  - [{status:11s}] {t['create'].title} (owner: {t['owner']})")
 
-    print(f"\nProject Members (3): A社PJにmugi/yuki/takeshi")
+    print("\nProject Members (3): A社PJにmugi/yuki/takeshi")
 
-    print(f"\nCheck-ins (3): mugi/yuki/takeshiの本日分")
+    print("\nCheck-ins (3): mugi/yuki/takeshiの本日分")
 
-    print(f"\nRecurring Meeting (1): A社PJ 週次定例（水曜10:00）")
+    print("\nRecurring Meeting (1): A社PJ 週次定例（水曜10:00）")
 
-    print(f"\nMeeting Agenda Items (4): チェックインベースの議題")
+    print("\nMeeting Agenda Items (4): チェックインベースの議題")
 
-    print(f"\nAchievement (1): Mugiの週次達成項目")
+    print("\nAchievement (1): Mugiの週次達成項目")
 
-    print(f"\nProject Achievement (1): A社PJチーム達成")
+    print("\nProject Achievement (1): A社PJチーム達成")
 
-    print(f"\nMemories (4): ユーザー嗜好2件 + プロジェクト情報2件")
+    print("\nMemories (4): ユーザー嗜好2件 + プロジェクト情報2件")
 
-    print(f"\nHeartbeat Settings (1): Mugiの見落としチェック設定")
-    print(f"\nHeartbeat Events (3): ステージング環境/アウトライン/API設計書のリスク検知")
+    print("\nHeartbeat Settings (1): Mugiの見落としチェック設定")
+    print("\nHeartbeat Events (3): ステージング環境/アウトライン/API設計書のリスク検知")
 
-    print(f"\nHeartbeat Chat Messages (2): 高リスクタスクへのAI声かけチャット")
+    print("\nHeartbeat Chat Messages (2): 高リスクタスクへのAI声かけチャット")
 
-    print(f"\nHeartbeat Notifications (2): 未着手タスクのリマインド通知")
+    print("\nHeartbeat Notifications (2): 未着手タスクのリマインド通知")
 
-    print(f"\n→ --apply フラグで実行してください")
+    print("\n→ --apply フラグで実行してください")
 
 
 def main() -> None:

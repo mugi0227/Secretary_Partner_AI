@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -179,8 +179,9 @@ function AchievementCard({
     index?: number;
     value: string;
   } | null>(null);
-  const [appendNote, setAppendNote] = useState(achievement.append_note ?? '');
-  const taskSnapshots = achievement.task_snapshots ?? [];
+  const [appendNoteDraft, setAppendNoteDraft] = useState<string | null>(null);
+  const appendNote = appendNoteDraft ?? achievement.append_note ?? '';
+  const taskSnapshots = useMemo(() => achievement.task_snapshots ?? [], [achievement.task_snapshots]);
   const groupedTasks = useMemo(
     () => groupTasksByProject(taskSnapshots, projectMap),
     [taskSnapshots, projectMap],
@@ -196,10 +197,6 @@ function AchievementCard({
     achievement.skill_analysis.soft_skills.length > 0 ||
     achievement.skill_analysis.work_types.length > 0;
   const isBusy = isDeleting || isRegenerating || isUpdating || isSummarizing;
-
-  useEffect(() => {
-    setAppendNote(achievement.append_note ?? '');
-  }, [achievement.append_note]);
 
   const handleEditStart = (section: EditableSection, value: string, index?: number) => {
     setEditing({ section, value, index });
@@ -270,6 +267,7 @@ function AchievementCard({
 
   const handleAppendNoteSave = async () => {
     await onUpdate(achievement.id, { append_note: appendNote });
+    setAppendNoteDraft(null);
   };
 
   return (
@@ -901,7 +899,7 @@ function AchievementCard({
                 className="edit-textarea"
                 rows={4}
                 value={appendNote}
-                onChange={(event) => setAppendNote(event.target.value)}
+                onChange={(event) => setAppendNoteDraft(event.target.value)}
                 disabled={isBusy}
               />
               <div className="item-actions append-note-actions">
@@ -997,7 +995,10 @@ export function AchievementPage() {
     queryFn: () => achievementsApi.list({ limit: 20 }),
   });
 
-  const achievements = achievementsData?.achievements ?? [];
+  const achievements = useMemo(
+    () => achievementsData?.achievements ?? [],
+    [achievementsData?.achievements],
+  );
   const hasLatestWeekAchievement = useMemo(
     () => achievements.some((achievement) => isSamePeriod(achievement, weekStart, weekEnd, timezone)),
     [achievements, weekStart, weekEnd, timezone]

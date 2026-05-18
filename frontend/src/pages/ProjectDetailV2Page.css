@@ -60,6 +60,22 @@
   color: #7c3aed;
 }
 
+.project-v2-permission-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(14, 165, 233, 0.1);
+  color: var(--primary);
+}
+
+.project-v2-permission-badge.role-viewer {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text-muted);
+}
+
 .project-v2-header-actions {
   display: flex;
   flex-wrap: wrap;

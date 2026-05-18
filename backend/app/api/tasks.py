@@ -42,12 +42,11 @@ from app.models.task import CompletionCheckResponse, Task, TaskCreate, TaskUpdat
 from app.services.assignee_utils import is_invitation_assignee
 from app.services.daily_schedule_plan_service import DEFAULT_PLAN_DAYS, DailySchedulePlanService
 from app.services.scheduler_service import SchedulerService
-from app.services.task_utils import renumber_siblings
+from app.services.task_application_service import TaskApplicationService
 from app.utils.datetime_utils import (
     all_day_bounds_to_utc,
     get_user_today,
     normalize_timezone,
-    user_date_to_utc,
 )
 from app.utils.dependency_validator import DependencyValidator
 
@@ -89,6 +88,32 @@ async def _validate_assignees_are_project_members(
 def get_scheduler_service() -> SchedulerService:
     """Get SchedulerService instance."""
     return SchedulerService()
+
+
+def _get_task_application_service(
+    repo: TaskRepo,
+    project_repo: ProjectRepo,
+    assignment_repo: Optional[TaskAssignmentRepo] = None,
+    member_repo: Optional[ProjectMemberRepo] = None,
+    postpone_repo: Optional[PostponeRepo] = None,
+    user_repo: Optional[UserRepo] = None,
+) -> TaskApplicationService:
+    return TaskApplicationService(
+        task_repo=repo,
+        project_repo=project_repo,
+        assignment_repo=assignment_repo,
+        member_repo=member_repo,
+        user_repo=user_repo or get_user_repository(),
+        postpone_repo=postpone_repo,
+    )
+
+
+def _to_task_http_exception(exc: Exception) -> HTTPException:
+    if isinstance(exc, NotFoundError):
+        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    if isinstance(exc, BusinessLogicError):
+        return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    return HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
 
 
 async def _resolve_user_timezone(
@@ -176,88 +201,12 @@ async def create_task(
     assignment_repo: TaskAssignmentRepo,
 ):
     """Create a new task."""
-    owner_user_id = user.id
-    task_project_id = task.project_id
-    project = None
-    if task_project_id:
-        project = await project_repo.get(user.id, task_project_id)
-        if not project:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Project {task_project_id} not found",
-            )
-        owner_user_id = project.user_id
-
-    # Validate dependencies before creating
-    if task.dependency_ids or task.parent_id:
-        validator = DependencyValidator(repo)
-
-        # For new tasks, use a temporary UUID for validation
-        from uuid import uuid4
-
-        temp_task_id = uuid4()
-
-        try:
-            if task.dependency_ids:
-                await validator.validate_dependencies(
-                    temp_task_id,
-                    task.dependency_ids,
-                    owner_user_id,
-                    task.parent_id,
-                    project_id=task_project_id,
-                )
-
-            if task.parent_id:
-                await validator.validate_parent_child_consistency(
-                    temp_task_id,
-                    task.parent_id,
-                    owner_user_id,
-                )
-        except BusinessLogicError as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(e),
-            )
-
-    # Shift existing siblings when inserting at a specific position
-    if task.parent_id and task.order_in_parent is not None:
-        existing_siblings = await repo.get_subtasks(
-            owner_user_id,
-            task.parent_id,
-            project_id=task_project_id,
-        )
-        for sibling in existing_siblings:
-            if (
-                sibling.order_in_parent is not None
-                and sibling.order_in_parent >= task.order_in_parent
-            ):
-                await repo.update(
-                    owner_user_id,
-                    sibling.id,
-                    TaskUpdate(order_in_parent=sibling.order_in_parent + 1),
-                    project_id=task_project_id,
-                )
-
-    if task.is_all_day:
-        timezone_name = await _resolve_user_timezone(owner_user_id)
-        reference = task.start_time or task.due_date or task.start_not_before
-        start_utc, end_utc = all_day_bounds_to_utc(timezone_name, reference=reference)
-        task.start_time = start_utc
-        task.end_time = end_utc
-        task.is_fixed_time = True
-
-    created_task = await repo.create(owner_user_id, task)
-
-    # Auto-assign user for PRIVATE projects
-    if task_project_id and project and project.visibility == ProjectVisibility.PRIVATE:
-        # Automatically assign the current user to the task
-        await assignment_repo.assign_multiple(
-            owner_user_id,
-            created_task.id,
-            TaskAssignmentsCreate(assignee_ids=[user.id]),
-        )
-
-    return created_task
+    service = _get_task_application_service(repo, project_repo, assignment_repo)
+    try:
+        result = await service.create_task(user.id, task)
+    except (BusinessLogicError, NotFoundError) as exc:
+        raise _to_task_http_exception(exc) from exc
+    return result.task
 
 
 @router.get("", response_model=list[Task])
@@ -633,6 +582,12 @@ async def update_task(
     assignment_repo: TaskAssignmentRepo,
 ):
     """Update a task."""
+    service = _get_task_application_service(repo, project_repo, assignment_repo)
+    try:
+        return await service.update_task(user.id, task_id, update)
+    except (BusinessLogicError, NotFoundError) as exc:
+        raise _to_task_http_exception(exc) from exc
+
     # Find task - try personal access first, then project-based
     current_task = await repo.get(user.id, task_id)
     task_owner_user_id = user.id
@@ -745,38 +700,17 @@ async def delete_task(
     project_repo: ProjectRepo,
 ):
     """Delete a task."""
-    # Try personal access first, then project-based (same pattern as update_task)
-    task = await repo.get(user.id, task_id)
-    task_project_id: Optional[UUID] = None
-
-    if task:
-        task_project_id = task.project_id
-    else:
-        # Use get_by_id to find task regardless of user_id (covers project tasks)
-        task = await repo.get_by_id(user.id, task_id)
-        if task and task.project_id:
-            project = await project_repo.get(user.id, task.project_id)
-            if project:
-                task_project_id = task.project_id
-            else:
-                task = None  # No access
-
-    if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task {task_id} not found",
-        )
-
-    parent_id = task.parent_id
-    deleted = await repo.delete(user.id, task_id, project_id=task_project_id)
+    service = _get_task_application_service(repo, project_repo)
+    try:
+        deleted = await service.delete_task(user.id, task_id)
+    except (BusinessLogicError, NotFoundError) as exc:
+        raise _to_task_http_exception(exc) from exc
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Task {task_id} not found",
         )
-
-    if parent_id:
-        await renumber_siblings(repo, user.id, parent_id, task_project_id)
+    return None
 
 
 @router.get("/{task_id}/subtasks", response_model=list[Task])
@@ -955,15 +889,11 @@ async def assign_task(
     member_repo: ProjectMemberRepo,
 ):
     """Assign a task to a member (upsert)."""
-    task, owner_user_id = await _get_task_or_404(user, repo, task_id, project_repo)
-    await _validate_assignees_are_project_members(
-        [assignment.assignee_id],
-        task,
-        project_repo,
-        member_repo,
-        user.id,
-    )
-    return await assignment_repo.assign(owner_user_id, task_id, assignment)
+    service = _get_task_application_service(repo, project_repo, assignment_repo, member_repo)
+    try:
+        return await service.assign_task(user.id, task_id, assignment)
+    except (BusinessLogicError, NotFoundError) as exc:
+        raise _to_task_http_exception(exc) from exc
 
 
 @router.put("/{task_id}/assignments", response_model=list[TaskAssignment])
@@ -977,15 +907,11 @@ async def assign_task_multiple(
     member_repo: ProjectMemberRepo,
 ):
     """Assign a task to multiple members. Replaces existing assignments."""
-    task, owner_user_id = await _get_task_or_404(user, repo, task_id, project_repo)
-    await _validate_assignees_are_project_members(
-        assignments.assignee_ids,
-        task,
-        project_repo,
-        member_repo,
-        user.id,
-    )
-    return await assignment_repo.assign_multiple(owner_user_id, task_id, assignments)
+    service = _get_task_application_service(repo, project_repo, assignment_repo, member_repo)
+    try:
+        return await service.assign_task_multiple(user.id, task_id, assignments)
+    except (BusinessLogicError, NotFoundError) as exc:
+        raise _to_task_http_exception(exc) from exc
 
 
 @router.patch("/assignments/{assignment_id}", response_model=TaskAssignment)
@@ -998,24 +924,11 @@ async def update_task_assignment(
     assignment_repo: TaskAssignmentRepo,
 ):
     """Update assignment fields."""
-    # First get the assignment to find the task_id
-    assignment = await assignment_repo.get_by_id(assignment_id)
-    if not assignment:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Assignment {assignment_id} not found",
-        )
-
-    # Verify project access and get owner_user_id
-    _, owner_user_id = await _get_task_or_404(user, repo, assignment.task_id, project_repo)
-
     try:
-        return await assignment_repo.update(owner_user_id, assignment_id, update)
-    except NotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        )
+        service = _get_task_application_service(repo, project_repo, assignment_repo)
+        return await service.update_assignment(user.id, assignment_id, update)
+    except (BusinessLogicError, NotFoundError) as exc:
+        raise _to_task_http_exception(exc) from exc
 
 
 @router.delete("/{task_id}/assignment", status_code=status.HTTP_204_NO_CONTENT)
@@ -1027,8 +940,11 @@ async def unassign_task(
     assignment_repo: TaskAssignmentRepo,
 ):
     """Remove assignment from a task."""
-    _, owner_user_id = await _get_task_or_404(user, repo, task_id, project_repo)
-    deleted = await assignment_repo.delete_by_task(owner_user_id, task_id)
+    service = _get_task_application_service(repo, project_repo, assignment_repo)
+    try:
+        deleted = await service.unassign_task(user.id, task_id)
+    except (BusinessLogicError, NotFoundError) as exc:
+        raise _to_task_http_exception(exc) from exc
     if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -1109,33 +1025,16 @@ async def postpone_task(
     user_repo: UserRepo,
 ):
     """Postpone a task to a later date."""
-    task, owner_user_id = await _get_task_or_404(user, repo, task_id, project_repo)
-
-    # Calculate "from" date (today in user's timezone)
-    user_timezone = await _resolve_user_timezone(user.id, user_repo)
-    from_date = get_user_today(user_timezone)
-
-    # Record postpone event
-    await postpone_repo.create(
-        user_id=owner_user_id,
-        task_id=task_id,
-        from_date=from_date,
-        to_date=request.to_date,
-        reason=request.reason,
-        pinned=request.pin,
+    service = _get_task_application_service(
+        repo,
+        project_repo,
+        postpone_repo=postpone_repo,
+        user_repo=user_repo,
     )
-
-    # Build update: set start_not_before to target date
-    target_datetime = user_date_to_utc(request.to_date, user_timezone)
-    update_data = TaskUpdate(start_not_before=target_datetime)
-
-    if request.pin:
-        update_data.pinned_date = target_datetime
-    else:
-        # Clear any existing pin when not pinning
-        update_data.pinned_date = None
-
-    return await repo.update(owner_user_id, task_id, update_data)
+    try:
+        return await service.postpone_task(user.id, task_id, request)
+    except (BusinessLogicError, NotFoundError) as exc:
+        raise _to_task_http_exception(exc) from exc
 
 
 @router.post("/{task_id}/do-today", response_model=Task)
@@ -1148,22 +1047,11 @@ async def do_today(
     user_repo: UserRepo,
 ):
     """Pull a task into today's schedule."""
-    task, owner_user_id = await _get_task_or_404(user, repo, task_id, project_repo)
-
-    user_timezone = await _resolve_user_timezone(user.id, user_repo)
-    today = get_user_today(user_timezone)
-    today_datetime = user_date_to_utc(today, user_timezone)
-
-    update_data = TaskUpdate()
-
-    # Clear future start_not_before if it's blocking today
-    if task.start_not_before and task.start_not_before.date() > today:
-        update_data.start_not_before = today_datetime
-
-    if request.pin:
-        update_data.pinned_date = today_datetime
-
-    return await repo.update(owner_user_id, task_id, update_data)
+    service = _get_task_application_service(repo, project_repo, user_repo=user_repo)
+    try:
+        return await service.do_today(user.id, task_id, request)
+    except (BusinessLogicError, NotFoundError) as exc:
+        raise _to_task_http_exception(exc) from exc
 
 
 @router.get("/{task_id}/postpone-history", response_model=list[PostponeEvent])

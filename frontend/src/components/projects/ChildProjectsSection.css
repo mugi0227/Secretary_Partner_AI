@@ -235,6 +235,7 @@
   display: flex;
   gap: 8px;
   margin-top: 4px;
+  flex-wrap: wrap;
 }
 
 .child-project-add-btn {
@@ -258,8 +259,21 @@
   background: rgba(14, 165, 233, 0.04);
 }
 
+.child-project-add-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .child-project-add-btn .btn-icon {
   font-size: 0.75rem;
+}
+
+.child-project-permission-note {
+  flex-basis: 100%;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  padding: 2px 0;
 }
 
 /* Expandable card */

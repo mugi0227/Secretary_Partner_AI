@@ -4,7 +4,7 @@
  * Uses native pointer events for precise grid snapping (15-min intervals)
  * and cross-day column detection via data-day-key attributes.
  */
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const SNAP_MINUTES = 15;
 const DRAG_THRESHOLD_PX = 4;
@@ -62,12 +62,19 @@ export function useBlockDragResize({
 }: UseBlockDragResizeOptions) {
   const [ghost, setGhost] = useState<GhostPosition | null>(null);
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const dragRef = useRef<DragState | null>(null);
   // Use a ref for onClick to avoid stale closures in document event listeners
   const onClickRef = useRef(onClick);
-  onClickRef.current = onClick;
   const onDropRef = useRef(onDrop);
-  onDropRef.current = onDrop;
+
+  useEffect(() => {
+    onClickRef.current = onClick;
+  }, [onClick]);
+
+  useEffect(() => {
+    onDropRef.current = onDrop;
+  }, [onDrop]);
 
   const snapToGrid = (minutes: number) =>
     Math.round(minutes / SNAP_MINUTES) * SNAP_MINUTES;
@@ -107,6 +114,7 @@ export function useBlockDragResize({
           return;
         }
         state.hasMoved = true;
+        setIsDragging(true);
       }
 
       const column = findDayColumn(e.clientX, e.clientY);
@@ -154,9 +162,9 @@ export function useBlockDragResize({
     (e: PointerEvent) => {
       const state = dragRef.current;
       document.removeEventListener('pointermove', handlePointerMove);
-      document.removeEventListener('pointerup', handlePointerUp);
       dragRef.current = null;
       setActiveBlockId(null);
+      setIsDragging(false);
       setGhost(null);
 
       if (!state) return;
@@ -238,8 +246,9 @@ export function useBlockDragResize({
       };
 
       setActiveBlockId(block.id);
+      setIsDragging(false);
       document.addEventListener('pointermove', handlePointerMove);
-      document.addEventListener('pointerup', handlePointerUp);
+      document.addEventListener('pointerup', handlePointerUp, { once: true });
     },
     [findDayColumn, clientYToMinutes, handlePointerMove, handlePointerUp],
   );
@@ -247,7 +256,7 @@ export function useBlockDragResize({
   return {
     ghost,
     activeBlockId,
-    isDragging: activeBlockId !== null && dragRef.current?.hasMoved === true,
+    isDragging,
     startInteraction,
   };
 }

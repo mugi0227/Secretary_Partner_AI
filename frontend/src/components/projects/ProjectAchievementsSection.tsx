@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -108,7 +108,8 @@ function AchievementCard({
     index?: number;
     value: string;
   } | null>(null);
-  const [appendNote, setAppendNote] = useState(achievement.append_note ?? '');
+  const [appendNoteDraft, setAppendNoteDraft] = useState<string | null>(null);
+  const appendNote = appendNoteDraft ?? achievement.append_note ?? '';
   const isBusy = isDeleting || isUpdating || isSummarizing;
 
   const formatPeriod = () => {
@@ -116,10 +117,6 @@ function AchievementCard({
     const end = formatDate(achievement.period_end, { month: 'numeric', day: 'numeric' }, timezone);
     return `${start} - ${end}`;
   };
-
-  useEffect(() => {
-    setAppendNote(achievement.append_note ?? '');
-  }, [achievement.append_note]);
 
   const handleEditStart = (section: EditableSection, value: string, index?: number) => {
     setEditing({ section, value, index });
@@ -184,6 +181,7 @@ function AchievementCard({
 
   const handleAppendNoteSave = async () => {
     await onUpdate(achievement.id, { append_note: appendNote });
+    setAppendNoteDraft(null);
   };
 
   return (
@@ -636,7 +634,7 @@ function AchievementCard({
                   className="edit-textarea"
                   rows={4}
                   value={appendNote}
-                  onChange={(event) => setAppendNote(event.target.value)}
+                  onChange={(event) => setAppendNoteDraft(event.target.value)}
                   disabled={isBusy}
                 />
                 <div className="item-actions append-note-actions">

@@ -943,6 +943,55 @@ export interface TodayTasksResponse {
   overflow: boolean;
 }
 
+export type TodayPlanBucket = 'selected' | 'recommended' | 'scheduled' | 'blocked';
+
+export interface TodayPlanReason {
+  code: string;
+  message: string;
+}
+
+export interface TodayPlanScoreComponent {
+  code: string;
+  label: string;
+  points: number;
+  detail?: string | null;
+}
+
+export interface TodayPlanTask {
+  task: Task;
+  bucket: TodayPlanBucket;
+  selected: boolean;
+  score: number;
+  score_summary: string;
+  score_breakdown: TodayPlanScoreComponent[];
+  reasons: TodayPlanReason[];
+  allocated_minutes: number;
+  remaining_minutes: number;
+}
+
+export interface TodayPlanCapacity {
+  feasible: boolean;
+  total_minutes: number;
+  capacity_minutes: number;
+  meeting_minutes: number;
+  overflow_minutes: number;
+  capacity_usage_percent: number;
+}
+
+export interface TodayPlanResponse {
+  today: string;
+  selected: TodayPlanTask[];
+  recommendations: TodayPlanTask[];
+  scheduled: TodayPlanTask[];
+  blocked: TodayPlanTask[];
+  capacity: TodayPlanCapacity;
+}
+
+export interface TodaySelectionUpdate {
+  task_ids: string[];
+  replace?: boolean;
+}
+
 export interface TaskAllocation {
   task_id: string;
   minutes: number;
@@ -1380,6 +1429,7 @@ export interface UnreadCountResponse {
 
 export interface HeartbeatUnreadCountResponse {
   count: number;
+  unread_session_ids: string[];
 }
 
 export type HeartbeatRiskSeverity = 'critical' | 'high' | 'medium' | 'low';

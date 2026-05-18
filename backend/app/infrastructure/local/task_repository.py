@@ -383,8 +383,33 @@ class SqliteTaskRepository(ITaskRepository):
             old_parent_id = orm.parent_id
             update_data = update.model_dump(exclude_unset=True)
             normalized_data: dict[str, object] = {}
+            nullable_fields = {
+                "description",
+                "purpose",
+                "project_id",
+                "phase_id",
+                "estimated_minutes",
+                "due_date",
+                "start_not_before",
+                "pinned_date",
+                "parent_id",
+                "source_capture_id",
+                "start_time",
+                "end_time",
+                "location",
+                "meeting_notes",
+                "recurring_meeting_id",
+                "recurring_task_id",
+                "milestone_id",
+                "touchpoint_count",
+                "touchpoint_minutes",
+                "completion_note",
+                "guide",
+            }
             for field, value in update_data.items():
                 if value is None:
+                    if field in nullable_fields:
+                        normalized_data[field] = None
                     continue
                 if field in {"project_id", "parent_id", "phase_id", "milestone_id"}:
                     normalized_data[field] = str(value)

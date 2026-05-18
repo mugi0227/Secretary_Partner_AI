@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { FaPlus, FaFilter } from 'react-icons/fa';
 import { KanbanBoard } from '../components/tasks/KanbanBoard';
 import { RecurringTaskList } from '../components/tasks/RecurringTaskList';
-import { ViewModeToggle, getStoredViewMode, setStoredViewMode, type ViewMode } from '../components/common/ViewModeToggle';
+import { ViewModeToggle } from '../components/common/ViewModeToggle';
+import { getStoredViewMode, setStoredViewMode, type ViewMode } from '../components/common/viewModeStorage';
 import { useTaskModal } from '../hooks/useTaskModal';
 import { useRecurringTasks } from '../hooks/useRecurringTasks';
 import { useCurrentUser } from '../hooks/useCurrentUser';
@@ -99,7 +100,7 @@ export function TasksPage() {
 
   const invalidateTaskQueries = () => {
     for (const key of [
-      ['tasks'], ['subtasks'], ['top3'], ['today-tasks'], ['schedule'],
+      ['tasks'], ['subtasks'], ['top3'], ['today-tasks'], ['today-plan'], ['schedule'],
       ['task-detail'], ['task-assignments'], ['project'],
     ]) {
       queryClient.invalidateQueries({ queryKey: key });

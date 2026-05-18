@@ -4,7 +4,7 @@
  * Modern design with visual hierarchy.
  * Card-based sections with clear visual feedback.
  */
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type {
   CheckinCreateV2,
   CheckinItem,
@@ -36,8 +36,46 @@ const MOOD_OPTIONS: { value: CheckinMood; label: string; emoji: string; color: s
   { value: 'struggling', label: '厳しい', emoji: '😰', color: '#dc2626', bgColor: '#fee2e2' },
 ];
 
+const ToggleButton = ({
+  active,
+  onClick,
+  activeColor = 'blue',
+  children
+}: {
+  active: boolean;
+  onClick: () => void;
+  activeColor?: 'blue' | 'red' | 'yellow';
+  children: ReactNode;
+}) => {
+  const colors = {
+    blue: { bg: '#3b82f6', hover: '#2563eb' },
+    red: { bg: '#ef4444', hover: '#dc2626' },
+    yellow: { bg: '#f59e0b', hover: '#d97706' },
+  };
+  const color = colors[activeColor];
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: '8px 20px',
+        borderRadius: '9999px',
+        fontSize: '14px',
+        fontWeight: 500,
+        transition: 'all 0.2s',
+        backgroundColor: active ? color.bg : '#f3f4f6',
+        color: active ? 'white' : '#6b7280',
+        border: active ? `2px solid ${color.hover}` : '2px solid transparent',
+        boxShadow: active ? '0 2px 8px rgba(0,0,0,0.15)' : 'none',
+      }}
+    >
+      {children}
+    </button>
+  );
+};
+
 export function CheckinForm({
-  projectId: _projectId,
   members,
   tasks,
   currentUserId,
@@ -127,46 +165,6 @@ export function CheckinForm({
   };
 
   const activeTasks = tasks.filter(t => t.status !== 'DONE' && !t.is_fixed_time);
-
-  // Toggle button component
-  const ToggleButton = ({
-    active,
-    onClick,
-    activeColor = 'blue',
-    children
-  }: {
-    active: boolean;
-    onClick: () => void;
-    activeColor?: 'blue' | 'red' | 'yellow';
-    children: React.ReactNode;
-  }) => {
-    const colors = {
-      blue: { bg: '#3b82f6', hover: '#2563eb' },
-      red: { bg: '#ef4444', hover: '#dc2626' },
-      yellow: { bg: '#f59e0b', hover: '#d97706' },
-    };
-    const color = colors[activeColor];
-
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        style={{
-          padding: '8px 20px',
-          borderRadius: '9999px',
-          fontSize: '14px',
-          fontWeight: 500,
-          transition: 'all 0.2s',
-          backgroundColor: active ? color.bg : '#f3f4f6',
-          color: active ? 'white' : '#6b7280',
-          border: active ? `2px solid ${color.hover}` : '2px solid transparent',
-          boxShadow: active ? '0 2px 8px rgba(0,0,0,0.15)' : 'none',
-        }}
-      >
-        {children}
-      </button>
-    );
-  };
 
   return (
     <div style={{

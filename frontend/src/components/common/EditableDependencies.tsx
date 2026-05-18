@@ -25,6 +25,11 @@ export function EditableDependencies({
   const [searchQuery, setSearchQuery] = useState('');
   const panelRef = useRef<HTMLDivElement>(null);
 
+  const handleCancel = useCallback(() => {
+    setIsEditing(false);
+    setPendingValue(value || []);
+  }, [value]);
+
   useEffect(() => {
     if (isEditing) {
       setPendingValue(value || []);
@@ -42,7 +47,7 @@ export function EditableDependencies({
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isEditing]);
+  }, [isEditing, handleCancel]);
 
   const handleStartEdit = useCallback(() => {
     if (disabled) return;
@@ -61,11 +66,6 @@ export function EditableDependencies({
       setIsSaving(false);
     }
   }, [pendingValue, onSave, isSaving]);
-
-  const handleCancel = useCallback(() => {
-    setIsEditing(false);
-    setPendingValue(value || []);
-  }, [value]);
 
   const handleToggle = useCallback((taskId: string) => {
     setPendingValue(prev => {

@@ -197,7 +197,7 @@ class TestList:
     @pytest.mark.asyncio
     async def test_list_unread_only(self, repository, user_id):
         """unread_only で未読のみフィルタできる。"""
-        n1 = await repository.create(_make_notification(user_id=user_id, title="未読"))
+        await repository.create(_make_notification(user_id=user_id, title="未読"))
         n2 = await repository.create(_make_notification(user_id=user_id, title="既読"))
         await repository.mark_as_read(user_id, n2.id)
 

@@ -13,6 +13,12 @@ import { achievementsApi } from '../api/achievements';
 import type { SharedAchievement } from '../api/types';
 import './SharedAchievementPage.css';
 
+type SharedAchievementState =
+  | { status: 'loading'; token: string | undefined }
+  | { status: 'success'; token: string | undefined; achievement: SharedAchievement }
+  | { status: 'not_found'; token: string | undefined }
+  | { status: 'error'; token: string | undefined };
+
 function formatPeriod(start: string, end: string): string {
   const s = DateTime.fromISO(start);
   const e = DateTime.fromISO(end);
@@ -21,23 +27,32 @@ function formatPeriod(start: string, end: string): string {
 
 export function SharedAchievementPage() {
   const { token } = useParams<{ token: string }>();
-  const [achievement, setAchievement] = useState<SharedAchievement | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<SharedAchievementState>({
+    status: 'loading',
+    token,
+  });
 
   useEffect(() => {
     if (!token) return;
-    setLoading(true);
+    let cancelled = false;
     achievementsApi
       .getShared(token)
-      .then(setAchievement)
-      .catch((err) => {
-        setError(err.message === 'Not found' ? 'not_found' : 'error');
+      .then((achievement) => {
+        if (!cancelled) {
+          setState({ status: 'success', token, achievement });
+        }
       })
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        if (!cancelled) {
+          setState({ status: err.message === 'Not found' ? 'not_found' : 'error', token });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
-  if (loading) {
+  if (state.token !== token || state.status === 'loading') {
     return (
       <div className="shared-achievement-page">
         <div className="shared-loading">
@@ -48,7 +63,7 @@ export function SharedAchievementPage() {
     );
   }
 
-  if (error === 'not_found') {
+  if (state.status === 'not_found') {
     return (
       <div className="shared-achievement-page">
         <div className="shared-error">
@@ -60,7 +75,7 @@ export function SharedAchievementPage() {
     );
   }
 
-  if (error || !achievement) {
+  if (state.status === 'error') {
     return (
       <div className="shared-achievement-page">
         <div className="shared-error">
@@ -70,6 +85,8 @@ export function SharedAchievementPage() {
       </div>
     );
   }
+
+  const { achievement } = state;
 
   return (
     <div className="shared-achievement-page">

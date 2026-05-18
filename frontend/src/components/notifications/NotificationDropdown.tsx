@@ -9,6 +9,13 @@ import { formatDate } from '../../utils/dateTime';
 import { useTimezone } from '../../hooks/useTimezone';
 import './NotificationDropdown.css';
 
+const NOTIFICATION_TEXT = {
+  title: '通知',
+  markAllRead: 'すべて既読',
+  markAllReadTitle: 'すべて既読にする',
+  empty: '通知はありません',
+};
+
 function getNotificationIcon(type: NotificationType) {
   switch (type) {
     case 'achievement_personal':
@@ -188,16 +195,17 @@ export function NotificationDropdown() {
           transition={{ duration: 0.15 }}
         >
           <div className="notification-header">
-            <h3>通知</h3>
+            <h3>{NOTIFICATION_TEXT.title}</h3>
             {unreadCount > 0 && (
               <button
                 className="mark-all-read-btn"
                 onClick={handleMarkAllAsRead}
                 disabled={isMarkingAllAsRead}
-                title="すべて既読にする"
+                aria-label={NOTIFICATION_TEXT.markAllReadTitle}
+                title={NOTIFICATION_TEXT.markAllReadTitle}
               >
                 <FaCheckDouble />
-                <span>すべて既読</span>
+                <span>{NOTIFICATION_TEXT.markAllRead}</span>
               </button>
             )}
           </div>
@@ -206,7 +214,7 @@ export function NotificationDropdown() {
             {notifications.length === 0 ? (
               <div className="notification-empty">
                 <FaBell className="empty-icon" />
-                <span>通知はありません</span>
+                <span>{NOTIFICATION_TEXT.empty}</span>
               </div>
             ) : (
               notifications.map((notification) => (
@@ -229,7 +237,12 @@ export function NotificationDropdown() {
       <button
         ref={buttonRef}
         className="footer-btn notification-btn"
-        title="通知"
+        title={NOTIFICATION_TEXT.title}
+        aria-label={
+          unreadCount > 0
+            ? `${NOTIFICATION_TEXT.title} (${unreadCount}件未読)`
+            : NOTIFICATION_TEXT.title
+        }
         onClick={() => setIsOpen(!isOpen)}
       >
         <FaBell />

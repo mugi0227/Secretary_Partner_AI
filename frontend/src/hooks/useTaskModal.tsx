@@ -33,6 +33,7 @@ interface UseTaskModalOptions {
   taskAssignments?: TaskAssignment[];
   /** 担当者変更ハンドラ */
   onAssigneeChange?: (taskId: string, memberIds: string[]) => void;
+  onSelectedTaskChange?: (task: Task | null) => void;
 }
 
 interface TaskModalState {
@@ -88,6 +89,7 @@ export function useTaskModal(options: UseTaskModalOptions): UseTaskModalReturn {
     memberOptions = [],
     taskAssignments = [],
     onAssigneeChange,
+    onSelectedTaskChange,
   } = options;
 
   const queryClient = useQueryClient();
@@ -100,15 +102,15 @@ export function useTaskModal(options: UseTaskModalOptions): UseTaskModalReturn {
   // Track task IDs created via openCreateForm/openCreateSubtaskForm to detect "empty close"
   const [freshlyCreatedTaskIds, setFreshlyCreatedTaskIds] = useState<Set<string>>(new Set());
 
-  const invalidateTaskQueries = () => {
+  const invalidateTaskQueries = useCallback(() => {
     for (const key of [
-      ['tasks'], ['subtasks'], ['top3'], ['today-tasks'], ['schedule'],
+      ['tasks'], ['subtasks'], ['top3'], ['today-tasks'], ['today-plan'], ['schedule'],
       ['task-detail'], ['task-assignments'], ['project'], ['meetings'], ['member-child-tasks'],
     ]) {
       queryClient.invalidateQueries({ queryKey: key });
     }
     onRefetch?.();
-  };
+  }, [queryClient, onRefetch]);
 
   // Mutations for inline updates
   const updateMutation = useMutation({
@@ -168,6 +170,7 @@ export function useTaskModal(options: UseTaskModalOptions): UseTaskModalReturn {
 
   // Actions
   const openTaskDetail = useCallback((task: Task) => {
+    onSelectedTaskChange?.(task);
     if (task.parent_id) {
       const parent = taskLookup.get(task.parent_id) ?? null;
       if (parent) {
@@ -191,7 +194,7 @@ export function useTaskModal(options: UseTaskModalOptions): UseTaskModalReturn {
       setSelectedTaskId(task.id);
       setOpenedParentTaskId(null);
     }
-  }, [taskLookup]);
+  }, [taskLookup, onSelectedTaskChange]);
 
   const openTaskDetailById = useCallback(async (taskId: string) => {
     const task = taskLookup.get(taskId);
@@ -219,10 +222,11 @@ export function useTaskModal(options: UseTaskModalOptions): UseTaskModalReturn {
     }
     setSelectedTaskId(null);
     setOpenedParentTaskId(null);
-  }, [selectedTaskId, freshlyCreatedTaskIds, deleteMutation]);
+    onSelectedTaskChange?.(null);
+  }, [selectedTaskId, freshlyCreatedTaskIds, deleteMutation, onSelectedTaskChange]);
 
   // openEditForm is no longer needed - inline editing handles this
-  const openEditForm = useCallback((_task: Task) => {
+  const openEditForm = useCallback(() => {
     // No-op: inline editing is now used instead of form modal
     console.log('[useTaskModal] openEditForm called but inline editing is now used');
   }, []);
@@ -246,12 +250,13 @@ export function useTaskModal(options: UseTaskModalOptions): UseTaskModalReturn {
       setFreshlyCreatedTaskIds(prev => new Set(prev).add(created.id));
       setSelectedTaskId(created.id);
       setOpenedParentTaskId(null);
+      onSelectedTaskChange?.(created);
     } catch (error) {
       console.error('Failed to create task:', error);
     } finally {
       setIsCreating(false);
     }
-  }, [defaultTaskData, createMutation, isCreating]);
+  }, [defaultTaskData, createMutation, isCreating, onSelectedTaskChange]);
 
   // Create a subtask and optionally open parent modal with subtask selected
   // - title: optional title for the subtask (used for inline creation)
@@ -289,6 +294,7 @@ export function useTaskModal(options: UseTaskModalOptions): UseTaskModalReturn {
         if (parent) {
           setOpenedParentTaskId(parentTaskId);
           setSelectedTaskId(created.id);
+          onSelectedTaskChange?.(created);
         }
       }
     } catch (error) {
@@ -297,7 +303,7 @@ export function useTaskModal(options: UseTaskModalOptions): UseTaskModalReturn {
     } finally {
       setIsCreating(false);
     }
-  }, [defaultTaskData, createMutation, isCreating, queryClient, taskLookup]);
+  }, [defaultTaskData, createMutation, isCreating, queryClient, taskLookup, onSelectedTaskChange]);
 
   // closeForm is no longer needed
   const closeForm = useCallback(() => {
@@ -340,7 +346,7 @@ export function useTaskModal(options: UseTaskModalOptions): UseTaskModalReturn {
     } catch {
       alert('確認の切り替えに失敗しました');
     }
-  }, []);
+  }, [invalidateTaskQueries]);
 
   const handleDelete = useCallback(async (task: Task) => {
     if (window.confirm(`${task.title} を削除してもよろしいですか？`)) {
@@ -400,8 +406,7 @@ export function useTaskModal(options: UseTaskModalOptions): UseTaskModalReturn {
     handleTaskCheck,
     updateMutation,
     openCreateSubtaskForm,
-    queryClient,
-    onRefetch,
+    invalidateTaskQueries,
     memberOptions,
     taskAssignments,
     onAssigneeChange,

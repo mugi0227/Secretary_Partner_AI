@@ -86,7 +86,7 @@ export function MeetingMainContent({
     // Collapsible state for meeting info section (default open when editable)
     const [isInfoCollapsed, setIsInfoCollapsed] = useState(!canEdit);
 
-    const getDateStr = (date: Date) => toDateKey(date, timezone);
+    const getDateStr = useCallback((date: Date) => toDateKey(date, timezone), [timezone]);
 
     const dateStr = selectedDate ? getDateStr(selectedDate) : '';
 
@@ -173,7 +173,16 @@ export function MeetingMainContent({
     const [showPastSessions, setShowPastSessions] = useState(false);
 
     // Global timer context
-    const meetingTimer = useMeetingTimer();
+    const {
+        session: activeTimerSession,
+        agendaItems: activeTimerAgendaItems,
+        startTimer,
+        updateSession: updateTimerSession,
+        updateAgendaItems: updateTimerAgendaItems,
+        stopTimer,
+        showModal,
+        isModalVisible,
+    } = useMeetingTimer();
 
     // Determine mode based on session status and date
     const mode = useMemo((): 'PREPARATION' | 'MEETING' | 'ARCHIVE' => {
@@ -199,7 +208,7 @@ export function MeetingMainContent({
             return 'ARCHIVE';
         }
         return 'PREPARATION';
-    }, [hasMeeting, selectedDate, session, timezone]);
+    }, [hasMeeting, selectedDate, session, timezone, getDateStr]);
 
     // Auto-refetch session when task changes
     useEffect(() => {
@@ -222,23 +231,39 @@ export function MeetingMainContent({
                 timezone,
             );
             // Start or update global timer
-            if (!meetingTimer.session || meetingTimer.session.id !== session.id) {
-                meetingTimer.startTimer(session, agendaItems, meetingTitle, dateStr, taskId, projectId);
+            if (!activeTimerSession || activeTimerSession.id !== session.id) {
+                startTimer(session, agendaItems, meetingTitle, dateStr, taskId, projectId);
             } else {
-                meetingTimer.updateSession(session);
+                updateTimerSession(session);
                 // Also update agenda items if they've changed
-                if (JSON.stringify(meetingTimer.agendaItems) !== JSON.stringify(agendaItems)) {
-                    meetingTimer.updateAgendaItems(agendaItems);
+                if (JSON.stringify(activeTimerAgendaItems) !== JSON.stringify(agendaItems)) {
+                    updateTimerAgendaItems(agendaItems);
                 }
             }
         } else if (session?.status === 'COMPLETED') {
             // Only stop timer when meeting is explicitly COMPLETED
-            if (meetingTimer.session) {
-                meetingTimer.stopTimer();
+            if (activeTimerSession) {
+                stopTimer();
             }
         }
         // Note: Don't stop timer when session is null/undefined - the timer context persists across pages
-    }, [session, agendaItems, meetingTitle, selectedDate, taskId, projectId, isSessionFetching, timezone]);
+    }, [
+        session,
+        agendaItems,
+        meetingTitle,
+        selectedDate,
+        taskId,
+        projectId,
+        isSessionFetching,
+        timezone,
+        getDateStr,
+        activeTimerSession,
+        activeTimerAgendaItems,
+        startTimer,
+        updateTimerSession,
+        updateTimerAgendaItems,
+        stopTimer,
+    ]);
 
     const handleGenerateDraft = async () => {
         if (!hasMeeting || !selectedDate) return;
@@ -304,21 +329,21 @@ export function MeetingMainContent({
             } else if (session.status === 'IN_PROGRESS') {
                 // Session already in progress, just show modal
             }
-            meetingTimer.showModal();
+            showModal();
         } catch (error) {
             console.error('Failed to start meeting:', error);
         }
     };
 
     const handleResumeModal = () => {
-        meetingTimer.showModal();
+        showModal();
     };
 
     const handleReopenSession = async () => {
         if (!session) return;
         try {
             await reopenSessionMutation.mutateAsync(session.id);
-            meetingTimer.showModal();
+            showModal();
         } catch (error) {
             console.error('Failed to reopen session:', error);
         }
@@ -340,8 +365,8 @@ export function MeetingMainContent({
         if (!window.confirm('会議を開始前の状態に戻しますか？\n議事録やサマリーは保持されます。')) return;
         try {
             // Stop timer if running
-            if (meetingTimer.session?.id === session.id) {
-                meetingTimer.stopTimer();
+            if (activeTimerSession?.id === session.id) {
+                stopTimer();
             }
             await resetToPreparationMutation.mutateAsync(session.id);
         } catch (error) {
@@ -622,7 +647,7 @@ export function MeetingMainContent({
                 )}
 
                 {/* Minimized meeting bar - show when meeting is in progress but modal is closed */}
-                {mode === 'MEETING' && session && !meetingTimer.isModalVisible && (
+                {mode === 'MEETING' && session && !isModalVisible && (
                     <div className="meeting-minimized-bar">
                         <div className="meeting-minimized-info">
                             <span className="meeting-minimized-status">

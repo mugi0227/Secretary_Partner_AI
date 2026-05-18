@@ -35,5 +35,9 @@ class IHeartbeatEventRepository(ABC):
         pass
 
     @abstractmethod
+    async def list_unread(self, user_id: str) -> list[HeartbeatEvent]:
+        pass
+
+    @abstractmethod
     async def mark_all_read(self, user_id: str) -> int:
         pass

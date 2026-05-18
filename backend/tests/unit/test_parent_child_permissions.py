@@ -17,17 +17,17 @@ import pytest
 from fastapi import HTTPException
 
 from app.core.exceptions import ForbiddenError
-from app.models.collaboration import ProjectMember, ProjectMemberCreate
+from app.models.collaboration import ProjectMember, ProjectMemberCreate, ProjectMemberUpdate
 from app.models.enums import ProjectRole, ProjectStatus, ProjectVisibility
-from app.models.project import Project
+from app.models.project import Project, ProjectCreate
 from app.services.project_permissions import (
     ProjectAccess,
     ProjectAction,
     ensure_project_action,
     get_project_access,
     role_allows,
+    roles_for_action,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -89,6 +89,27 @@ class FakeProjectRepo:
     async def get_by_id(self, project_id: UUID) -> Project | None:
         return self._by_id.get(project_id)
 
+    async def create(self, user_id: str, project: ProjectCreate) -> Project:
+        created = Project(
+            id=uuid4(),
+            user_id=user_id,
+            name=project.name,
+            description=project.description,
+            visibility=project.visibility,
+            context_summary=project.context_summary,
+            context=project.context,
+            priority=project.priority,
+            goals=project.goals,
+            key_points=project.key_points,
+            kpi_config=project.kpi_config,
+            parent_project_id=project.parent_project_id,
+            status=ProjectStatus.ACTIVE,
+            created_at=_now(),
+            updated_at=_now(),
+        )
+        self._by_id[created.id] = created
+        return created
+
 
 class FakeMemberRepo:
     """Minimal member repo for permission tests."""
@@ -114,6 +135,33 @@ class FakeMemberRepo:
         self._members.append(m)
         return m
 
+    async def get(self, owner_id: str, member_id: UUID) -> ProjectMember | None:
+        for member in self._members:
+            if member.user_id == owner_id and member.id == member_id:
+                return member
+        return None
+
+    async def update(
+        self,
+        owner_id: str,
+        member_id: UUID,
+        data: ProjectMemberUpdate,
+    ) -> ProjectMember:
+        member = await self.get(owner_id, member_id)
+        if not member:
+            raise AssertionError("member not found")
+        updated = member.model_copy(update=data.model_dump(exclude_unset=True))
+        self._members = [updated if m.id == member_id else m for m in self._members]
+        return updated
+
+    async def delete(self, owner_id: str, member_id: UUID) -> bool:
+        before = len(self._members)
+        self._members = [
+            member for member in self._members
+            if not (member.user_id == owner_id and member.id == member_id)
+        ]
+        return len(self._members) < before
+
 
 # ===========================================================================
 # Phase 1: VIEWER role & permission matrix
@@ -122,6 +170,86 @@ class FakeMemberRepo:
 
 class TestViewerRoleMatrix:
     """VIEWER should be allowed on read actions, denied on write actions."""
+
+    @pytest.mark.parametrize(
+        ("action", "expected_roles"),
+        [
+            (
+                ProjectAction.PROJECT_READ,
+                {ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.MEMBER, ProjectRole.VIEWER},
+            ),
+            (
+                ProjectAction.PROJECT_UPDATE,
+                {ProjectRole.OWNER, ProjectRole.ADMIN},
+            ),
+            (
+                ProjectAction.PROJECT_DELETE,
+                {ProjectRole.OWNER, ProjectRole.ADMIN},
+            ),
+            (
+                ProjectAction.MEMBER_READ,
+                {ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.MEMBER, ProjectRole.VIEWER},
+            ),
+            (
+                ProjectAction.MEMBER_MANAGE,
+                {ProjectRole.OWNER, ProjectRole.ADMIN},
+            ),
+            (
+                ProjectAction.INVITATION_READ,
+                {ProjectRole.OWNER, ProjectRole.ADMIN},
+            ),
+            (
+                ProjectAction.INVITATION_MANAGE,
+                {ProjectRole.OWNER, ProjectRole.ADMIN},
+            ),
+            (
+                ProjectAction.PHASE_MANAGE,
+                {ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.MEMBER},
+            ),
+            (
+                ProjectAction.MILESTONE_MANAGE,
+                {ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.MEMBER},
+            ),
+            (
+                ProjectAction.CHECKIN_READ,
+                {ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.MEMBER, ProjectRole.VIEWER},
+            ),
+            (
+                ProjectAction.CHECKIN_WRITE,
+                {ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.MEMBER},
+            ),
+            (
+                ProjectAction.ACHIEVEMENT_READ,
+                {ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.MEMBER, ProjectRole.VIEWER},
+            ),
+            (
+                ProjectAction.ACHIEVEMENT_WRITE,
+                {ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.MEMBER},
+            ),
+            (
+                ProjectAction.SNAPSHOT_MANAGE,
+                {ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.MEMBER},
+            ),
+            (
+                ProjectAction.MEETING_AGENDA_MANAGE,
+                {ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.MEMBER},
+            ),
+            (
+                ProjectAction.ASSIGNMENT_READ,
+                {ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.MEMBER, ProjectRole.VIEWER},
+            ),
+            (
+                ProjectAction.BLOCKER_READ,
+                {ProjectRole.OWNER, ProjectRole.ADMIN, ProjectRole.MEMBER, ProjectRole.VIEWER},
+            ),
+        ],
+    )
+    def test_project_permission_matrix_is_explicit(
+        self,
+        action: ProjectAction,
+        expected_roles: set[ProjectRole],
+    ):
+        assert roles_for_action(action) == expected_roles
 
     @pytest.mark.parametrize(
         "action",
@@ -223,6 +351,134 @@ class TestGetProjectAccessAncestor:
 
 
 # ===========================================================================
+# Parent assignment and owner role guardrails
+# ===========================================================================
+
+
+class TestProjectPermissionGuardrails:
+    @pytest.mark.asyncio
+    async def test_create_child_project_requires_parent_owner(self):
+        from app.api.projects import create_project
+
+        parent = _make_project("parent-owner")
+        project_repo = FakeProjectRepo(parent)
+        member_repo = FakeMemberRepo()
+        user = SimpleNamespace(id="other-user")
+
+        with pytest.raises(HTTPException) as exc_info:
+            await create_project(
+                ProjectCreate(
+                    name="Unauthorized Child",
+                    visibility=ProjectVisibility.TEAM,
+                    parent_project_id=parent.id,
+                ),
+                user,
+                project_repo,
+                member_repo,
+            )
+
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_create_child_project_allows_parent_owner(self):
+        from app.api.projects import create_project
+
+        parent_owner = "parent-owner"
+        parent = _make_project(parent_owner)
+        project_repo = FakeProjectRepo(parent)
+        member_repo = FakeMemberRepo()
+        user = SimpleNamespace(id=parent_owner)
+
+        created = await create_project(
+            ProjectCreate(
+                name="Authorized Child",
+                visibility=ProjectVisibility.TEAM,
+                parent_project_id=parent.id,
+            ),
+            user,
+            project_repo,
+            member_repo,
+        )
+
+        assert created.parent_project_id == parent.id
+        assert any(
+            member.project_id == created.id
+            and member.member_user_id == parent_owner
+            and member.role == ProjectRole.OWNER
+            for member in member_repo._members
+        )
+
+    @pytest.mark.asyncio
+    async def test_add_member_rejects_owner_role(self):
+        from app.api.projects import add_project_member
+
+        owner_id = "owner"
+        project = _make_project(owner_id)
+        owner_member = _make_member(project.id, owner_id, owner_id, ProjectRole.OWNER)
+        project_repo = FakeProjectRepo(project)
+        member_repo = FakeMemberRepo(owner_member)
+        user = SimpleNamespace(id=owner_id)
+        user_repo = AsyncMock()
+
+        with pytest.raises(HTTPException) as exc_info:
+            await add_project_member(
+                project.id,
+                ProjectMemberCreate(member_user_id="new-member", role=ProjectRole.OWNER),
+                user,
+                project_repo,
+                member_repo,
+                user_repo,
+            )
+
+        assert exc_info.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_project_owner_member_cannot_be_demoted(self):
+        from app.api.projects import update_project_member
+
+        owner_id = "owner"
+        project = _make_project(owner_id)
+        owner_member = _make_member(project.id, owner_id, owner_id, ProjectRole.OWNER)
+        project_repo = FakeProjectRepo(project)
+        member_repo = FakeMemberRepo(owner_member)
+        user = SimpleNamespace(id=owner_id)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await update_project_member(
+                project.id,
+                owner_member.id,
+                ProjectMemberUpdate(role=ProjectRole.MEMBER),
+                user,
+                project_repo,
+                member_repo,
+            )
+
+        assert exc_info.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_project_owner_member_cannot_be_removed(self):
+        from app.api.projects import delete_project_member
+
+        owner_id = "owner"
+        project = _make_project(owner_id)
+        owner_member = _make_member(project.id, owner_id, owner_id, ProjectRole.OWNER)
+        project_repo = FakeProjectRepo(project)
+        member_repo = FakeMemberRepo(owner_member)
+        user = SimpleNamespace(id=owner_id)
+
+        with pytest.raises(HTTPException) as exc_info:
+            await delete_project_member(
+                project.id,
+                owner_member.id,
+                user,
+                project_repo,
+                member_repo,
+            )
+
+        assert exc_info.value.status_code == 400
+
+
+# ===========================================================================
 # Phase 5: invite_from_parent endpoint
 # ===========================================================================
 
@@ -240,7 +496,7 @@ class TestInviteFromParent:
         child = _make_project(child_owner, parent_project_id=parent.id)
 
         parent_member = _make_member(parent.id, parent_owner, parent_member_id)
-        child_owner_member = _make_member(child.id, child_owner, child_owner, ProjectRole.OWNER)
+        _make_member(child.id, child_owner, child_owner, ProjectRole.OWNER)
 
         project_repo = FakeProjectRepo(parent, child)
         member_repo = FakeMemberRepo(parent_member)

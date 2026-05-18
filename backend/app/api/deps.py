@@ -14,11 +14,11 @@ from app.core.config import get_settings
 from app.interfaces.achievement_repository import IAchievementRepository
 from app.interfaces.agent_task_repository import IAgentTaskRepository
 from app.interfaces.auth_provider import IAuthProvider, User
-from app.interfaces.email_provider import IEmailProvider
 from app.interfaces.blocker_repository import IBlockerRepository
 from app.interfaces.capture_repository import ICaptureRepository
 from app.interfaces.chat_session_repository import IChatSessionRepository
 from app.interfaces.checkin_repository import ICheckinRepository
+from app.interfaces.email_provider import IEmailProvider
 from app.interfaces.heartbeat_event_repository import IHeartbeatEventRepository
 from app.interfaces.heartbeat_settings_repository import IHeartbeatSettingsRepository
 from app.interfaces.issue_comment_repository import IIssueCommentRepository

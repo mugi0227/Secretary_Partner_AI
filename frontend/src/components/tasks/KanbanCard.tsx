@@ -1,5 +1,5 @@
 import { type DateTime } from 'luxon';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { FaCalendarAlt, FaCheckCircle, FaCircle } from 'react-icons/fa';
 import { FaBatteryFull, FaBatteryQuarter, FaClock, FaFire, FaHourglass, FaLeaf, FaListCheck, FaLock, FaLockOpen, FaPen, FaRepeat, FaTrash, FaUser } from 'react-icons/fa6';
 import type { Task, TaskAssignment, TaskStatus } from '../../api/types';
@@ -74,7 +74,7 @@ export function KanbanCard({
     return level === 'HIGH' ? <FaBatteryFull /> : <FaBatteryQuarter />;
   };
 
-  const formatShortDate = (value?: string | DateTime | null) => {
+  const formatShortDate = useCallback((value?: string | DateTime | null) => {
     if (!value) return null;
     if (typeof value === 'string') {
       return formatDate(value, { month: 'numeric', day: 'numeric' }, timezone);
@@ -82,7 +82,7 @@ export function KanbanCard({
     return value.isValid
       ? value.setLocale('ja-JP').toLocaleString({ month: 'numeric', day: 'numeric' })
       : null;
-  };
+  }, [timezone]);
 
   const handleCardClick = () => {
     if (selectionMode && onSelect) {
@@ -179,7 +179,7 @@ export function KanbanCard({
     if (endDate) return `〜${endDate}${overdueSuffix}`;
     if (startDate) return `${startDate}〜`;
     return null;
-  }, [task.is_fixed_time, effectiveStartNotBefore, task.due_date, deadlineStatus, timezone]);
+  }, [task.is_fixed_time, effectiveStartNotBefore, task.due_date, deadlineStatus, formatShortDate]);
 
   const handleBreakdown = () => {
     const draftCard: DraftCardData = {

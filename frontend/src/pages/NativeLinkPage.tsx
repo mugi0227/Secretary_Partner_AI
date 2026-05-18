@@ -17,11 +17,11 @@ const formatError = (error: unknown): string => {
   return '不明なエラーです';
 };
 
-const formatTimeLeft = (expiresAt: string | null): string => {
+const formatTimeLeft = (expiresAt: string | null, nowMs: number): string => {
   if (!expiresAt) return '';
   const expiresAtMs = new Date(expiresAt).getTime();
   if (Number.isNaN(expiresAtMs)) return '';
-  const remainingSec = Math.max(0, Math.floor((expiresAtMs - Date.now()) / 1000));
+  const remainingSec = Math.max(0, Math.floor((expiresAtMs - nowMs) / 1000));
   const minutes = Math.floor(remainingSec / 60);
   const seconds = remainingSec % 60;
   return `${minutes}:${String(seconds).padStart(2, '0')}`;
@@ -43,15 +43,14 @@ export function NativeLinkPage() {
   }, []);
 
   const timeLeft = useMemo(() => {
-    void nowTick;
-    return formatTimeLeft(expiresAt);
+    return formatTimeLeft(expiresAt, nowTick);
   }, [expiresAt, nowTick]);
 
   const isExpired = useMemo(() => {
     if (!expiresAt) return false;
     const at = new Date(expiresAt).getTime();
     if (Number.isNaN(at)) return false;
-    return at <= Date.now();
+    return at <= nowTick;
   }, [expiresAt, nowTick]);
 
   const handleGenerate = async () => {

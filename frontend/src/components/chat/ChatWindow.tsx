@@ -10,6 +10,7 @@ import {
   FaPlus,
   FaXmark,
 } from 'react-icons/fa6';
+import { heartbeatApi } from '../../api/heartbeat';
 import { tasksApi } from '../../api/tasks';
 import { projectsApi } from '../../api/projects';
 import type {
@@ -20,6 +21,7 @@ import type {
 } from '../../api/types';
 import type { ApprovalResult } from '../../api/proposals';
 import { useChat, type ProposalInfo } from '../../hooks/useChat';
+import { useHeartbeatUnreadCount } from '../../hooks/useHeartbeatUnreadCount';
 import { useTaskModal } from '../../hooks/useTaskModal';
 import { useTimezone } from '../../hooks/useTimezone';
 import { formatDate } from '../../utils/dateTime';
@@ -69,7 +71,6 @@ export function ChatWindow({ isOpen, onClose, initialMessage, onInitialMessageCo
     selectedModel,
     setSelectedModel,
   } = useChat();
-  const [activeDraftCard, setActiveDraftCard] = useState<DraftCardData | null>(null);
   const [processedProposalIds, setProcessedProposalIds] = useState<Set<string>>(new Set());
   const [processedQuestionMessageIds, setProcessedQuestionMessageIds] = useState<Set<string>>(new Set());
   const approvedProposalsRef = useRef<ProposalInfo[]>([]);
@@ -79,6 +80,15 @@ export function ChatWindow({ isOpen, onClose, initialMessage, onInitialMessageCo
   const [draggedImage, setDraggedImage] = useState<string | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [historyMode, setHistoryMode] = useState<'all' | 'heartbeat'>('all');
+  const {
+    count: heartbeatUnreadCount,
+    unreadSessionIds: heartbeatUnreadSessionIds,
+  } = useHeartbeatUnreadCount();
+  const unreadHeartbeatSessionIds = useMemo(
+    () => new Set(heartbeatUnreadSessionIds),
+    [heartbeatUnreadSessionIds],
+  );
+  const hasHeartbeatUnread = heartbeatUnreadCount > 0;
   const [approvalMode, setApprovalMode] = useState<'manual' | 'auto'>(() => {
     return (userStorage.get('aiApprovalMode') as 'manual' | 'auto') || 'auto';
   });
@@ -91,6 +101,9 @@ export function ChatWindow({ isOpen, onClose, initialMessage, onInitialMessageCo
 
   // Task modal for viewing created tasks inline
   const [modalProjectId, setModalProjectId] = useState<string | null>(null);
+  const handleSelectedTaskChange = useCallback((task: Task | null) => {
+    setModalProjectId(task?.project_id ?? null);
+  }, []);
 
   const { data: projectMembers = [] } = useQuery({
     queryKey: ['project-members', modalProjectId],
@@ -142,12 +155,16 @@ export function ChatWindow({ isOpen, onClose, initialMessage, onInitialMessageCo
     onRefetch: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
     },
+    onSelectedTaskChange: handleSelectedTaskChange,
   });
 
-  // Sync project ID when selected task changes
-  useEffect(() => {
-    setModalProjectId(taskModal.selectedTask?.project_id ?? null);
-  }, [taskModal.selectedTask?.project_id]);
+  const markHeartbeatReadMutation = useMutation({
+    mutationFn: heartbeatApi.markRead,
+    onSuccess: (data) => {
+      queryClient.setQueryData(['heartbeat', 'unread-count'], data);
+      queryClient.invalidateQueries({ queryKey: ['heartbeat', 'unread-count'] });
+    },
+  });
 
   // Extract pending proposals from messages
   const pendingProposals = useMemo(() => {
@@ -157,7 +174,7 @@ export function ChatWindow({ isOpen, onClose, initialMessage, onInitialMessageCo
 
   const invalidateAfterProposal = () => {
     for (const key of [
-      ['tasks'], ['subtasks'], ['top3'], ['today-tasks'], ['schedule'],
+      ['tasks'], ['subtasks'], ['top3'], ['today-tasks'], ['today-plan'], ['schedule'],
       ['task-detail'], ['task-assignments'],
       ['projects'], ['project'], ['meeting-agendas'], ['member-child-tasks'],
     ]) {
@@ -255,14 +272,14 @@ export function ChatWindow({ isOpen, onClose, initialMessage, onInitialMessageCo
   };
 
   // Extract pending questions from messages
-  const pendingQuestionsData = useMemo(() => {
+  const pendingQuestionsData = (() => {
     for (const msg of messages) {
       if (msg.questions && msg.questions.length > 0 && !processedQuestionMessageIds.has(msg.id)) {
         return { messageId: msg.id, questions: msg.questions, context: msg.questionsContext };
       }
     }
     return null;
-  }, [messages, processedQuestionMessageIds]);
+  })();
 
   const handleQuestionsSubmit = (answer: string) => {
     if (pendingQuestionsData) {
@@ -297,15 +314,10 @@ export function ChatWindow({ isOpen, onClose, initialMessage, onInitialMessageCo
   // DraftCard (AI生成ダイアログ) 使用時は、デフォルトで新規チャットを作成する
   // 既存チャットに追加したい場合は、明示的に newChat: false を指定する
   useEffect(() => {
-    if (draftCard) {
-      // Default: clear chat unless explicitly set to false
-      if (draftCard.newChat !== false) {
-        clearChat();
-      }
-      setActiveDraftCard(draftCard);
-      onDraftCardConsumed?.();
+    if (draftCard && draftCard.newChat !== false) {
+      clearChat();
     }
-  }, [draftCard, onDraftCardConsumed, clearChat]);
+  }, [draftCard, clearChat]);
 
   const processImageFile = (file: File) => {
     // Check file size (max 5MB)
@@ -365,8 +377,6 @@ export function ChatWindow({ isOpen, onClose, initialMessage, onInitialMessageCo
     }
   };
 
-  if (!isOpen) return null;
-
   const handleSelectSession = async (targetSessionId: string) => {
     try {
       shouldAutoScroll.current = true;
@@ -419,6 +429,8 @@ export function ChatWindow({ isOpen, onClose, initialMessage, onInitialMessageCo
     setIsHistoryOpen((prev) => (prev && historyMode === mode ? false : true));
   };
 
+  if (!isOpen) return null;
+
   return (
     <div
       className={`chat-window ${isDragging ? 'dragging' : ''}`}
@@ -469,11 +481,17 @@ export function ChatWindow({ isOpen, onClose, initialMessage, onInitialMessageCo
           </div>
           <div className="chat-header-actions">
             <button
-              className="header-btn"
+              className={`header-btn heartbeat-header-btn ${hasHeartbeatUnread ? 'has-unread' : ''}`}
               onClick={() => toggleHistory('heartbeat')}
-              title="Heartbeat"
+              title={hasHeartbeatUnread ? `Heartbeat (${heartbeatUnreadCount} new)` : 'Heartbeat'}
+              aria-label={hasHeartbeatUnread ? `Heartbeat (${heartbeatUnreadCount} new)` : 'Heartbeat'}
             >
               <FaHeartPulse />
+              {hasHeartbeatUnread && (
+                <span className="header-btn-badge" aria-hidden="true">
+                  {heartbeatUnreadCount}
+                </span>
+              )}
             </button>
             <button
               className="header-btn"
@@ -496,13 +514,25 @@ export function ChatWindow({ isOpen, onClose, initialMessage, onInitialMessageCo
         <div className="chat-history-panel">
           <div className="history-panel-header">
             <span>{historyTitle}</span>
-            <button
-              className="header-btn close-btn"
-              onClick={() => setIsHistoryOpen(false)}
-              title="Close history"
-            >
-              <FaXmark />
-            </button>
+            <div className="history-panel-actions">
+              {historyMode === 'heartbeat' && hasHeartbeatUnread && (
+                <button
+                  className="history-mark-read-btn"
+                  onClick={() => markHeartbeatReadMutation.mutate()}
+                  type="button"
+                  disabled={markHeartbeatReadMutation.isPending}
+                >
+                  すべて既読
+                </button>
+              )}
+              <button
+                className="header-btn close-btn"
+                onClick={() => setIsHistoryOpen(false)}
+                title="Close history"
+              >
+                <FaXmark />
+              </button>
+            </div>
           </div>
           <div className="history-panel-list">
             {(isLoadingSessions || isLoadingHistory) && (
@@ -512,16 +542,28 @@ export function ChatWindow({ isOpen, onClose, initialMessage, onInitialMessageCo
               <div className="history-panel-empty">{emptyHistoryText}</div>
             )}
             {!isLoadingSessions && !isLoadingHistory && visibleSessions.map((session) => (
+              (() => {
+                const isUnreadHeartbeatSession =
+                  historyMode === 'heartbeat'
+                  && unreadHeartbeatSessionIds.has(session.session_id);
+                return (
               <button
                 key={session.session_id}
-                className={`history-panel-item ${session.session_id === sessionId ? 'active' : ''}`}
+                className={`history-panel-item ${session.session_id === sessionId ? 'active' : ''} ${isUnreadHeartbeatSession ? 'unread' : ''}`}
                 onClick={() => handleSelectSession(session.session_id)}
                 type="button"
                 disabled={isLoadingHistory}
               >
-                <span className="history-panel-title">{session.title || 'New Chat'}</span>
+                <span className="history-panel-title-row">
+                  <span className="history-panel-title">{session.title || 'New Chat'}</span>
+                  {isUnreadHeartbeatSession && (
+                    <span className="history-new-badge">新規</span>
+                  )}
+                </span>
                 <span className="history-panel-date">{formatSessionDate(session.updated_at)}</span>
               </button>
+                );
+              })()
             ))}
           </div>
         </div>
@@ -560,14 +602,14 @@ export function ChatWindow({ isOpen, onClose, initialMessage, onInitialMessageCo
       </div>
 
       {/* Priority: DraftCard > ProposalPanel > QuestionsPanel > ChatInput */}
-      {activeDraftCard ? (
+      {draftCard ? (
         <DraftCard
-          data={activeDraftCard}
+          data={draftCard}
           onSend={(message) => {
             sendMessageStream(message, undefined, undefined, projectContext);
-            setActiveDraftCard(null);
+            onDraftCardConsumed?.();
           }}
-          onCancel={() => setActiveDraftCard(null)}
+          onCancel={() => onDraftCardConsumed?.()}
         />
       ) : pendingProposals.length > 0 ? (
         <ProposalPanel

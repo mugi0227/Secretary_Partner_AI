@@ -10,11 +10,11 @@ interface MeetingBadgeProps {
 }
 
 export function MeetingBadge({ task, showDetails = false }: MeetingBadgeProps) {
+  const timezone = useTimezone();
+
   if (!task.is_fixed_time) {
     return null;
   }
-
-  const timezone = useTimezone();
 
   const formatTime = (dateString: string) => {
     return formatDate(dateString, {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { CallBackProps } from 'react-joyride';
 import { ACTIONS, EVENTS, STATUS } from 'react-joyride';
 import { tourStorage } from '../utils/tourStorage';
@@ -17,19 +17,6 @@ export function usePageTour(pageKey: string): UsePageTourReturn {
   const steps = tourRegistry[pageKey] ?? [];
   const [run, setRun] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
-
-  // Auto-start on mount if tour not yet completed
-  useEffect(() => {
-    if (steps.length === 0) return;
-    // Wait for page animations (framer-motion transitions)
-    const timer = setTimeout(() => {
-      if (!tourStorage.isCompleted(pageKey)) {
-        setStepIndex(0);
-        setRun(true);
-      }
-    }, 800);
-    return () => clearTimeout(timer);
-  }, [pageKey, steps.length]);
 
   const handleCallback = useCallback(
     (data: CallBackProps) => {

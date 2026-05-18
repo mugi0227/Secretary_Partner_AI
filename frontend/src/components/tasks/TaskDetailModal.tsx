@@ -121,7 +121,6 @@ export function TaskDetailModal({
   onDelete,
   onProgressChange,
   onTaskCheck,
-  onActionItemsCreated: _onActionItemsCreated,
   onStatusChange,
   onCreateSubtask,
   onUpdateTask,
@@ -181,7 +180,7 @@ export function TaskDetailModal({
         filterByAssignee: true,
       });
       for (const key of [
-        ['tasks'], ['subtasks'], ['top3'], ['today-tasks'], ['schedule'],
+        ['tasks'], ['subtasks'], ['top3'], ['today-tasks'], ['today-plan'], ['schedule'],
         ['task-detail'], ['task-assignments'], ['project'], ['member-child-tasks'],
       ]) {
         queryClient.invalidateQueries({ queryKey: key });

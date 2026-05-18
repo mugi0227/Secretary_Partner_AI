@@ -821,7 +821,9 @@ export function ProjectDetailModal({ project, onClose, onUpdate }: ProjectDetail
                       ) : (
                         members.length > 0 && (
                           <div className="members-list">
-                            {members.map((member) => (
+                            {members.map((member) => {
+                              const isOwnerMember = member.member_user_id === project.user_id;
+                              return (
                               <div key={member.id} className="member-chip">
                                 <div className="member-info">
                                   <span className="member-name">
@@ -836,9 +838,9 @@ export function ProjectDetailModal({ project, onClose, onUpdate }: ProjectDetail
                                     onChange={(e) =>
                                       handleMemberRoleChange(member.id, e.target.value as ProjectMember['role'])
                                     }
-                                    disabled={memberActionId === member.id}
+                                    disabled={memberActionId === member.id || isOwnerMember}
                                   >
-                                    <option value="OWNER">OWNER</option>
+                                    {isOwnerMember && <option value="OWNER">OWNER</option>}
                                     <option value="ADMIN">ADMIN</option>
                                     <option value="MEMBER">MEMBER</option>
                                   </select>
@@ -846,13 +848,14 @@ export function ProjectDetailModal({ project, onClose, onUpdate }: ProjectDetail
                                     type="button"
                                     className="member-remove-btn"
                                     onClick={() => handleRemoveMember(member.id)}
-                                    disabled={memberActionId === member.id}
+                                    disabled={memberActionId === member.id || isOwnerMember}
                                   >
                                     Remove
                                   </button>
                                 </div>
                               </div>
-                            ))}
+                              );
+                            })}
                           </div>
                         )
                       )}

@@ -1,7 +1,6 @@
 ﻿import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { chatApi } from '../api/chat';
-import { heartbeatApi } from '../api/heartbeat';
 import type {
   ChatHistoryMessage,
   ChatMode,
@@ -231,12 +230,7 @@ export function useChat() {
       setMessages(mapped);
       setSessionId(targetSessionId);
       if (isHeartbeatSession(targetSessionId)) {
-        try {
-          await heartbeatApi.markRead();
-          queryClient.invalidateQueries({ queryKey: ['heartbeat', 'unread-count'] });
-        } catch (error) {
-          console.error('Failed to mark heartbeat messages as read', error);
-        }
+        queryClient.invalidateQueries({ queryKey: ['heartbeat', 'unread-count'] });
       }
     } finally {
       setIsLoadingHistory(false);
@@ -563,7 +557,7 @@ export function useChat() {
               }
 
               for (const key of [
-                ['tasks'], ['subtasks'], ['top3'], ['today-tasks'], ['schedule'],
+                ['tasks'], ['subtasks'], ['top3'], ['today-tasks'], ['today-plan'], ['schedule'],
                 ['task-detail'], ['task-assignments'],
                 ['projects'], ['project'],
                 ['project-children'], ['project-link-requests'],

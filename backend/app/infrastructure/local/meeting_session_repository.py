@@ -4,7 +4,6 @@ SQLite implementation of meeting session repository.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Optional
 from uuid import UUID, uuid4
 
@@ -13,12 +12,12 @@ from sqlalchemy import and_, desc, select
 from app.infrastructure.local.database import MeetingSessionORM, get_session_factory
 from app.interfaces.meeting_session_repository import IMeetingSessionRepository
 from app.models.enums import MeetingSessionStatus
-from app.utils.datetime_utils import now_utc
 from app.models.meeting_session import (
     MeetingSession,
     MeetingSessionCreate,
     MeetingSessionUpdate,
 )
+from app.utils.datetime_utils import now_utc
 
 
 class SqliteMeetingSessionRepository(IMeetingSessionRepository):

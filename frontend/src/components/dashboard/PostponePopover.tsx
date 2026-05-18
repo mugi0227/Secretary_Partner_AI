@@ -61,7 +61,7 @@ export function PostponePopover({ taskId, className, onSuccess }: PostponePopove
 
   const invalidateAll = () => {
     for (const key of [
-      ['tasks'], ['subtasks'], ['top3'], ['today-tasks'], ['schedule'],
+      ['tasks'], ['subtasks'], ['top3'], ['today-tasks'], ['today-plan'], ['schedule'],
       ['task-detail'], ['task-assignments'], ['project'],
     ]) {
       queryClient.invalidateQueries({ queryKey: key });

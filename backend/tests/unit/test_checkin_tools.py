@@ -13,7 +13,6 @@ import pytest
 
 from app.models.collaboration import (
     CheckinCreateV2,
-    CheckinItem,
     CheckinItemResponse,
     CheckinV2,
 )

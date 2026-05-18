@@ -14,6 +14,7 @@ from google.adk.tools import FunctionTool
 from pydantic import BaseModel, Field, field_validator
 
 from app.core.config import get_settings
+from app.core.exceptions import BusinessLogicError, NotFoundError
 from app.interfaces.project_member_repository import IProjectMemberRepository
 from app.interfaces.project_repository import IProjectRepository
 from app.interfaces.proposal_repository import IProposalRepository
@@ -25,7 +26,7 @@ from app.models.enums import CreatedBy, EnergyLevel, Priority
 from app.models.proposal import Proposal, ProposalType
 from app.models.task import Task, TaskCreate, TaskUpdate, TouchpointStep
 from app.services.project_permissions import ProjectAction
-from app.services.task_utils import renumber_siblings
+from app.services.task_application_service import TaskApplicationService
 from app.tools.approval_tools import create_tool_action_proposal
 from app.tools.permissions import require_project_action, require_project_member
 from app.utils.datetime_utils import (
@@ -410,6 +411,10 @@ async def _resolve_user_timezone(
     return normalize_timezone(user.timezone if user else None)
 
 
+def _task_service_error(exc: Exception) -> dict:
+    return {"error": str(exc)}
+
+
 async def _resolve_task_access(
     user_id: str,
     task_id: UUID,
@@ -767,90 +772,31 @@ async def create_task(
         meeting_notes=input_data.meeting_notes,
     )
 
-    task = await repo.create(owner_id, task_data)
-    result = task.model_dump(mode="json")  # Serialize UUIDs to strings
+    service = TaskApplicationService(
+        task_repo=repo,
+        project_repo=project_repo,
+        assignment_repo=assignment_repo,
+        member_repo=member_repo,
+        user_repo=user_repo,
+    )
+    try:
+        creation = await service.create_task(
+            user_id,
+            task_data,
+            assignee_ids=input_data.assignee_ids,
+            inherit_parent_assignments=True,
+            auto_assign_requester=True,
+            dedupe_fixed_time=True,
+            shift_siblings=False,
+        )
+    except (BusinessLogicError, NotFoundError) as exc:
+        return _task_service_error(exc)
 
-    assigned = []
-    # Assign task to members if assignee_ids provided
-    if input_data.assignee_ids and assignment_repo:
-        # Resolve assignee IDs: AI may provide member record IDs instead of member_user_id
-        resolved_ids = list(input_data.assignee_ids)
-        if project_id and member_repo:
-            try:
-                members = await member_repo.list_by_project(project_id)
-                user_id_set = {m.member_user_id for m in members}
-                record_to_user = {str(m.id): m.member_user_id for m in members}
-                resolved_ids = []
-                for aid in input_data.assignee_ids:
-                    if not aid or not aid.strip():
-                        continue
-                    aid = aid.strip()
-                    if aid in user_id_set:
-                        resolved_ids.append(aid)
-                    elif aid in record_to_user:
-                        resolved_ids.append(record_to_user[aid])
-                    else:
-                        import logging
-                        logging.getLogger(__name__).warning(
-                            "Skipping unknown assignee_id %s (not a member of project %s)", aid, project_id,
-                        )
-            except Exception:
-                pass  # Fall back to using original IDs
-
-        for assignee_id in resolved_ids:
-            if assignee_id and assignee_id.strip():
-                try:
-                    assignment = await assignment_repo.assign(
-                        owner_id,
-                        task.id,
-                        TaskAssignmentCreate(assignee_id=assignee_id),
-                    )
-                    assigned.append(assignment.model_dump(mode="json"))
-                except Exception:
-                    pass
-
-    if not assigned and assignment_repo and parent_id and not input_data.assignee_ids:
-        parent_assignments = await assignment_repo.list_by_task(owner_id, parent_id)
-        if not parent_assignments and project_id:
-            project_assignments = await assignment_repo.list_by_project(owner_id, project_id)
-            parent_assignments = [
-                assignment for assignment in project_assignments if assignment.task_id == parent_id
-            ]
-        for assignment in parent_assignments:
-            if assignment.assignee_id:
-                created = await assignment_repo.assign(
-                    owner_id,
-                    task.id,
-                    TaskAssignmentCreate(assignee_id=assignment.assignee_id),
-                )
-                assigned.append(created.model_dump(mode="json"))
-
-    # Auto-assign to the requester (current user) for project tasks
-    if not assigned and assignment_repo and project_id and member_repo:
-        try:
-            members = await member_repo.list_by_project(project_id)
-            member_ids = {m.member_user_id for m in members}
-            if user_id in member_ids:
-                created = await assignment_repo.assign(
-                    owner_id,
-                    task.id,
-                    TaskAssignmentCreate(assignee_id=user_id),
-                )
-                assigned.append(created.model_dump(mode="json"))
-            elif len(members) == 1:
-                created = await assignment_repo.assign(
-                    owner_id,
-                    task.id,
-                    TaskAssignmentCreate(assignee_id=members[0].member_user_id),
-                )
-                assigned.append(created.model_dump(mode="json"))
-        except Exception as exc:
-            import logging
-            logging.getLogger(__name__).warning("Auto-assign failed: %s", exc, exc_info=True)
-
-    if assigned:
-        result["assignments"] = assigned
-
+    result = creation.task.model_dump(mode="json")  # Serialize UUIDs to strings
+    if creation.assignments:
+        result["assignments"] = [
+            assignment.model_dump(mode="json") for assignment in creation.assignments
+        ]
     return result
 
 
@@ -1022,8 +968,60 @@ async def update_task(
         attendees=input_data.attendees,
         meeting_notes=input_data.meeting_notes,
     )
+    provided = set(input_data.model_fields_set)
+    update_field_map = {
+        "title": "title",
+        "description": "description",
+        "purpose": "purpose",
+        "project_id": "project_id",
+        "phase_id": "phase_id",
+        "status": "status",
+        "importance": "importance",
+        "urgency": "urgency",
+        "energy_level": "energy_level",
+        "estimated_minutes": "estimated_minutes",
+        "due_date": "due_date",
+        "start_not_before": "start_not_before",
+        "parent_id": "parent_id",
+        "order_in_parent": "order_in_parent",
+        "dependency_ids": "dependency_ids",
+        "same_day_allowed": "same_day_allowed",
+        "min_gap_days": "min_gap_days",
+        "progress": "progress",
+        "source_capture_id": "source_capture_id",
+        "completion_note": "completion_note",
+        "guide": "guide",
+        "touchpoint_count": "touchpoint_count",
+        "touchpoint_minutes": "touchpoint_minutes",
+        "touchpoint_gap_days": "touchpoint_gap_days",
+        "touchpoint_steps": "touchpoint_steps",
+        "is_fixed_time": "is_fixed_time",
+        "is_all_day": "is_all_day",
+        "start_time": "start_time",
+        "end_time": "end_time",
+        "location": "location",
+        "attendees": "attendees",
+        "meeting_notes": "meeting_notes",
+    }
+    update_fields = {
+        update_field
+        for source_field, update_field in update_field_map.items()
+        if source_field in provided
+    }
+    if input_data.is_all_day is True:
+        update_fields.update({"start_time", "end_time", "is_fixed_time"})
+    update_data.model_fields_set.intersection_update(update_fields)
 
-    task = await repo.update(owner_id, task_id, update_data, project_id=current_project_id)
+    service = TaskApplicationService(
+        task_repo=repo,
+        project_repo=project_repo,
+        member_repo=member_repo,
+        user_repo=user_repo,
+    )
+    try:
+        task = await service.update_task(user_id, task_id, update_data)
+    except (BusinessLogicError, NotFoundError) as exc:
+        return _task_service_error(exc)
     return task.model_dump(mode="json")  # Serialize UUIDs to strings
 
 
@@ -1046,22 +1044,15 @@ async def delete_task(
         Deletion result
     """
     task_id = UUID(input_data.task_id)
-    task, owner_id, project_id, access_error = await _resolve_task_access(
-        user_id,
-        task_id,
-        repo,
-        project_repo,
-        member_repo,
+    service = TaskApplicationService(
+        task_repo=repo,
+        project_repo=project_repo,
+        member_repo=member_repo,
     )
-    if access_error:
-        return access_error
-
-    parent_id = task.parent_id if task else None
-    deleted = await repo.delete(owner_id, task_id, project_id=project_id)
-
-    if deleted and parent_id:
-        await renumber_siblings(repo, owner_id, parent_id, project_id)
-
+    try:
+        deleted = await service.delete_task(user_id, task_id)
+    except (BusinessLogicError, NotFoundError) as exc:
+        return _task_service_error(exc)
     return {
         "success": deleted,
         "task_id": input_data.task_id,
@@ -1196,32 +1187,35 @@ async def assign_task(
 ) -> dict:
     # Assign a task to one or more members.
     task_id = UUID(input_data.task_id)
-    _, owner_id, _, access_error = await _resolve_task_access(
-        user_id,
-        task_id,
-        task_repo,
-        project_repo,
-        member_repo,
-    )
-    if access_error:
-        return access_error
     assignee_ids = _normalize_assignee_ids(input_data)
     if not assignee_ids:
         raise ValueError("assignee_id or assignee_ids is required")
 
+    service = TaskApplicationService(
+        task_repo=task_repo,
+        project_repo=project_repo,
+        assignment_repo=assignment_repo,
+        member_repo=member_repo,
+    )
     if len(assignee_ids) == 1:
-        assignment = await assignment_repo.assign(
-            owner_id,
-            task_id,
-            TaskAssignmentCreate(assignee_id=assignee_ids[0]),
-        )
+        try:
+            assignment = await service.assign_task(
+                user_id,
+                task_id,
+                TaskAssignmentCreate(assignee_id=assignee_ids[0]),
+            )
+        except (BusinessLogicError, NotFoundError) as exc:
+            return _task_service_error(exc)
         return assignment.model_dump(mode="json")
 
-    assignments = await assignment_repo.assign_multiple(
-        owner_id,
-        task_id,
-        TaskAssignmentsCreate(assignee_ids=assignee_ids),
-    )
+    try:
+        assignments = await service.assign_task_multiple(
+            user_id,
+            task_id,
+            TaskAssignmentsCreate(assignee_ids=assignee_ids),
+        )
+    except (BusinessLogicError, NotFoundError) as exc:
+        return _task_service_error(exc)
     return {
         "assignments": [assignment.model_dump(mode="json") for assignment in assignments],
         "count": len(assignments),
@@ -1380,7 +1374,21 @@ async def create_meeting(
         created_by=CreatedBy.AGENT,
     )
 
-    task = await repo.create(owner_id, task_data)
+    service = TaskApplicationService(
+        task_repo=repo,
+        project_repo=project_repo,
+        member_repo=member_repo,
+    )
+    try:
+        creation = await service.create_task(
+            user_id,
+            task_data,
+            dedupe_fixed_time=True,
+            shift_siblings=False,
+        )
+    except (BusinessLogicError, NotFoundError) as exc:
+        return _task_service_error(exc)
+    task = creation.task
     return task.model_dump(mode="json")
 
 

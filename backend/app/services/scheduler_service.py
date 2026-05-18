@@ -1292,6 +1292,19 @@ class SchedulerService:
         today = reference_today or date.today()
         _tz = ZoneInfo(normalize_timezone(user_timezone))
 
+        def as_aware(value: Optional[datetime]) -> Optional[datetime]:
+            if value is None:
+                return None
+            if value.tzinfo is None:
+                return value.replace(tzinfo=_UTC)
+            return value
+
+        def local_day_start(value: date) -> datetime:
+            return datetime.combine(value, datetime.min.time(), tzinfo=_tz)
+
+        def local_day_end(value: date) -> datetime:
+            return datetime.combine(value, datetime.max.time(), tzinfo=_tz)
+
         def get_parent_bounds(task: Task) -> tuple[Optional[datetime], Optional[datetime]]:
             parent_start_candidates: list[datetime] = []
             parent_due_candidates: list[datetime] = []
@@ -1302,10 +1315,12 @@ class SchedulerService:
                 parent = task_map.get(parent_id)
                 if not parent:
                     break
-                if parent.start_not_before:
-                    parent_start_candidates.append(parent.start_not_before)
-                if parent.due_date:
-                    parent_due_candidates.append(parent.due_date)
+                parent_start_dt = as_aware(parent.start_not_before)
+                if parent_start_dt:
+                    parent_start_candidates.append(parent_start_dt)
+                parent_due_dt = as_aware(parent.due_date)
+                if parent_due_dt:
+                    parent_due_candidates.append(parent_due_dt)
                 parent_id = parent.parent_id
             parent_start = max(parent_start_candidates) if parent_start_candidates else None
             parent_due = min(parent_due_candidates) if parent_due_candidates else None
@@ -1313,7 +1328,7 @@ class SchedulerService:
 
         for task in tasks:
             parent_start, parent_due = get_parent_bounds(task)
-            start_dt = task.start_not_before
+            start_dt = as_aware(task.start_not_before)
             if parent_start and (start_dt is None or start_dt < parent_start):
                 start_dt = parent_start
 
@@ -1323,24 +1338,22 @@ class SchedulerService:
             if task.pinned_date and _pinned_local_date(task.pinned_date, _tz) >= today:
                 # Use local-date midnight so that .date() yields the user's
                 # local date, not the UTC date of the stored pinned_date.
-                start_dt = datetime.combine(
-                    _pinned_local_date(task.pinned_date, _tz), datetime.min.time(),
-                )
+                start_dt = local_day_start(_pinned_local_date(task.pinned_date, _tz))
 
             planned_start, planned_end = planned_window_by_task.get(task.id, (None, None))
             if planned_start:
-                planned_start_dt = datetime.combine(planned_start, datetime.min.time())
+                planned_start_dt = local_day_start(planned_start)
                 if start_dt is None or start_dt < planned_start_dt:
                     start_dt = planned_start_dt
 
-            due_dt = task.due_date
+            due_dt = as_aware(task.due_date)
             if due_dt is None:
                 due_dt = parent_due
             elif parent_due and due_dt > parent_due:
                 due_dt = parent_due
 
             if planned_end:
-                planned_end_dt = datetime.combine(planned_end, datetime.max.time())
+                planned_end_dt = local_day_end(planned_end)
                 if due_dt is None or due_dt > planned_end_dt:
                     due_dt = planned_end_dt
 
@@ -1353,7 +1366,7 @@ class SchedulerService:
                     due_dt = start_dt
 
             if start_dt:
-                effective_start_by_task[task.id] = start_dt.date()
+                effective_start_by_task[task.id] = start_dt.astimezone(_tz).date()
             if due_dt:
                 effective_due_by_task[task.id] = due_dt
 

@@ -324,6 +324,28 @@ async def _validate_parent_project(
     return parent
 
 
+async def _is_project_owner(
+    project: Project,
+    user_id: str,
+    member_repo: ProjectMemberRepo,
+) -> bool:
+    if project.user_id == user_id:
+        return True
+    members = await member_repo.list_by_project(project.id)
+    return any(
+        member.member_user_id == user_id and member.role == ProjectRole.OWNER
+        for member in members
+    )
+
+
+def _reject_assigning_owner_role(role: ProjectRole | None) -> None:
+    if role == ProjectRole.OWNER:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OWNER role is reserved for the project owner.",
+        )
+
+
 async def _enrich_owner_names(
     projects: list[ProjectWithTaskCount],
     user_repo: UserRepo,
@@ -369,7 +391,15 @@ async def create_project(
 ):
     """Create a new project."""
     if project.parent_project_id:
-        await _validate_parent_project(repo, user.id, None, project.parent_project_id)
+        parent = await _validate_parent_project(repo, user.id, None, project.parent_project_id)
+        if not await _is_project_owner(parent, user.id, member_repo):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Only the parent project owner can create a child project directly. "
+                    "Use a link request instead."
+                ),
+            )
 
     created_project = await repo.create(user.id, project)
 
@@ -614,6 +644,8 @@ async def add_project_member(
     user_repo: UserRepo,
 ):
     """Add a member to a project."""
+    _reject_assigning_owner_role(member.role)
+
     access = await require_project_action(
         user,
         project_id,
@@ -677,6 +709,17 @@ async def update_project_member(
     is_self = existing.member_user_id == user.id
     is_capacity_only = set(update_fields.keys()) <= {"capacity_hours"}
 
+    if update.role == ProjectRole.OWNER and existing.member_user_id != access.project.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="OWNER role cannot be assigned to another member.",
+        )
+    if existing.member_user_id == access.project.user_id and update.role not in (None, ProjectRole.OWNER):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The project owner's role cannot be changed.",
+        )
+
     if not (is_self and is_capacity_only):
         from app.services.project_permissions import ensure_project_action
         try:
@@ -712,6 +755,11 @@ async def delete_project_member(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Project member {member_id} not found",
+        )
+    if existing.member_user_id == access.project.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The project owner cannot be removed from the project.",
         )
     deleted = await member_repo.delete(owner_id, member_id)
     if not deleted:
@@ -752,6 +800,8 @@ async def create_project_invitation(
     user_repo: UserRepo,
 ):
     """Create a project invitation (or add member if user exists)."""
+    _reject_assigning_owner_role(invitation.role)
+
     access = await require_project_action(
         user,
         project_id,
@@ -874,6 +924,7 @@ async def accept_project_invitation(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invitation is not pending",
         )
+    _reject_assigning_owner_role(invitation.role)
     expires_at = ensure_utc(invitation.expires_at)
     if expires_at and expires_at < now_utc():
         await invitation_repo.update(
@@ -1799,6 +1850,8 @@ async def invite_from_parent(
     user_repo: UserRepo,
 ):
     """Invite a parent project member to this child project with a specified role."""
+    _reject_assigning_owner_role(body.role)
+
     # Verify the user can manage members on this child project
     access = await require_project_action(
         user, project_id, repo, member_repo, ProjectAction.MEMBER_MANAGE,

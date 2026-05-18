@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useTodayTasks } from '../../hooks/useTodayTasks';
+import { useTodayPlan } from '../../hooks/useTodayPlan';
 import { useTasks } from '../../hooks/useTasks';
 import { useProjects } from '../../hooks/useProjects';
 import { useCapacitySettings } from '../../hooks/useCapacitySettings';
 import { StepNumber } from '../common/StepNumber';
 import { tasksApi } from '../../api/tasks';
-import type { Task } from '../../api/types';
+import type { Task, TodayPlanTask } from '../../api/types';
+import type { DraftCardData } from '../chat/DraftCard';
 import { sortTasksByStepNumber } from '../../utils/taskSort';
 import { userStorage } from '../../utils/userStorage';
 import { useTimezone } from '../../hooks/useTimezone';
@@ -14,18 +15,28 @@ import { PostponePopover } from './PostponePopover';
 import './TodayTasksCard.css';
 
 const LOCK_STORAGE_KEY = 'todayTasksLock';
+const DISMISSED_RECOMMENDATIONS_STORAGE_KEY = 'todayDismissedRecommendations';
 
-const TEXT = {
-  title: '今日のタスク',
-  nextAction: 'Next Action',
-  fetchError: '今日のタスクの取得に失敗しました',
+const TEXT: Record<string, string> = {
+  title: '今日やること',
+  nextAction: '次の一手',
+  fetchError: '今日の計画の取得に失敗しました',
   loading: '読み込み中...',
   dependencyAlert: '依存タスクが完了していないため完了できません',
-  locked: 'Locked',
-  lock: 'Lock',
+  locked: '固定中',
+  lock: '今日の予定を固定',
   unlock: 'Unlock',
-  empty: '今日のタスクはありません',
+  recommendations: 'AIのおすすめ',
+  recommendationsNote: 'AIの提案です。今日やるかはここで自分で確定します。',
+  add: '今日やる',
+  remove: '外す',
+  dismiss: 'やらない',
+  breakdown: '分解',
+  restoreHidden: '非表示を戻す',
+  empty: '今日やることはまだ選ばれていません',
   parentUnknown: '親タスク不明',
+  personalTask: '個人タスク',
+  scorePrefix: '優先度',
 };
 
 const formatMinutes = (minutes: number) => {
@@ -62,6 +73,8 @@ type TodayTaskSnapshot = {
   parent_title?: string | null;
 };
 
+type DismissedRecommendationStore = Record<string, string[]>;
+
 interface TodayTasksCardProps {
   /** タスククリック時のコールバック（モーダル表示は親に委譲） */
   onTaskClick?: (task: Task) => void;
@@ -69,7 +82,7 @@ interface TodayTasksCardProps {
 
 export function TodayTasksCard({ onTaskClick }: TodayTasksCardProps) {
   const timezone = useTimezone();
-  const { data, isLoading, error } = useTodayTasks();
+  const { data, isLoading, error, updateSelection, isUpdatingSelection } = useTodayPlan();
   const { tasks: allTasks, updateTask } = useTasks();
   const { projects } = useProjects();
   const { getCapacityForDate } = useCapacitySettings();
@@ -83,6 +96,16 @@ export function TodayTasksCard({ onTaskClick }: TodayTasksCardProps) {
     }
   });
   const [dependencyCache, setDependencyCache] = useState<Record<string, Task>>({});
+  const [dismissedRecommendationStore, setDismissedRecommendationStore] =
+    useState<DismissedRecommendationStore>(() => {
+      const raw = userStorage.get(DISMISSED_RECOMMENDATIONS_STORAGE_KEY);
+      if (!raw) return {};
+      try {
+        return JSON.parse(raw) as DismissedRecommendationStore;
+      } catch {
+        return {};
+      }
+    });
 
   const parentMap = useMemo(() => {
     const map = new Map<string, Task>();
@@ -101,8 +124,48 @@ export function TodayTasksCard({ onTaskClick }: TodayTasksCardProps) {
     ? lockInfoState
     : null;
 
-  const todayTasks = useMemo(() => data?.today_tasks ?? [], [data?.today_tasks]);
-  const todayAllocations = useMemo(() => data?.today_allocations ?? [], [data?.today_allocations]);
+  const todayTasks = useMemo(
+    () => data?.selected.map(item => item.task) ?? [],
+    [data?.selected],
+  );
+  const recommendations = useMemo(
+    () => data?.recommendations ?? [],
+    [data?.recommendations],
+  );
+  const dismissedRecommendationIds = useMemo(
+    () => new Set(dismissedRecommendationStore[dateLabel] ?? []),
+    [dismissedRecommendationStore, dateLabel],
+  );
+  const visibleRecommendations = useMemo(
+    () => recommendations.filter(item => !dismissedRecommendationIds.has(item.task.id)),
+    [recommendations, dismissedRecommendationIds],
+  );
+  const hiddenRecommendationCount = recommendations.length - visibleRecommendations.length;
+  const recommendationTasks = useMemo(
+    () => visibleRecommendations.map(item => item.task),
+    [visibleRecommendations],
+  );
+  const planItemByTaskId = useMemo(() => {
+    const map = new Map<string, TodayPlanTask>();
+    [
+      ...(data?.selected ?? []),
+      ...(data?.recommendations ?? []),
+      ...(data?.scheduled ?? []),
+      ...(data?.blocked ?? []),
+    ].forEach(item => map.set(item.task.id, item));
+    return map;
+  }, [data?.selected, data?.recommendations, data?.scheduled, data?.blocked]);
+  const todayAllocations = useMemo(
+    () => data?.selected.map(item => ({
+      task_id: item.task.id,
+      allocated_minutes: item.allocated_minutes || item.remaining_minutes,
+      total_minutes: item.remaining_minutes,
+      ratio: item.remaining_minutes > 0
+        ? Math.min(1, (item.allocated_minutes || item.remaining_minutes) / item.remaining_minutes)
+        : 0,
+    })) ?? [],
+    [data?.selected],
+  );
 
   // Clean up stale lock info
   useEffect(() => {
@@ -166,9 +229,78 @@ export function TodayTasksCard({ onTaskClick }: TodayTasksCardProps) {
     updateTask(taskId, { status: 'DONE' });
   };
 
-  const allocatedMinutes = data?.total_estimated_minutes ?? 0;
-  const meetingMinutes = data?.meeting_minutes ?? 0;
-  const displayCapacityMinutes = Math.max(
+  const handleAddRecommendedTask = async (taskId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (todayTasks.some(task => task.id === taskId)) return;
+    await updateSelection([...todayTasks.map(task => task.id), taskId]);
+    clearDismissedRecommendation(taskId);
+  };
+
+  const handleRemoveSelectedTask = async (taskId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    await updateSelection(todayTasks.filter(task => task.id !== taskId).map(task => task.id));
+  };
+
+  const persistDismissedRecommendationStore = (
+    updater: (current: DismissedRecommendationStore) => DismissedRecommendationStore,
+  ) => {
+    setDismissedRecommendationStore(current => {
+      const next = updater(current);
+      userStorage.set(DISMISSED_RECOMMENDATIONS_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const clearDismissedRecommendation = (taskId: string) => {
+    persistDismissedRecommendationStore(current => {
+      const nextIds = (current[dateLabel] ?? []).filter(id => id !== taskId);
+      return { ...current, [dateLabel]: nextIds };
+    });
+  };
+
+  const handleDismissRecommendation = (taskId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    persistDismissedRecommendationStore(current => {
+      const existing = new Set(current[dateLabel] ?? []);
+      existing.add(taskId);
+      return { ...current, [dateLabel]: Array.from(existing) };
+    });
+  };
+
+  const handleRestoreHiddenRecommendations = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    persistDismissedRecommendationStore(current => {
+      const next = { ...current };
+      delete next[dateLabel];
+      return next;
+    });
+  };
+
+  const handleBreakdownTask = (task: Task, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const draftCard: DraftCardData = {
+      type: 'subtask',
+      title: 'タスクを分解',
+      info: [
+        { label: 'タスク', value: task.title },
+        { label: 'タスクID', value: task.id },
+      ],
+      placeholder: '例: 最初の一歩が明確になるように3〜5個に分解して',
+      promptTemplate: `タスク「${task.title}」をサブタスクに分解してください。
+
+親タスクID: ${task.id}
+${task.project_id ? `親タスクと同じ project_id (${task.project_id}) で作成してください。` : ''}
+各サブタスクには、完了条件と進め方が分かる短い説明を入れてください。
+
+追加の指示:
+{instruction}`,
+    };
+    window.dispatchEvent(new CustomEvent('secretary:chat-open', { detail: { draftCard } }));
+  };
+
+  const allocatedMinutes = data?.capacity.total_minutes ?? 0;
+  const meetingMinutes = data?.capacity.meeting_minutes ?? 0;
+  const displayCapacityMinutes = data?.capacity.capacity_minutes ?? Math.max(
     0,
     Math.round(getCapacityForDate(todayInTimezone(timezone).toJSDate()) * 60)
   );
@@ -223,10 +355,13 @@ export function TodayTasksCard({ onTaskClick }: TodayTasksCardProps) {
   const meetingPercent = displayCapacityMinutes
     ? Math.min(100, Math.round((meetingMinutesWithin / displayCapacityMinutes) * 100))
     : 0;
-  const isOverflow = totalCommittedMinutes > displayCapacityMinutes || (data?.overflow ?? false);
+  const isOverflow = totalCommittedMinutes > displayCapacityMinutes || !(data?.capacity.feasible ?? true);
 
   useEffect(() => {
-    const tasksForDependencyScan = lockInfo ? (lockedTasks ?? []) : todayTasks;
+    const tasksForDependencyScan = [
+      ...(lockInfo ? (lockedTasks ?? []) : todayTasks),
+      ...recommendationTasks,
+    ];
     const knownIds = new Set<string>([
       ...allTasks.map(task => task.id),
       ...Object.keys(dependencyCache),
@@ -253,7 +388,7 @@ export function TodayTasksCard({ onTaskClick }: TodayTasksCardProps) {
         setDependencyCache(prev => ({ ...prev, ...updates }));
       }
     });
-  }, [lockInfo, lockedTasks, todayTasks, allTasks, dependencyCache]);
+  }, [lockInfo, lockedTasks, todayTasks, recommendationTasks, allTasks, dependencyCache]);
 
   const dependencyStatusByTaskId = (() => {
     const map = new Map<string, { blocked: boolean; reason?: string }>();
@@ -262,7 +397,7 @@ export function TodayTasksCard({ onTaskClick }: TodayTasksCardProps) {
       ...Object.values(dependencyCache).map(task => [task.id, task] as [string, Task]),
     ]);
 
-    effectiveTodayTasks.forEach(task => {
+    [...effectiveTodayTasks, ...recommendationTasks].forEach(task => {
       if (!task.dependency_ids || task.dependency_ids.length === 0) return;
       const blockingTitles: string[] = [];
       let hasMissing = false;
@@ -506,6 +641,7 @@ export function TodayTasksCard({ onTaskClick }: TodayTasksCardProps) {
               ? projectMap.get(focusTask.project_id)
               : null;
             const allocation = allocationSource?.get(focusTask.id);
+            const planItem = planItemByTaskId.get(focusTask.id);
 
             return (
               <div
@@ -532,23 +668,41 @@ export function TodayTasksCard({ onTaskClick }: TodayTasksCardProps) {
                     {focusTask.title}
                     {isBlocked && <span className="lock-icon">🔒</span>}
                   </div>
-                  {(projectName || parentTitle) && (
-                    <div className="focus-context">
-                      {projectName && <span className="focus-project">{projectName}</span>}
-                      {projectName && parentTitle && <span className="context-separator">/</span>}
-                      {parentTitle && <span className="focus-parent-text">{parentTitle}</span>}
-                    </div>
-                  )}
+                  <TaskContext
+                    projectName={projectName ?? undefined}
+                    parentTitle={parentTitle ?? undefined}
+                    className="focus-context"
+                    projectClassName="focus-project"
+                    parentClassName="focus-parent-text"
+                  />
                   <div className="focus-meta">
                     {formatMinutes(focusTask.estimated_minutes || 0)}
                     {allocation && ` / 目標${Math.round(allocation.ratio * 100)}%`}
                   </div>
+                  <TaskPlanExplanation item={planItem} />
                 </div>
                 {!isDone && (
-                  <PostponePopover
-                    taskId={focusTask.id}
-                    className="focus-postpone"
-                  />
+                  <div className="focus-side-actions">
+                    <button
+                      type="button"
+                      className="selection-action-btn secondary"
+                      onClick={(e) => handleBreakdownTask(focusTask, e)}
+                    >
+                      {TEXT.breakdown}
+                    </button>
+                    <button
+                      type="button"
+                      className="selection-action-btn remove"
+                      onClick={(e) => handleRemoveSelectedTask(focusTask.id, e)}
+                      disabled={isUpdatingSelection}
+                    >
+                      {TEXT.remove}
+                    </button>
+                    <PostponePopover
+                      taskId={focusTask.id}
+                      className="focus-postpone"
+                    />
+                  </div>
                 )}
               </div>
             );
@@ -581,10 +735,15 @@ export function TodayTasksCard({ onTaskClick }: TodayTasksCardProps) {
                         key={task.id}
                         task={task}
                         dependencyStatus={dependencyStatusByTaskId.get(task.id)}
+                        planItem={planItemByTaskId.get(task.id)}
                         stepNumber={stepNumberByTaskId.get(task.id)}
                         onCheck={handleTaskCheck}
                         onClick={handleTaskClick}
                         getProgressValues={getProgressValues}
+                        selectionActionLabel={TEXT.remove}
+                        selectionActionDisabled={isUpdatingSelection}
+                        onSelectionAction={handleRemoveSelectedTask}
+                        onBreakdown={handleBreakdownTask}
                         hideParent
                       />
                     ))}
@@ -605,12 +764,17 @@ export function TodayTasksCard({ onTaskClick }: TodayTasksCardProps) {
                     key={task.id}
                     task={task}
                     dependencyStatus={dependencyStatusByTaskId.get(task.id)}
+                    planItem={planItemByTaskId.get(task.id)}
                     stepNumber={stepNumberByTaskId.get(task.id)}
                     parentTitle={parentTitle ?? undefined}
                     projectName={projName ?? undefined}
                     onCheck={handleTaskCheck}
                     onClick={handleTaskClick}
                     getProgressValues={getProgressValues}
+                    selectionActionLabel={TEXT.remove}
+                    selectionActionDisabled={isUpdatingSelection}
+                    onSelectionAction={handleRemoveSelectedTask}
+                    onBreakdown={handleBreakdownTask}
                   />
                 );
               });
@@ -618,14 +782,118 @@ export function TodayTasksCard({ onTaskClick }: TodayTasksCardProps) {
           )}
         </div>
       </div>
+
+      {recommendations.length > 0 && (
+        <div className="recommendation-section">
+          <div className="recommendation-header">
+            <span>{TEXT.recommendations}</span>
+            {hiddenRecommendationCount > 0 && (
+              <button
+                type="button"
+                className="restore-recommendations-btn"
+                onClick={handleRestoreHiddenRecommendations}
+              >
+                {TEXT.restoreHidden} ({hiddenRecommendationCount})
+              </button>
+            )}
+          </div>
+          <div className="recommendation-note">{TEXT.recommendationsNote}</div>
+          <div className="task-list recommendation-list">
+            {visibleRecommendations.map(item => {
+              const task = item.task;
+              const parentTitle = task.parent_id
+                ? parentMap.get(task.parent_id)?.title
+                : null;
+              const projName = task.project_id
+                ? projectMap.get(task.project_id)
+                : null;
+              return (
+                <TaskItemRow
+                  key={task.id}
+                  task={task}
+                  dependencyStatus={dependencyStatusByTaskId.get(task.id)}
+                  planItem={item}
+                  parentTitle={parentTitle ?? undefined}
+                  projectName={projName ?? undefined}
+                  onCheck={handleTaskCheck}
+                  onClick={handleTaskClick}
+                  getProgressValues={getProgressValues}
+                  selectionActionLabel={TEXT.add}
+                  selectionActionDisabled={isUpdatingSelection}
+                  onSelectionAction={handleAddRecommendedTask}
+                  dismissActionLabel={TEXT.dismiss}
+                  onDismissAction={handleDismissRecommendation}
+                  onBreakdown={handleBreakdownTask}
+                />
+              );
+            })}
+            {visibleRecommendations.length === 0 && (
+              <div className="recommendation-empty">今日のおすすめはすべて非表示にしました。</div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // Task Item Row Component
+type TaskContextProps = {
+  projectName?: string;
+  parentTitle?: string;
+  className: string;
+  projectClassName: string;
+  parentClassName: string;
+};
+
+function TaskContext({
+  projectName,
+  parentTitle,
+  className,
+  projectClassName,
+  parentClassName,
+}: TaskContextProps) {
+  return (
+    <div className={className}>
+      {projectName ? (
+        <span className={projectClassName}>{projectName}</span>
+      ) : (
+        <span className="task-scope-personal">{TEXT.personalTask}</span>
+      )}
+      {projectName && parentTitle && <span className="context-separator">/</span>}
+      {parentTitle && <span className={parentClassName}>{parentTitle}</span>}
+    </div>
+  );
+}
+
+function TaskPlanExplanation({ item }: { item?: TodayPlanTask }) {
+  if (!item) return null;
+  const visibleComponents = item.score_breakdown
+    .filter(component => component.points > 0)
+    .sort((a, b) => b.points - a.points)
+    .slice(0, 3);
+
+  return (
+    <div className="task-plan-explanation">
+      <span className="task-score-pill">
+        {TEXT.scorePrefix} {Math.round(item.score)}
+      </span>
+      {item.score_summary && <span className="task-score-summary">{item.score_summary}</span>}
+      {visibleComponents.map(component => (
+        <span key={component.code} className="task-score-chip">
+          {component.label}
+          {component.detail ? `: ${component.detail}` : ''}
+          {component.points > 0 ? ` +${Math.round(component.points)}` : ''}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 type TaskItemRowProps = {
   task: Task;
   dependencyStatus?: { blocked: boolean; reason?: string };
+  planItem?: TodayPlanTask;
   parentTitle?: string;
   projectName?: string;
   hideParent?: boolean;
@@ -633,11 +901,18 @@ type TaskItemRowProps = {
   onCheck: (taskId: string, e?: React.MouseEvent) => void;
   onClick: (task: Task) => void;
   getProgressValues: (task: Task) => { targetPercent: number; actualPercent: number };
+  selectionActionLabel?: string;
+  selectionActionDisabled?: boolean;
+  onSelectionAction?: (taskId: string, e?: React.MouseEvent) => void;
+  dismissActionLabel?: string;
+  onDismissAction?: (taskId: string, e?: React.MouseEvent) => void;
+  onBreakdown?: (task: Task, e?: React.MouseEvent) => void;
 };
 
 function TaskItemRow({
   task,
   dependencyStatus,
+  planItem,
   parentTitle,
   projectName,
   hideParent,
@@ -645,6 +920,12 @@ function TaskItemRow({
   onCheck,
   onClick,
   getProgressValues,
+  selectionActionLabel,
+  selectionActionDisabled,
+  onSelectionAction,
+  dismissActionLabel,
+  onDismissAction,
+  onBreakdown,
 }: TaskItemRowProps) {
   const { targetPercent, actualPercent } = getProgressValues(task);
   const isDone = task.status === 'DONE';
@@ -675,13 +956,16 @@ function TaskItemRow({
           <span>{task.title}</span>
           {isBlocked && <span className="lock-icon">🔒</span>}
         </div>
-        {!hideParent && (projectName || parentTitle) && (
-          <div className="task-context">
-            {projectName && <span className="task-project">{projectName}</span>}
-            {projectName && parentTitle && <span className="context-separator">/</span>}
-            {parentTitle && <span className="task-parent-text">{parentTitle}</span>}
-          </div>
+        {!hideParent && (
+          <TaskContext
+            projectName={projectName}
+            parentTitle={parentTitle}
+            className="task-context"
+            projectClassName="task-project"
+            parentClassName="task-parent-text"
+          />
         )}
+        <TaskPlanExplanation item={planItem} />
       </div>
       <div className="task-meta">
         {actualPercent > 0 && actualPercent < 100 && (
@@ -689,11 +973,42 @@ function TaskItemRow({
         )}
         <span className="task-time">{formatMinutes(task.estimated_minutes || 0)}</span>
       </div>
-      {!isDone && (
-        <PostponePopover
-          taskId={task.id}
-        />
-      )}
+      <div className="task-row-actions">
+        {onBreakdown && (
+          <button
+            type="button"
+            className="selection-action-btn secondary"
+            onClick={(e) => onBreakdown(task, e)}
+          >
+            {TEXT.breakdown}
+          </button>
+        )}
+        {selectionActionLabel && onSelectionAction && (
+          <button
+            type="button"
+            className="selection-action-btn"
+            onClick={(e) => onSelectionAction(task.id, e)}
+            disabled={selectionActionDisabled}
+          >
+            {selectionActionLabel}
+          </button>
+        )}
+        {dismissActionLabel && onDismissAction && (
+          <button
+            type="button"
+            className="selection-action-btn muted"
+            onClick={(e) => onDismissAction(task.id, e)}
+            disabled={selectionActionDisabled}
+          >
+            {dismissActionLabel}
+          </button>
+        )}
+        {!isDone && (
+          <PostponePopover
+            taskId={task.id}
+          />
+        )}
+      </div>
     </div>
   );
 }

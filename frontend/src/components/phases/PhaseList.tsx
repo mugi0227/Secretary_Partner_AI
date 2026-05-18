@@ -39,10 +39,6 @@ export function PhaseList({
   onCreateMilestone,
   onUpdateMilestone,
   onDeleteMilestone,
-  onGeneratePhases: _onGeneratePhases,
-  onGeneratePhaseTasks: _onGeneratePhaseTasks,
-  isPlanningPhases: _isPlanningPhases = false,
-  planningPhaseId: _planningPhaseId = null,
   projectId,
 }: PhaseListProps) {
   const [isAdding, setIsAdding] = useState(false);

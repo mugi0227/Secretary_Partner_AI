@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { tasksApi } from '../../api/tasks';
@@ -56,26 +56,21 @@ export function MeetingCalendarView({
 
   const today = todayInTimezone(timezone);
   const currentWeekStart = startOfWeek(today);
-  const currentWeekStartKey = toDateKey(currentWeekStart.toJSDate(), timezone);
-
-  const weekStart = useMemo(() => {
-    return currentWeekStart.plus({ days: weekOffset * 7 });
-  }, [currentWeekStartKey, weekOffset]);
+  const weekStart = currentWeekStart.plus({ days: weekOffset * 7 });
 
   const weekEnd = weekStart.plus({ days: 7 });
   const weekStartKey = toDateKey(weekStart.toJSDate(), timezone);
-  const weekEndKey = toDateKey(weekEnd.toJSDate(), timezone);
 
   const isCurrentWeek = weekOffset === 0;
   const goToPrevWeek = () => setWeekOffset(prev => prev - 1);
   const goToNextWeek = () => setWeekOffset(prev => prev + 1);
   const goToCurrentWeek = () => setWeekOffset(0);
 
-  const days = useMemo(() => (
+  const days = (
     Array.from({ length: 7 }, (_, index) => {
       return weekStart.plus({ days: index });
     })
-  ), [weekStartKey]);
+  );
 
   const { data: meetingTasks = [], isLoading, error } = useQuery({
     queryKey: ['meetings', 'week', weekStartKey, projectId],
@@ -87,39 +82,46 @@ export function MeetingCalendarView({
     staleTime: 30_000,
   });
 
-  const meetings = useMemo(() => {
-    const weekStartDate = weekStart.startOf('day');
-    const weekEndDate = weekEnd.startOf('day');
+  const weekStartDate = weekStart.startOf('day');
+  const weekEndDateForFilter = weekEnd.startOf('day');
+  const meetings = meetingTasks
+    .filter(task => task.is_fixed_time && task.start_time && task.end_time)
+    .map((task): MeetingBlock | null => {
+      const start = toDateTime(task.start_time as string, timezone);
+      const end = toDateTime(task.end_time as string, timezone);
+      if (!start.isValid || !end.isValid) return null;
+      if (
+        start.toMillis() < weekStartDate.toMillis() ||
+        start.toMillis() >= weekEndDateForFilter.toMillis()
+      ) {
+        return null;
+      }
+      const startMinutes = start.hour * 60 + start.minute;
+      const endMinutesRaw = end.hour * 60 + end.minute;
+      const endMinutes = Math.max(startMinutes + 15, endMinutesRaw);
+      const block: MeetingBlock = {
+        id: task.id,
+        title: task.title,
+        start: start.toJSDate(),
+        end: end.toJSDate(),
+        dayKey: toLocalDateKey(start.toJSDate(), timezone),
+        startMinutes,
+        endMinutes,
+        lane: 0,
+        laneCount: 1,
+        status: task.status,
+      };
+      if (task.location) {
+        block.location = task.location;
+      }
+      if (task.recurring_meeting_id) {
+        block.recurringMeetingId = task.recurring_meeting_id;
+      }
+      return block;
+    })
+    .filter((meeting): meeting is MeetingBlock => meeting !== null);
 
-    return meetingTasks
-      .filter(task => task.is_fixed_time && task.start_time && task.end_time)
-      .map(task => {
-        const start = toDateTime(task.start_time as string, timezone);
-        const end = toDateTime(task.end_time as string, timezone);
-        if (!start.isValid || !end.isValid) return null;
-        if (start.toMillis() < weekStartDate.toMillis() || start.toMillis() >= weekEndDate.toMillis()) return null;
-        const startMinutes = start.hour * 60 + start.minute;
-        const endMinutesRaw = end.hour * 60 + end.minute;
-        const endMinutes = Math.max(startMinutes + 15, endMinutesRaw);
-        return {
-          id: task.id,
-          title: task.title,
-          start: start.toJSDate(),
-          end: end.toJSDate(),
-          dayKey: toLocalDateKey(start.toJSDate(), timezone),
-          startMinutes,
-          endMinutes,
-          lane: 0,
-          laneCount: 1,
-          location: task.location,
-          status: task.status,
-          recurringMeetingId: task.recurring_meeting_id,
-        } satisfies MeetingBlock;
-      })
-      .filter(Boolean) as MeetingBlock[];
-  }, [meetingTasks, weekStartKey, weekEndKey, timezone]);
-
-  const timeBounds = useMemo(() => {
+  const timeBounds = (() => {
     if (!meetings.length) {
       return { startHour: DEFAULT_START_HOUR, endHour: DEFAULT_END_HOUR };
     }
@@ -130,9 +132,9 @@ export function MeetingCalendarView({
     startHour = Math.max(MIN_START_HOUR, startHour);
     endHour = Math.min(MAX_END_HOUR, Math.max(startHour + 1, endHour));
     return { startHour, endHour };
-  }, [meetings]);
+  })();
 
-  const meetingsByDay = useMemo(() => {
+  const meetingsByDay = (() => {
     const grouped = new Map<string, MeetingBlock[]>();
     meetings.forEach(meeting => {
       const list = grouped.get(meeting.dayKey) ?? [];
@@ -162,12 +164,12 @@ export function MeetingCalendarView({
     });
 
     return results;
-  }, [meetings]);
+  })();
 
   const hourCount = timeBounds.endHour - timeBounds.startHour;
-  const hours = useMemo(() => (
+  const hours = (
     Array.from({ length: hourCount }, (_, index) => timeBounds.startHour + index)
-  ), [hourCount, timeBounds.startHour]);
+  );
 
   const gridHeight = hourCount * HOUR_HEIGHT;
 
@@ -180,12 +182,10 @@ export function MeetingCalendarView({
     }
   };
 
-  const rangeLabel = useMemo(() => {
-    const weekEndDate = weekEnd.minus({ days: 1 });
-    const startLabel = formatDate(weekStart.toJSDate(), { month: 'numeric', day: 'numeric' }, timezone);
-    const endLabel = formatDate(weekEndDate.toJSDate(), { month: 'numeric', day: 'numeric' }, timezone);
-    return `${startLabel} - ${endLabel}`;
-  }, [weekStartKey, weekEndKey, timezone]);
+  const weekEndDate = weekEnd.minus({ days: 1 });
+  const startLabel = formatDate(weekStart.toJSDate(), { month: 'numeric', day: 'numeric' }, timezone);
+  const endLabel = formatDate(weekEndDate.toJSDate(), { month: 'numeric', day: 'numeric' }, timezone);
+  const rangeLabel = `${startLabel} - ${endLabel}`;
 
   return (
     <div className="meeting-calendar-view">

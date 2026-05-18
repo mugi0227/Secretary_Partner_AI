@@ -10,6 +10,7 @@ export function useHeartbeatUnreadCount() {
 
   return {
     count: query.data?.count ?? 0,
+    unreadSessionIds: query.data?.unread_session_ids ?? [],
     isLoading: query.isLoading,
   };
 }

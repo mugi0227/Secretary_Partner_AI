@@ -380,6 +380,7 @@ export function ChatMessage({
         remarkPlugins={[remarkGfm]}
         components={{
           a: ({ href, children, node, ...rest }) => {
+            void node;
             if (href && href.startsWith('task://')) {
               return null;
             }

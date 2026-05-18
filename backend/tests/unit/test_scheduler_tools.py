@@ -86,6 +86,23 @@ class MockTaskRepository:
     def __init__(self, tasks: list[Task]):
         self.tasks = {task.id: task for task in tasks}
 
+    async def get(
+        self,
+        user_id: str,
+        task_id: UUID,
+        project_id: UUID | None = None,
+    ) -> Task | None:
+        task = self.tasks.get(task_id)
+        if not task or task.user_id != user_id:
+            return None
+        if project_id is not None and task.project_id != project_id:
+            return None
+        return task
+
+    async def get_by_id(self, user_id: str, task_id: UUID) -> Task | None:
+        del user_id
+        return self.tasks.get(task_id)
+
     async def list(
         self,
         user_id: str,
@@ -134,6 +151,12 @@ class MockProjectRepository:
 
     def __init__(self, projects: list[Project]):
         self.projects = projects
+
+    async def get(self, user_id: str, project_id: UUID) -> Project | None:
+        for project in self.projects:
+            if project.id == project_id and project.user_id == user_id:
+                return project
+        return None
 
     async def list(
         self,

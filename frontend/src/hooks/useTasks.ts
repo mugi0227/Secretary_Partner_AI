@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { tasksApi } from '../api/tasks';
-import type { TaskCreate, TaskUpdate } from '../api/types';
+import type { Task, TaskCreate, TaskUpdate } from '../api/types';
 
 /** Invalidation keys shared across all task mutations. */
 const TASK_INVALIDATION_KEYS: string[][] = [
@@ -8,6 +8,7 @@ const TASK_INVALIDATION_KEYS: string[][] = [
   ['subtasks'],
   ['top3'],
   ['today-tasks'],
+  ['today-plan'],
   ['schedule'],
   ['task-detail'],
   ['task-assignments'],
@@ -43,19 +44,20 @@ export function useTasks(projectId?: string) {
     onMutate: async ({ id, data }) => {
       await queryClient.cancelQueries({ queryKey: ['tasks'] });
       await queryClient.cancelQueries({ queryKey: ['today-tasks'] });
+      await queryClient.cancelQueries({ queryKey: ['today-plan'] });
       await queryClient.cancelQueries({ queryKey: ['subtasks'] });
 
-      const previousTasks = queryClient.getQueryData(['tasks']);
-      const previousSubtasks = queryClient.getQueryData(['subtasks']);
+      const previousTasks = queryClient.getQueryData<Task[]>(['tasks']);
+      const previousSubtasks = queryClient.getQueryData<Task[]>(['subtasks']);
 
-      queryClient.setQueryData(['tasks'], (old: any) => {
+      queryClient.setQueryData<Task[]>(['tasks'], (old) => {
         if (!old) return old;
-        return old.map((t: any) => (t.id === id ? { ...t, ...data } : t));
+        return old.map((task) => (task.id === id ? { ...task, ...data } : task));
       });
 
-      queryClient.setQueryData(['subtasks'], (old: any) => {
+      queryClient.setQueryData<Task[]>(['subtasks'], (old) => {
         if (!old) return old;
-        return old.map((t: any) => (t.id === id ? { ...t, ...data } : t));
+        return old.map((task) => (task.id === id ? { ...task, ...data } : task));
       });
 
       return { previousTasks, previousSubtasks };

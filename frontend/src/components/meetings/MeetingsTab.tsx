@@ -177,7 +177,7 @@ export function MeetingsTab({ projectId, members, tasks, currentUserId, canDelet
     const invalidateMeetingQueries = () => {
         for (const key of [
             ['meetings', 'project', projectId], ['meetings', 'week'], ['meetings'],
-            ['tasks'], ['subtasks'], ['top3'], ['today-tasks'], ['schedule'],
+            ['tasks'], ['subtasks'], ['top3'], ['today-tasks'], ['today-plan'], ['schedule'],
             ['task-detail'], ['task-assignments'], ['project'],
         ]) {
             queryClient.invalidateQueries({ queryKey: key });

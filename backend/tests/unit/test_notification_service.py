@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.models.notification import NotificationCreate, NotificationType
+from app.models.notification import NotificationType
 from app.services import notification_service as notify
 
 

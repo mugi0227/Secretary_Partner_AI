@@ -154,8 +154,8 @@ class SqliteProjectRepository(IProjectRepository):
         """List projects with optional filters (includes projects where user is owner or member)."""
         async with self._session_factory() as session:
             # Aliases for joining parent project and its members
-            ParentProject = aliased(ProjectORM)
-            ParentMember = aliased(ProjectMemberORM)
+            parent_project = aliased(ProjectORM)
+            parent_member = aliased(ProjectMemberORM)
 
             # Select projects where user is owner, member,
             # OR child of a project the user owns/is a member of
@@ -166,19 +166,19 @@ class SqliteProjectRepository(IProjectRepository):
                     ProjectORM.id == ProjectMemberORM.project_id
                 )
                 .outerjoin(
-                    ParentProject,
-                    ProjectORM.parent_project_id == ParentProject.id
+                    parent_project,
+                    ProjectORM.parent_project_id == parent_project.id
                 )
                 .outerjoin(
-                    ParentMember,
-                    ParentProject.id == ParentMember.project_id
+                    parent_member,
+                    parent_project.id == parent_member.project_id
                 )
                 .where(
                     or_(
                         ProjectORM.user_id == user_id,
                         ProjectMemberORM.member_user_id == user_id,
-                        ParentProject.user_id == user_id,
-                        ParentMember.member_user_id == user_id,
+                        parent_project.user_id == user_id,
+                        parent_member.member_user_id == user_id,
                     )
                 )
                 .distinct()

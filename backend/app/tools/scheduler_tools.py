@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 from google.adk.tools import FunctionTool
 from pydantic import BaseModel, Field
 
+from app.core.exceptions import BusinessLogicError, NotFoundError
 from app.interfaces.agent_task_repository import IAgentTaskRepository
 from app.interfaces.postpone_repository import IPostponeRepository
 from app.interfaces.project_repository import IProjectRepository
@@ -25,6 +26,7 @@ from app.interfaces.user_repository import IUserRepository
 from app.models.agent_task import AgentTaskCreate, AgentTaskPayload
 from app.models.enums import ActionType, ProjectVisibility, TaskStatus
 from app.models.task import Task, TaskUpdate
+from app.services.task_application_service import TaskApplicationService
 from app.services.task_utils import is_parent_task
 from app.tools.approval_tools import create_tool_action_proposal
 from app.utils.datetime_utils import (
@@ -334,6 +336,12 @@ async def apply_schedule_request(
     )
     selected = scored[: input_data.max_focus_tasks]
     selected_ids = {task.id for task, _score in selected}
+    task_service = TaskApplicationService(
+        task_repo=task_repo,
+        project_repo=project_repo,
+        assignment_repo=assignment_repo,
+        user_repo=user_repo,
+    )
 
     updated_task_ids: list[str] = []
     unchanged_task_ids: list[str] = []
@@ -350,12 +358,10 @@ async def apply_schedule_request(
             unchanged_task_ids.append(str(task.id))
             continue
 
-        await task_repo.update(
-            user_id=user_id,
-            task_id=task.id,
-            update=TaskUpdate(**update_fields),
-            project_id=task.project_id,
-        )
+        try:
+            await task_service.update_task(user_id, task.id, TaskUpdate(**update_fields))
+        except (BusinessLogicError, NotFoundError) as exc:
+            raise ValueError(str(exc)) from exc
         updated_task_ids.append(str(task.id))
 
     unpinned_task_ids: list[str] = []
@@ -367,12 +373,10 @@ async def apply_schedule_request(
                 continue
             if _match_score(_task_search_text(task), avoid_keywords) <= 0:
                 continue
-            await task_repo.update(
-                user_id=user_id,
-                task_id=task.id,
-                update=TaskUpdate(pinned_date=None),
-                project_id=task.project_id,
-            )
+            try:
+                await task_service.update_task(user_id, task.id, TaskUpdate(pinned_date=None))
+            except (BusinessLogicError, NotFoundError) as exc:
+                raise ValueError(str(exc)) from exc
             unpinned_task_ids.append(str(task.id))
 
     status = "applied" if selected else "no_match"

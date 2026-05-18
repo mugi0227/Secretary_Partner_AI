@@ -1,7 +1,7 @@
 """
 Vertex AI provider for GCP environment.
 
-Uses Vertex AI (requires GCP project and service account).
+Uses Vertex AI with Application Default Credentials.
 """
 
 from app.core.config import get_settings
@@ -9,7 +9,7 @@ from app.interfaces.llm_provider import ILLMProvider
 
 
 class VertexAIProvider(ILLMProvider):
-    """Vertex AI provider for GCP environment (requires service account)."""
+    """Vertex AI provider for GCP environment."""
 
     def __init__(self, model_name: str):
         """
@@ -24,11 +24,6 @@ class VertexAIProvider(ILLMProvider):
         if not self._settings.GOOGLE_CLOUD_PROJECT:
             raise ValueError(
                 "GOOGLE_CLOUD_PROJECT is required for Vertex AI provider"
-            )
-
-        if not self._settings.GOOGLE_APPLICATION_CREDENTIALS:
-            raise ValueError(
-                "GOOGLE_APPLICATION_CREDENTIALS is required for Vertex AI provider"
             )
 
     def get_model(self) -> str:

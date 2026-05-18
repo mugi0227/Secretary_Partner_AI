@@ -68,6 +68,7 @@ class HeartbeatStatusResponse(BaseModel):
 
 class HeartbeatUnreadCountResponse(BaseModel):
     count: int
+    unread_session_ids: list[str] = []
 
 
 def get_task_heartbeat_service(
@@ -223,8 +224,19 @@ async def get_heartbeat_unread_count(
     user: CurrentUser,
     event_repo: HeartbeatEventRepo,
 ):
-    count = await event_repo.count_unread(user.id)
-    return HeartbeatUnreadCountResponse(count=count)
+    unread_events = await event_repo.list_unread(user.id)
+    unread_session_ids = sorted(
+        {
+            session_id
+            for event in unread_events
+            if isinstance((session_id := event.metadata.get("chat_session_id")), str)
+            and session_id
+        }
+    )
+    return HeartbeatUnreadCountResponse(
+        count=len(unread_events),
+        unread_session_ids=unread_session_ids,
+    )
 
 
 @router.post(
@@ -237,6 +249,5 @@ async def mark_heartbeat_as_read(
     event_repo: HeartbeatEventRepo,
 ):
     await event_repo.mark_all_read(user.id)
-    count = await event_repo.count_unread(user.id)
-    return HeartbeatUnreadCountResponse(count=count)
+    return HeartbeatUnreadCountResponse(count=0, unread_session_ids=[])
 

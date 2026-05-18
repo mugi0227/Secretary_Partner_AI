@@ -7,10 +7,10 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import HTTPException
 
-from app.api import tasks as tasks_api
 from app.api.tasks import create_task, get_subtasks, list_tasks, update_task
 from app.models.enums import CreatedBy, ProjectVisibility, TaskStatus
 from app.models.task import Task, TaskCreate, TaskUpdate
+from app.services import task_application_service as task_app_service
 
 
 def _make_task(
@@ -242,7 +242,7 @@ async def test_update_task_parent_validation_uses_owner_scope(monkeypatch: Any) 
         async def validate_parent_child_consistency(self, *args: Any, **kwargs: Any) -> None:
             calls["parent"] = args
 
-    monkeypatch.setattr(tasks_api, "DependencyValidator", StubDependencyValidator)
+    monkeypatch.setattr(task_app_service, "DependencyValidator", StubDependencyValidator)
 
     await update_task(
         task_id=task_id,

@@ -8,7 +8,8 @@ import type {
   TaskAssignment,
   TaskStatus,
 } from '../../api/types';
-import { ViewModeToggle, getStoredViewMode, setStoredViewMode, type ViewMode } from '../common/ViewModeToggle';
+import { ViewModeToggle } from '../common/ViewModeToggle';
+import { getStoredViewMode, setStoredViewMode, type ViewMode } from '../common/viewModeStorage';
 import { KanbanBoard } from '../tasks/KanbanBoard';
 import { PhaseExplorerSidebar } from './PhaseExplorerSidebar';
 import './ProjectTasksView.css';

@@ -101,6 +101,18 @@ class SqliteHeartbeatEventRepository(IHeartbeatEventRepository):
             )
             return result.scalar() or 0
 
+    async def list_unread(self, user_id: str) -> list[HeartbeatEvent]:
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(HeartbeatEventORM)
+                .where(
+                    HeartbeatEventORM.user_id == user_id,
+                    HeartbeatEventORM.is_read.is_(False),
+                )
+                .order_by(desc(HeartbeatEventORM.created_at))
+            )
+            return [self._orm_to_model(orm) for orm in result.scalars().all()]
+
     async def mark_all_read(self, user_id: str) -> int:
         async with self._session_factory() as session:
             now = now_utc()
