@@ -2,7 +2,7 @@
 Tests for RecurringTaskService occurrence calculation logic.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -357,7 +357,7 @@ class TestComputeDueDate:
 
 @pytest.mark.asyncio
 async def test_ensure_upcoming_tasks_skips_duplicate_occurrence_on_recheck():
-    today = date.today()
+    today = datetime.now(timezone.utc).date()
     definition = _make_definition(
         RecurringTaskFrequency.DAILY,
         anchor_date=today - timedelta(days=1),
@@ -385,7 +385,7 @@ async def test_ensure_upcoming_tasks_skips_duplicate_occurrence_on_recheck():
 
 @pytest.mark.asyncio
 async def test_ensure_upcoming_tasks_handles_unique_violation_as_duplicate():
-    today = date.today()
+    today = datetime.now(timezone.utc).date()
     definition = _make_definition(
         RecurringTaskFrequency.DAILY,
         anchor_date=today - timedelta(days=1),

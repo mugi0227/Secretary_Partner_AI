@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from app.models.enums import CreatedBy, TaskStatus
-from app.models.schedule import ScheduleResponse
+from app.models.schedule import ScheduleDay, ScheduleResponse, TaskAllocation, TaskScheduleInfo
 from app.models.schedule_plan import ScheduleTimeBlock, TimeBlockMoveRequest
 from app.models.task import Task, TaskUpdate
 from app.services.daily_schedule_plan_service import (
@@ -68,6 +68,14 @@ class _CapturingSchedulerService:
             unscheduled_task_ids=[],
             excluded_tasks=[],
         )
+
+
+class _StaticSchedulerService:
+    def __init__(self, response: ScheduleResponse) -> None:
+        self.response = response
+
+    def build_schedule(self, tasks: list[Task], **kwargs) -> ScheduleResponse:
+        return self.response
 
 
 @pytest.mark.asyncio
@@ -351,3 +359,107 @@ async def test_build_plan_includes_accessible_team_project_tasks() -> None:
     scheduled_task_ids = {task.id for task in scheduler_service.calls[0]}
     assert personal_task.id in scheduled_task_ids
     assert team_task.id in scheduled_task_ids
+
+
+@pytest.mark.asyncio
+async def test_get_plan_or_forecast_preserves_partial_saved_time_blocks() -> None:
+    user_id = str(uuid4())
+    task_id = uuid4()
+    start_date = date(2026, 2, 8)
+    planned_date = start_date + timedelta(days=1)
+    now = datetime.now(timezone.utc)
+    task = _build_task(
+        task_id,
+        start_time=now,
+        end_time=now + timedelta(hours=1),
+        is_fixed_time=False,
+    )
+    task_info = TaskScheduleInfo(
+        task_id=task_id,
+        title="Movable task",
+        total_minutes=60,
+        priority_score=10,
+    )
+    forecast_days = [
+        ScheduleDay(
+            date=start_date + timedelta(days=offset),
+            capacity_minutes=480,
+            allocated_minutes=30,
+            task_allocations=[TaskAllocation(task_id=task_id, minutes=30)],
+        )
+        for offset in range(3)
+    ]
+    planned_day = ScheduleDay(
+        date=planned_date,
+        capacity_minutes=480,
+        allocated_minutes=60,
+        task_allocations=[TaskAllocation(task_id=task_id, minutes=60)],
+    )
+    planned_block = ScheduleTimeBlock(
+        task_id=task_id,
+        start=datetime(2026, 2, 9, 13, 0, tzinfo=timezone.utc),
+        end=datetime(2026, 2, 9, 14, 0, tzinfo=timezone.utc),
+        kind="auto",
+        status="TODO",
+    )
+
+    task_repo = AsyncMock()
+    task_repo.list.return_value = [task]
+    project_repo = AsyncMock()
+    project_repo.list.return_value = []
+    assignment_repo = AsyncMock()
+    assignment_repo.list_for_assignee.return_value = []
+    user_repo = AsyncMock()
+    user_repo.get.return_value = SimpleNamespace(timezone="UTC")
+    settings_repo = AsyncMock()
+    settings_repo.get.return_value = None
+    plan_repo = AsyncMock()
+    plan_repo.list_by_range.return_value = [
+        SimpleNamespace(
+            plan_date=planned_date,
+            timezone="UTC",
+            schedule_day=planned_day,
+            tasks=[task_info],
+            unscheduled_task_ids=[],
+            excluded_tasks=[],
+            time_blocks=[planned_block],
+            pinned_overflow_task_ids=[],
+            task_snapshots=[],
+            plan_params={},
+            plan_group_id=uuid4(),
+            generated_at=now,
+        )
+    ]
+    scheduler_service = _StaticSchedulerService(
+        ScheduleResponse(
+            start_date=start_date,
+            days=forecast_days,
+            tasks=[task_info],
+            unscheduled_task_ids=[],
+            excluded_tasks=[],
+        )
+    )
+    service = DailySchedulePlanService(
+        task_repo=task_repo,
+        project_repo=project_repo,
+        assignment_repo=assignment_repo,
+        snapshot_repo=AsyncMock(),
+        user_repo=user_repo,
+        settings_repo=settings_repo,
+        plan_repo=plan_repo,
+        scheduler_service=scheduler_service,
+    )
+
+    result = await service._get_plan_or_forecast_from_date(
+        user_id=user_id,
+        resolved_start=start_date,
+        max_days=3,
+        filter_by_assignee=True,
+        apply_plan_constraints=True,
+        timezone="UTC",
+    )
+
+    assert result.time_blocks == [planned_block]
+    assert result.days[1].allocated_minutes == 60
+    assert result.days[0].allocated_minutes == 30
+    assert result.days[2].allocated_minutes == 30

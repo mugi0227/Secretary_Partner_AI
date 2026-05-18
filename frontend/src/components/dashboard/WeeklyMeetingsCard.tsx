@@ -785,13 +785,29 @@ export function WeeklyMeetingsCard({
     scheduleTaskMap,
   ]);
 
+  const plannedDayKeys = useMemo(
+    () => new Set(planBlocks.map(block => block.dayKey)),
+    [planBlocks],
+  );
   const autoBlocks = useMemo(
-    () => (hasPlanBlocks ? planBlocks.filter(block => block.kind === 'auto') : autoBlocksFromSchedule),
-    [hasPlanBlocks, planBlocks, autoBlocksFromSchedule],
+    () => {
+      if (!hasPlanBlocks) return autoBlocksFromSchedule;
+      return [
+        ...planBlocks.filter(block => block.kind === 'auto'),
+        ...autoBlocksFromSchedule.filter(block => !plannedDayKeys.has(block.dayKey)),
+      ];
+    },
+    [hasPlanBlocks, planBlocks, autoBlocksFromSchedule, plannedDayKeys],
   );
   const meetingBlocks = useMemo(
-    () => (hasPlanBlocks ? planBlocks.filter(block => block.kind === 'meeting') : meetingBlocksFromTasks),
-    [hasPlanBlocks, planBlocks, meetingBlocksFromTasks],
+    () => {
+      if (!hasPlanBlocks) return meetingBlocksFromTasks;
+      return [
+        ...planBlocks.filter(block => block.kind === 'meeting'),
+        ...meetingBlocksFromTasks.filter(block => !plannedDayKeys.has(block.dayKey)),
+      ];
+    },
+    [hasPlanBlocks, planBlocks, meetingBlocksFromTasks, plannedDayKeys],
   );
   // Keep drag overrides until base data reflects the moved position.
   // This avoids a snapback when unrelated queries resolve first.
@@ -1100,7 +1116,17 @@ export function WeeklyMeetingsCard({
       };
 
       try {
-        if (hasPlanBlocks) {
+        let canMoveStoredBlock = plannedDayKeys.has(from.dayKey);
+        if (!canMoveStoredBlock && kind === 'auto') {
+          await tasksApi.recalculateSchedulePlan({
+            startDate: from.dayKey,
+            maxDays: DEFAULT_PLAN_DAYS,
+            filterByAssignee: true,
+          });
+          canMoveStoredBlock = true;
+        }
+
+        if (canMoveStoredBlock) {
           await tasksApi.moveTimeBlock({
             task_id: taskId,
             original_date: from.dayKey,
@@ -1123,7 +1149,7 @@ export function WeeklyMeetingsCard({
         return false;
       }
     },
-    [days, timezone, hasPlanBlocks, invalidateAfterChange],
+    [days, timezone, plannedDayKeys, invalidateAfterChange],
   );
 
   const handleBlockDrop = useCallback(

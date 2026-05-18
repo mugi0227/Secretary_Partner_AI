@@ -1118,6 +1118,63 @@ class DailySchedulePlanService:
             team_project_ids=team_project_ids,
         )
 
+        if plans:
+            plan_by_date = {plan.plan_date: plan for plan in plans}
+            planned_tasks = _merge_task_infos_from_plans(plans)
+            time_blocks: list[ScheduleTimeBlock] = []
+            pinned_overflow: list[UUID] = []
+            for plan in plans:
+                time_blocks.extend(plan.time_blocks)
+                for task_id in plan.pinned_overflow_task_ids:
+                    if task_id not in pinned_overflow:
+                        pinned_overflow.append(task_id)
+
+            filtered_current_tasks = self._filter_tasks_for_plan(
+                tasks,
+                assignments,
+                user_id,
+                filter_by_assignee,
+                timezone,
+                team_project_ids=team_project_ids,
+            )
+            pending_changes = _compute_pending_changes(
+                filtered_current_tasks,
+                plans[0].task_snapshots,
+            )
+            current_params = {
+                "start_date": str(resolved_start),
+                "max_days": max_days,
+                "timezone": timezone,
+                "filter_by_assignee": filter_by_assignee,
+                "apply_plan_constraints": apply_plan_constraints,
+                "capacity_by_weekday": capacity_by_weekday,
+                "buffer_hours": settings.buffer_hours,
+                "break_after_task_minutes": settings.break_after_task_minutes,
+            }
+            params_changed = (
+                _plan_params_fingerprint(current_params)
+                != _plan_params_fingerprint(plans[0].plan_params)
+            )
+
+            return SchedulePlanResponse(
+                start_date=schedule.start_date,
+                days=[
+                    plan_by_date.get(day.date).schedule_day
+                    if day.date in plan_by_date
+                    else day
+                    for day in schedule.days
+                ],
+                tasks=_merge_task_info_lists(planned_tasks, list(schedule.tasks)),
+                unscheduled_task_ids=schedule.unscheduled_task_ids,
+                excluded_tasks=schedule.excluded_tasks,
+                plan_state="stale" if pending_changes or params_changed else "planned",
+                plan_group_id=plans[0].plan_group_id,
+                plan_generated_at=plans[0].generated_at,
+                pending_changes=pending_changes,
+                time_blocks=time_blocks,
+                pinned_overflow_task_ids=pinned_overflow,
+            )
+
         return SchedulePlanResponse(
             start_date=schedule.start_date,
             days=schedule.days,
